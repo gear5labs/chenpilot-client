@@ -1,76 +1,89 @@
-'use client';
+"use client";
 
-import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAppDispatch, useAppSelector } from '@/store';
-import { getAccountStatus, getBalance, deployAccount, fundAccount, getStellarNetworkStatus } from '@/store/slices/accountSlice';
-import { loadUser } from '@/store/slices/authSlice';
-import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import { ChatLayout } from '@/components/layout/ChatLayout';
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAppDispatch, useAppSelector } from "@/store";
+import {
+  getAccountStatus,
+  getBalance,
+  getStellarNetworkStatus,
+} from "@/store/slices/accountSlice";
+import { loadUser } from "@/store/slices/authSlice";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { ChatLayout } from "@/components/layout/ChatLayout";
 import {
   Copy,
   ExternalLink,
-  Clock,
-  ArrowUpRight,
-  ArrowDownLeft,
-  RefreshCw,
-  CheckCircle2,
-  Circle,
-  Loader2,
   ShieldCheck,
   Wallet,
   Coins,
-  Zap
+  Zap,
   Activity,
-  AlertTriangle
-} from 'lucide-react';
-import { formatAddress, formatTokenAmount } from '@/utils/format';
-import toast from 'react-hot-toast';
+  Users,
+  Server,
+  Cpu,
+  Database,
+} from "lucide-react";
+import { formatAddress, formatTokenAmount } from "@/utils/format";
+import apiService from "@/services/api";
+import { RealtimeMetrics } from "@/types/agent";
+import { cn } from "@/utils/cn";
+import toast from "react-hot-toast";
 
 export default function DashboardPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
-  const { status, balance, isLoading, network } = useAppSelector((state) => state.account);
-  const { messages } = useAppSelector((state) => state.chat);
+  const { status, balance } = useAppSelector((state) => state.account);
+  // const { messages } = useAppSelector((state) => state.chat);
+
+  // Real-time Metrics State
+  const [metrics, setMetrics] = useState<RealtimeMetrics | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/auth/login');
+      router.push("/auth/login");
       return;
     }
 
-    // Load initial user data and account status
     dispatch(loadUser());
     dispatch(getAccountStatus());
     dispatch(getBalance());
 
-    // Set up polling for account status and balance if not fully deployed
     const pollInterval = setInterval(() => {
       if (!status?.isDeployed || !status?.isFunded) {
         dispatch(getAccountStatus());
-        dispatch(getBalance());
-      } else {
-        dispatch(getBalance());
       }
-    }, 10000); 
+      dispatch(getBalance());
+    }, 10000);
 
     return () => clearInterval(pollInterval);
   }, [dispatch, isAuthenticated, router, status?.isDeployed, status?.isFunded]);
 
+  // Real-time Metrics Polling (5 seconds)
   useEffect(() => {
-    if (!isAuthenticated) {
-      return;
-    }
-
-    const refreshNetworkStatus = () => {
-      dispatch(getStellarNetworkStatus());
+    const fetchMetrics = async () => {
+      try {
+        const response = await apiService.getRealtimeStats();
+        if (response.success) {
+          setMetrics(response.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch real-time stats");
+      }
     };
 
+    fetchMetrics();
+    const interval = setInterval(fetchMetrics, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const refreshNetworkStatus = () => dispatch(getStellarNetworkStatus());
     refreshNetworkStatus();
     const interval = setInterval(refreshNetworkStatus, 15000);
-
     return () => clearInterval(interval);
   }, [dispatch, isAuthenticated]);
 
@@ -79,509 +92,253 @@ export default function DashboardPage() {
     toast.success(`${label} copied to clipboard`);
   };
 
-
   const quickActions = [
     {
-      title: 'Chat with AI Agent',
-      description: 'Ask questions or execute DeFi operations',
-      action: () => router.push('/chat'),
-      color: 'bg-blue-500',
+      title: "Chat with AI Agent",
+      description: "Ask questions or execute DeFi operations",
+      action: () => router.push("/chat"),
     },
     {
-      title: 'Manage Contacts',
-      description: 'Add and organize your contacts',
-      action: () => router.push('/contacts'),
-      color: 'bg-green-500',
+      title: "Manage Contacts",
+      description: "Add and organize your contacts",
+      action: () => router.push("/contacts"),
     },
     {
-      title: 'View Transactions',
-      description: 'Check your transaction history',
-      action: () => router.push('/transactions'),
-      color: 'bg-purple-500',
+      title: "View Transactions",
+      description: "Check your transaction history",
+      action: () => router.push("/transactions"),
     },
   ];
 
-  const networkStatusLabel =
-    network.status === 'healthy'
-      ? 'Healthy'
-      : network.status === 'degraded'
-        ? 'Degraded'
-        : network.status === 'down'
-          ? 'Down'
-          : 'Checking';
-
-  const networkStatusColor =
-    network.status === 'healthy'
-      ? 'text-green-400'
-      : network.status === 'degraded'
-        ? 'text-yellow-400'
-        : network.status === 'down'
-          ? 'text-red-400'
-          : 'text-gray-300';
-
-  const syncStatusLabel =
-    network.accountSyncState === 'synced'
-      ? 'Synced'
-      : network.accountSyncState === 'syncing'
-        ? 'Syncing'
-        : 'Desynced';
-
-  const syncStatusColor =
-    network.accountSyncState === 'synced'
-      ? 'text-green-400'
-      : network.accountSyncState === 'syncing'
-        ? 'text-yellow-400'
-        : 'text-red-400';
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  if (!isAuthenticated) return null;
 
   return (
     <ChatLayout>
       <div className="h-full flex flex-col bg-black text-white overflow-hidden relative">
-        {/* Simple Background */}
         <div className="absolute inset-0">
-          {/* Grid Pattern */}
           <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:50px_50px]" />
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10 overflow-y-auto">
           {/* Welcome Section */}
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-white mb-2">
-              Welcome back, {user?.name || 'User'}!
+              Welcome back, {user?.name || "User"}!
             </h1>
             <p className="text-gray-300">
-              Here's an overview of your ChenPilot account and recent activity.
+              Overview of your ChenPilot account and system health.
             </p>
           </div>
 
+          {/* Admin Real-time Metrics Section */}
+          <section className="mb-12">
+            <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
+              <Activity className="mr-2 h-6 w-6 text-purple-500" />
+              System Live Metrics
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card className="flex items-center justify-between p-6 bg-gray-900/40 border-gray-800">
+                <div>
+                  <p className="text-sm text-gray-400">Active Users</p>
+                  <h3 className="text-2xl font-bold text-white">
+                    {metrics?.activeUsers ?? 0}
+                  </h3>
+                </div>
+                <Users className="text-blue-500 h-8 w-8" />
+              </Card>
+
+              <Card className="flex items-center justify-between p-6 bg-gray-900/40 border-gray-800">
+                <div>
+                  <p className="text-sm text-gray-400">Server Status</p>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "h-2 w-2 rounded-full animate-pulse",
+                        metrics?.serverHealth === "healthy"
+                          ? "bg-green-500"
+                          : "bg-red-500",
+                      )}
+                    />
+                    <h3 className="text-2xl font-bold capitalize text-white">
+                      {metrics?.serverHealth ?? "Checking..."}
+                    </h3>
+                  </div>
+                </div>
+                <Server
+                  className={cn(
+                    "h-8 w-8",
+                    metrics?.serverHealth === "healthy"
+                      ? "text-green-500"
+                      : "text-red-500",
+                  )}
+                />
+              </Card>
+
+              <Card className="flex items-center justify-between p-6 bg-gray-900/40 border-gray-800">
+                <div>
+                  <p className="text-sm text-gray-400">CPU Load</p>
+                  <h3 className="text-2xl font-bold text-white">
+                    {metrics?.cpuUsage ?? 0}%
+                  </h3>
+                </div>
+                <Cpu className="text-purple-500 h-8 w-8" />
+              </Card>
+
+              <Card className="flex items-center justify-between p-6 bg-gray-900/40 border-gray-800">
+                <div>
+                  <p className="text-sm text-gray-400">Memory Usage</p>
+                  <h3 className="text-2xl font-bold text-white">
+                    {metrics?.memoryUsage ?? 0}%
+                  </h3>
+                </div>
+                <Database className="text-orange-500 h-8 w-8" />
+              </Card>
+            </div>
+          </section>
+
           {/* Account Lifecycle Section */}
           <div className="mb-12">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white flex items-center">
-                <ShieldCheck className="mr-2 h-6 w-6 text-blue-400" />
-                Account Lifecycle
-              </h2>
-              <div className="flex items-center space-x-2 bg-gray-900/50 px-3 py-1.5 rounded-full border border-gray-800">
-                <div className={`w-2 h-2 rounded-full animate-pulse ${status?.isDeployed ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                <span className="text-xs font-medium text-gray-300">
-                  {status?.isDeployed ? 'Network Live' : 'Pending Activation'}
-                </span>
-              </div>
-            </div>
-
+            <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
+              <ShieldCheck className="mr-2 h-6 w-6 text-blue-400" />
+              Account Lifecycle
+            </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Step 1: Created */}
-              <Card className={`relative overflow-hidden border-2 transition-all duration-500 ${status?.address ? 'border-green-500/50 bg-green-500/5' : 'border-gray-800'}`}>
-                <div className="flex items-start justify-between">
-                  <div className="z-10">
-                    <div className="flex items-center mb-2">
-                      <div className={`p-2 rounded-lg mr-3 ${status?.address ? 'bg-green-500/20' : 'bg-gray-800'}`}>
-                        <Wallet className={`h-5 w-5 ${status?.address ? 'text-green-400' : 'text-gray-400'}`} />
-                      </div>
-                      <h3 className={`font-bold ${status?.address ? 'text-green-400' : 'text-gray-400'}`}>1. Created</h3>
-                    </div>
-                    <p className="text-sm text-gray-400 mb-4">Account identity established on-chain.</p>
-                    {status?.address ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center text-xs font-mono bg-black/40 p-2 rounded border border-gray-800 text-gray-300">
-                          {formatAddress(status.address)}
-                          <button
-                            onClick={() => copyToClipboard(status.address, 'Address')}
-                            className="ml-2 hover:text-white transition-colors"
-                          >
-                            <Copy className="h-3 w-3" />
-                          </button>
-                        </div>
-                        <div className="flex items-center text-xs text-green-500 font-medium">
-                          <CheckCircle2 className="h-3 w-3 mr-1" /> Active
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center text-xs text-gray-500 italic">
-                        <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Initializing...
-                      </div>
+              <Card
+                className={cn(
+                  "relative border-2 transition-all duration-500",
+                  status?.address
+                    ? "border-green-500/50 bg-green-500/5"
+                    : "border-gray-800",
+                )}
+              >
+                <div className="flex items-center mb-2">
+                  <Wallet
+                    className={cn(
+                      "h-5 w-5 mr-3",
+                      status?.address ? "text-green-400" : "text-gray-400",
                     )}
+                  />
+                  <h3
+                    className={cn(
+                      "font-bold",
+                      status?.address ? "text-green-400" : "text-gray-400",
+                    )}
+                  >
+                    1. Created
+                  </h3>
+                </div>
+                <p className="text-sm text-gray-400 mb-4">
+                  Identity established on-chain.
+                </p>
+                {status?.address && (
+                  <div className="text-xs font-mono bg-black/40 p-2 rounded border border-gray-800 text-gray-300 flex justify-between items-center">
+                    {formatAddress(status.address)}
+                    <button
+                      onClick={() => copyToClipboard(status.address, "Address")}
+                      className="hover:text-white"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </button>
                   </div>
+                )}
+              </Card>
+
+              <Card
+                className={cn(
+                  "relative border-2 transition-all duration-500",
+                  status?.isFunded
+                    ? "border-green-500/50 bg-green-500/5"
+                    : status?.address
+                      ? "border-blue-500/30 bg-blue-500/5"
+                      : "border-gray-800 opacity-50",
+                )}
+              >
+                <div className="flex items-center mb-2">
+                  <Coins
+                    className={cn(
+                      "h-5 w-5 mr-3",
+                      status?.isFunded ? "text-green-400" : "text-blue-400",
+                    )}
+                  />
+                  <h3
+                    className={cn(
+                      "font-bold",
+                      status?.isFunded ? "text-green-400" : "text-blue-400",
+                    )}
+                  >
+                    2. Funded
+                  </h3>
+                </div>
+                <p className="text-sm text-gray-400 mb-4">
+                  Resources added for operations.
+                </p>
+                <div className="text-xl font-bold text-white">
+                  {balance
+                    ? formatTokenAmount(balance.balance, 4, "STRK")
+                    : "0.00 STRK"}
                 </div>
               </Card>
 
-              {/* Step 2: Funded */}
-              <Card className={`relative overflow-hidden border-2 transition-all duration-500 ${status?.isFunded ? 'border-green-500/50 bg-green-500/5' : status?.address ? 'border-blue-500/30 bg-blue-500/5' : 'border-gray-800 opacity-50'}`}>
-                <div className="flex items-start justify-between">
-                  <div className="z-10">
-                    <div className="flex items-center mb-2">
-                      <div className={`p-2 rounded-lg mr-3 ${status?.isFunded ? 'bg-green-500/20' : status?.address ? 'bg-blue-500/20' : 'bg-gray-800'}`}>
-                        <Coins className={`h-5 w-5 ${status?.isFunded ? 'text-green-400' : status?.address ? 'text-blue-400' : 'text-gray-400'}`} />
-                      </div>
-                      <h3 className={`font-bold ${status?.isFunded ? 'text-green-400' : status?.address ? 'text-blue-400' : 'text-gray-400'}`}>2. Funded</h3>
-                    </div>
-                    <p className="text-sm text-gray-400 mb-4">Resources added for network operations.</p>
-                    {status?.isFunded ? (
-                      <div className="space-y-2">
-                        <div className="text-xl font-bold text-white">
-                          {balance ? formatTokenAmount(balance.balance, 4, 'STRK') : '0.00 STRK'}
-                        </div>
-                        <div className="flex items-center text-xs text-green-500 font-medium">
-                          <CheckCircle2 className="h-3 w-3 mr-1" /> Verified
-                        </div>
-                      </div>
-                    ) : status?.address ? (
-                      <div className="flex items-center text-xs text-blue-400 font-medium animate-pulse">
-                        <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Detecting funds...
-                      </div>
-                    ) : (
-                      <div className="flex items-center text-xs text-gray-500">
-                        <Circle className="h-3 w-3 mr-1" /> Waiting for account
-                      </div>
+              <Card
+                className={cn(
+                  "relative border-2 transition-all duration-500",
+                  status?.isDeployed
+                    ? "border-green-500/50 bg-green-500/5"
+                    : "border-gray-800 opacity-50",
+                )}
+              >
+                <div className="flex items-center mb-2">
+                  <Zap
+                    className={cn(
+                      "h-5 w-5 mr-3",
+                      status?.isDeployed ? "text-green-400" : "text-purple-400",
                     )}
-                  </div>
-                </div>
-              </Card>
-
-              {/* Step 3: Deployed */}
-              <Card className={`relative overflow-hidden border-2 transition-all duration-500 ${status?.isDeployed ? 'border-green-500/50 bg-green-500/5' : status?.isFunded ? 'border-purple-500/30 bg-purple-500/5' : 'border-gray-800 opacity-50'}`}>
-                <div className="flex items-start justify-between">
-                  <div className="z-10">
-                    <div className="flex items-center mb-2">
-                      <div className={`p-2 rounded-lg mr-3 ${status?.isDeployed ? 'bg-green-500/20' : status?.isFunded ? 'bg-purple-500/20' : 'bg-gray-800'}`}>
-                        <Zap className={`h-5 w-5 ${status?.isDeployed ? 'text-green-400' : status?.isFunded ? 'text-purple-400' : 'text-gray-400'}`} />
-                      </div>
-                      <h3 className={`font-bold ${status?.isDeployed ? 'text-green-400' : status?.isFunded ? 'text-purple-400' : 'text-gray-400'}`}>3. Deployed</h3>
-                    </div>
-                    <p className="text-sm text-gray-400 mb-4">Account is live and DeFi-ready.</p>
-                    {status?.isDeployed ? (
-                      <div className="space-y-2">
-                        <div className="text-xs py-1 px-2 bg-green-500/20 text-green-400 rounded-full inline-flex items-center border border-green-500/30">
-                          <ShieldCheck className="h-3 w-3 mr-1" /> Full Access
-                        </div>
-                        <div className="flex items-center text-xs text-green-500 font-medium">
-                          <CheckCircle2 className="h-3 w-3 mr-1" /> Deployed
-                        </div>
-                      </div>
-                    ) : status?.isFunded ? (
-                      <div className="flex items-center text-xs text-purple-400 font-medium animate-pulse">
-                        <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Finalizing deployment...
-                      </div>
-                    ) : (
-                      <div className="flex items-center text-xs text-gray-500">
-                        <Circle className="h-3 w-3 mr-1" /> Waiting for funding
-                      </div>
+                  />
+                  <h3
+                    className={cn(
+                      "font-bold",
+                      status?.isDeployed ? "text-green-400" : "text-purple-400",
                     )}
-                  </div>
+                  >
+                    3. Deployed
+                  </h3>
                 </div>
+                <p className="text-sm text-gray-400 mb-4">
+                  Account live and DeFi-ready.
+                </p>
+                {status?.isDeployed ? (
+                  <span className="text-xs py-1 px-2 bg-green-500/20 text-green-400 rounded-full border border-green-500/30">
+                    Full Access
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-500">
+                    Waiting for activation
+                  </span>
+                )}
               </Card>
             </div>
           </div>
 
           {/* Quick Actions */}
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-white mb-6">
-              Quick Actions
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {quickActions.map((action, index) => (
-                <Card key={index} className="cursor-pointer hover:shadow-lg transition-shadow">
-                  <div className="flex items-start space-x-4">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-white mb-1">
-                        {action.title}
-                      </h3>
-                      <p className="text-gray-300 mb-4">
-                        {action.description}
-                      </p>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={action.action}
-                      >
-                        Get Started
-                        <ExternalLink className="h-4 w-4 ml-1" />
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-
-          {/* Recent Activity */}
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-white mb-6">
-              Recent Activity
-            </h2>
-            <Card>
-              {messages.length > 0 ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-medium text-white">
-                      Recent Chat Messages
-        {/* Stellar Network */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-white mb-6">
-            Stellar Network
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-300">
-                    Network Status
-                  </p>
-                  <div className="flex items-center space-x-2 mt-1">
-                    <Activity className={`h-4 w-4 ${networkStatusColor}`} />
-                    <span className={`text-lg font-semibold ${networkStatusColor}`}>
-                      {networkStatusLabel}
-                    </span>
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => dispatch(getStellarNetworkStatus())}
-                >
-                  Refresh
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {quickActions.map((action, i) => (
+              <Card
+                key={i}
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={action.action}
+              >
+                <h3 className="text-lg font-semibold text-white mb-1">
+                  {action.title}
+                </h3>
+                <p className="text-sm text-gray-400 mb-4">
+                  {action.description}
+                </p>
+                <Button variant="ghost" size="sm">
+                  Get Started <ExternalLink className="h-4 w-4 ml-1" />
                 </Button>
-              </div>
-              <div className="mt-4 space-y-2 text-sm text-gray-300">
-                <div className="flex items-center justify-between">
-                  <span>Latest Ledger</span>
-                  <span className="text-white font-medium">
-                    {network.latestLedger ?? 'Loading...'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Ledger Age</span>
-                  <span className="text-white font-medium">
-                    {network.ledgerAgeSeconds !== null
-                      ? `${network.ledgerAgeSeconds}s`
-                      : 'Loading...'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Last Updated</span>
-                  <span className="text-white font-medium">
-                    {network.lastUpdated
-                      ? new Date(network.lastUpdated).toLocaleTimeString()
-                      : 'Loading...'}
-                  </span>
-                </div>
-              </div>
-              {network.congestion && (
-                <div className="mt-4 flex items-start space-x-2 rounded-lg bg-yellow-500/10 p-3 text-yellow-300">
-                  <AlertTriangle className="h-4 w-4 mt-0.5" />
-                  <span className="text-sm">
-                    Congestion detected. Transactions may take longer to confirm.
-                  </span>
-                </div>
-              )}
-            </Card>
-
-            <Card>
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-300">
-                    Account Sync State
-                  </p>
-                  <div className="flex items-center space-x-2 mt-1">
-                    <span className={`text-lg font-semibold ${syncStatusColor}`}>
-                      {syncStatusLabel}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-2">
-                    Based on the latest ledger signal from Horizon.
-                  </p>
-                </div>
-              </div>
-              {network.accountSyncState === 'desynced' && (
-                <div className="mt-4 flex items-start space-x-2 rounded-lg bg-red-500/10 p-3 text-red-300">
-                  <AlertTriangle className="h-4 w-4 mt-0.5" />
-                  <span className="text-sm">
-                    Account appears out of sync. Try refreshing or check network conditions.
-                  </span>
-                </div>
-              )}
-              {network.accountSyncState === 'syncing' && (
-                <div className="mt-4 flex items-start space-x-2 rounded-lg bg-yellow-500/10 p-3 text-yellow-300">
-                  <AlertTriangle className="h-4 w-4 mt-0.5" />
-                  <span className="text-sm">
-                    Syncing with the network. Recent updates may be delayed.
-                  </span>
-                </div>
-              )}
-            </Card>
+              </Card>
+            ))}
           </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-white mb-6">
-            Quick Actions
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {quickActions.map((action, index) => (
-              <Card key={index} className="cursor-pointer hover:shadow-lg transition-shadow">
-                <div className="flex items-start space-x-4">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-white mb-1">
-                      {action.title}
-                    </h3>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => router.push('/chat')}
-                    >
-                      View All
-                    </Button>
-                  </div>
-                  <div className="space-y-3">
-                    {messages.slice(-5).reverse().map((message, index) => (
-                      <div key={index} className="flex items-start space-x-2 p-2 bg-gray-800/50 rounded-lg">
-                        <div className={`w-2 h-2 rounded-full mt-2 ${message.type === 'user' ? 'bg-blue-500' : 'bg-green-500'
-                          }`} />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-2 mb-1">
-                            <span className="text-sm font-medium text-white">
-                              {message.type === 'user' ? 'You' : 'AI Agent'}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-300 truncate">
-                            {(() => {
-                              const content = typeof message.content === 'string'
-                                ? message.content
-                                : (message.content as any)?.message || 'Structured data message';
-                              return content.length > 100
-                                ? content.substring(0, 100) + '...'
-                                : content;
-                            })()}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <h3 className="text-lg font-medium text-white mb-2">
-                    No recent activity
-                  </h3>
-                  <p className="text-gray-300 mb-4">
-                    Your recent transactions and interactions will appear here.
-                  </p>
-                  <Button
-                    onClick={() => router.push('/chat')}
-                  >
-                    Start with AI Agent
-                  </Button>
-                </div>
-              )}
-            </Card>
-          </div>
-
-          {/* Transaction History */}
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-white mb-6">
-              Transaction History
-            </h2>
-            <Card>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium text-white">
-                    Recent Transactions
-                  </h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      // TODO: Implement transaction history fetch
-                      toast('Transaction history coming soon!');
-                    }}
-                  >
-                    <RefreshCw className="h-4 w-4 mr-1" />
-                    Refresh
-                  </Button>
-                </div>
-
-                {/* Mock transaction data - will be replaced with real data */}
-                <div className="space-y-3">
-                  {status?.deploymentTransactionHash && (
-                    <div className="flex items-center space-x-3 p-3 bg-gray-800/50 rounded-lg">
-                      <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center">
-                        <ArrowUpRight className="h-4 w-4 text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-white">
-                            Account Deployment
-                          </span>
-                          <span className="text-xs text-gray-400">
-                            {new Date().toLocaleDateString()}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-300">
-                          Transaction: {formatAddress(status.deploymentTransactionHash)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-sm text-green-400">Deployed</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {status?.fundingTransactionHash && (
-                    <div className="flex items-center space-x-3 p-3 bg-gray-800/50 rounded-lg">
-                      <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
-                        <ArrowDownLeft className="h-4 w-4 text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-white">
-                            Account Funding
-                          </span>
-                          <span className="text-xs text-gray-400">
-                            {new Date().toLocaleDateString()}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-300">
-                          Transaction: {formatAddress(status.fundingTransactionHash)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-sm text-blue-400">Funded</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {!status?.deploymentTransactionHash && !status?.fundingTransactionHash && (
-                    <div className="text-center py-8">
-                      <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-white mb-2">
-                        No transactions yet
-                      </h3>
-                      <p className="text-gray-300 mb-4">
-                        Your transaction history will appear here once you start using ChenPilot.
-                      </p>
-                      <Button
-                        onClick={() => router.push('/chat')}
-                      >
-                        Start with AI Agent
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Card>
-          </div>
-
         </div>
       </div>
     </ChatLayout>

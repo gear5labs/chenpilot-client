@@ -12,13 +12,21 @@ export interface AgentQueryResponse {
     error?: string;
     transactionHash?: string;
     metadata?: {
-      type?: 'defi' | 'wallet' | 'contact' | 'general';
+      type?: "defi" | "wallet" | "contact" | "general";
       action?: string;
       amount?: string;
       asset?: string;
       requiresConfirmation?: boolean;
     };
   };
+}
+
+export interface RealtimeMetrics {
+  activeUsers: number;
+  serverHealth: "healthy" | "degraded" | "unhealthy";
+  uptime: string;
+  cpuUsage: number;
+  memoryUsage: number;
 }
 
 export interface AgentStatus {
@@ -65,11 +73,11 @@ export interface AgentCapabilities {
 }
 
 export interface AgentHealthCheck {
-  status: 'healthy' | 'degraded' | 'unhealthy';
+  status: "healthy" | "degraded" | "unhealthy";
   timestamp: string;
   services: {
     [key: string]: {
-      status: 'up' | 'down' | 'degraded';
+      status: "up" | "down" | "degraded";
       responseTime?: number;
       error?: string;
     };
@@ -90,7 +98,7 @@ export interface AgentHealthCheck {
 export interface AgentTool {
   name: string;
   description: string;
-  category: 'defi' | 'wallet' | 'contact' | 'utility';
+  category: "defi" | "wallet" | "contact" | "utility";
   isActive: boolean;
   parameters?: {
     [key: string]: {
@@ -121,7 +129,7 @@ export interface AgentWorkflow {
 export interface WorkflowStep {
   id: string;
   name: string;
-  type: 'action' | 'condition' | 'loop' | 'parallel';
+  type: "action" | "condition" | "loop" | "parallel";
   parameters: {
     [key: string]: any;
   };
@@ -134,7 +142,7 @@ export interface AgentExecutionResult {
   steps: {
     id: string;
     name: string;
-    status: 'pending' | 'running' | 'completed' | 'failed';
+    status: "pending" | "running" | "completed" | "failed";
     result?: any;
     error?: string;
     duration?: number;
@@ -190,7 +198,14 @@ export interface AgentValidationError extends AgentError {
 
 // Event types for real-time updates
 export interface AgentEvent {
-  type: 'query_started' | 'query_completed' | 'query_failed' | 'tool_executed' | 'workflow_started' | 'workflow_completed' | 'service_status_changed';
+  type:
+    | "query_started"
+    | "query_completed"
+    | "query_failed"
+    | "tool_executed"
+    | "workflow_started"
+    | "workflow_completed"
+    | "service_status_changed";
   timestamp: string;
   userId?: string;
   data: any;
@@ -198,7 +213,7 @@ export interface AgentEvent {
 
 export interface AgentNotification {
   id: string;
-  type: 'info' | 'warning' | 'error' | 'success';
+  type: "info" | "warning" | "error" | "success";
   title: string;
   message: string;
   timestamp: string;
