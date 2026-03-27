@@ -1,11 +1,13 @@
 import { createSlice, PayloadAction, createAction } from '@reduxjs/toolkit';
 
-export interface ThemeState {
+export interface UIState {
   mode: 'light' | 'dark';
+  isRateLimited: boolean;
 }
 
-const initialState: ThemeState = {
+const initialState: UIState = {
   mode: 'dark', // Default to dark mode
+  isRateLimited: false,
 };
 
 // Create action for initialization
@@ -38,6 +40,9 @@ export const uiSlice = createSlice({
         localStorage.setItem('theme', state.mode);
       }
     },
+    setRateLimited: (state, action: PayloadAction<boolean>) => {
+      state.isRateLimited = action.payload;
+    },
   },
   extraReducers: (builder) => {
     builder.addCase(initializeUI, (state, action) => {
@@ -46,5 +51,5 @@ export const uiSlice = createSlice({
   },
 });
 
-export const { toggleTheme, setTheme } = uiSlice.actions;
+export const { toggleTheme, setTheme, setRateLimited } = uiSlice.actions;
 export default uiSlice.reducer;
