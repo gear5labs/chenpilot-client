@@ -162,7 +162,27 @@ export interface AgentQueryResponse {
     success: boolean;
     data: string;
     error?: string;
+    executionTrace?: ExecutionTrace;
   };
+}
+
+// Execution Trace Types
+export interface ExecutionTrace {
+  steps: ExecutionStep[];
+  totalTime: number;
+  startTime: string;
+  endTime: string;
+}
+
+export interface ExecutionStep {
+  id: string;
+  name: string;
+  type: 'thought' | 'action' | 'tool_call' | 'result' | 'error';
+  timestamp: string;
+  duration: number;
+  description: string;
+  details?: any;
+  substeps?: ExecutionStep[];
 }
 
 // Chat and Message Types
@@ -182,6 +202,7 @@ export interface ChatMessage {
     action?: string;
     asset?: string;
     requiresConfirmation?: boolean;
+    executionTrace?: ExecutionTrace;
   };
 }
 

@@ -13,10 +13,10 @@ import {
   AgentQueryResponse,
   ApiResponse,
   ChatMessage,
-  Conversation,
-} from "@/types";
-import agentService from "./agentService";
-import { RealtimeMetrics } from "@/types/agent";
+  Conversation
+} from '@/types';
+import agentService from './agentService';
+import { tokenRefreshService } from './tokenRefreshService';
 
 class ApiService {
   private api: AxiosInstance;
@@ -44,19 +44,49 @@ class ApiService {
       },
     );
 
-    // Response interceptor for error handling
+    // Response interceptor for automatic token refresh
     this.api.interceptors.response.use(
       (response) => response,
-      (error) => {
-        if (error.response?.status === 401) {
-          this.clearToken();
-          // Redirect to login or dispatch logout action
-          if (typeof window !== "undefined") {
-            window.location.href = "/auth/login";
+      async (error) => {
+        const originalRequest = error.config;
+
+        // If error is not 401 or original request already tried refresh, reject
+        if (error.response?.status !== 401 || originalRequest._retry) {
+          // Handle 401 by clearing token and redirecting to login
+          if (error.response?.status === 401) {
+            this.clearToken();
+            if (typeof window !== 'undefined') {
+              window.location.href = '/auth/login';
+            }
           }
+          return Promise.reject(error);
         }
-        return Promise.reject(error);
-      },
+
+        // Mark that we're retrying
+        originalRequest._retry = true;
+
+        try {
+          // Attempt to refresh the token
+          const response = await tokenRefreshService.refreshToken(this.api.defaults.baseURL as string);
+          const newToken = response.token;
+          
+          // Update the token in the service and original request
+          this.setToken(newToken);
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          
+          // Retry the original request
+          return this.api(originalRequest);
+        } catch (refreshError) {
+          // Refresh failed, clear token and redirect to login
+          this.clearToken();
+          
+          if (typeof window !== 'undefined') {
+            window.location.href = '/auth/login';
+          }
+          
+          return Promise.reject(refreshError);
+        }
+      }
     );
   }
 
@@ -191,6 +221,25 @@ class ApiService {
     } finally {
       this.clearToken();
     }
+  }
+
+  async refreshToken(): Promise<{ token: string }> {
+    // Use direct axios call to avoid interceptor recursion
+    const response = await axios.post<{ token: string }>(
+      `${this.api.defaults.baseURL}/auth/refresh`,
+      {},
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          // Don't send Authorization header for refresh to avoid circular dependency
+        },
+      }
+    );
+    
+    if (response.data?.token) {
+      this.setToken(response.data.token);
+    }
+    return response.data;
   }
 
   // Protected endpoints

@@ -6,6 +6,7 @@ import { Toaster } from 'react-hot-toast';
 import { store } from '@/store';
 import { initializeAuth } from '@/store/slices/authSlice';
 import { initializeUI } from '@/store/slices/uiSlice';
+import { SocketProvider } from './SocketProvider';
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -21,31 +22,46 @@ export function Providers({ children }: ProvidersProps) {
 
   return (
     <Provider store={store}>
-      {children}
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 4000,
-          style: {
-            background: '#363636',
-            color: '#fff',
-          },
-          success: {
-            duration: 3000,
-            iconTheme: {
-              primary: '#10B981',
-              secondary: '#fff',
-            },
-          },
-          error: {
-            duration: 5000,
-            iconTheme: {
-              primary: '#EF4444',
-              secondary: '#fff',
-            },
+      <SocketProvider 
+        config={{
+          url: process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001',
+          options: {
+            transports: ['websocket', 'polling'],
+            autoConnect: true,
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionAttempts: 5,
+            timeout: 20000,
           },
         }}
-      />
+        autoConnect={true}
+      >
+        {children}
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#363636',
+              color: '#fff',
+            },
+            success: {
+              duration: 3000,
+              iconTheme: {
+                primary: '#10B981',
+                secondary: '#fff',
+              },
+            },
+            error: {
+              duration: 5000,
+              iconTheme: {
+                primary: '#EF4444',
+                secondary: '#fff',
+              },
+            },
+          }}
+        />
+      </SocketProvider>
     </Provider>
   );
 }
