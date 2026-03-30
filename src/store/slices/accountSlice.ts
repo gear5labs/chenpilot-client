@@ -2,12 +2,10 @@ import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import {
   AccountStatus,
   WalletBalance,
-  TransactionHistory,
   StellarTransaction,
-  StellarOperation,
   AccountState,
 } from "@/types";
-import apiService from "@/services/api";
+import { horizonFetch } from "@/utils/horizonFetch";
 
 type NetworkHealthStatus = "healthy" | "degraded" | "down" | "unknown";
 type AccountSyncState = "synced" | "syncing" | "desynced";
@@ -38,7 +36,7 @@ const initialState: AccountState = {
 // Async thunks
 export const getAccountStatus = createAsyncThunk(
   "account/getStatus",
-  async (_, { rejectWithValue }) => {
+  async () => {
     // Mock account status
     const mockStatus: AccountStatus = {
       isDeployed: true,
@@ -55,7 +53,7 @@ export const getAccountStatus = createAsyncThunk(
 
 export const getBalance = createAsyncThunk(
   "account/getBalance",
-  async (_, { rejectWithValue }) => {
+  async () => {
     // Mock balance
     return "1000000000000000000"; // 1 ETH in wei
   },
@@ -65,7 +63,7 @@ export const getStellarNetworkStatus = createAsyncThunk(
   "account/getStellarNetworkStatus",
   async (_, { rejectWithValue }) => {
     try {
-      const response = await fetch(
+      const response = await horizonFetch(
         "https://horizon.stellar.org/ledgers?order=desc&limit=1",
       );
       if (!response.ok) {
@@ -100,9 +98,9 @@ export const getStellarNetworkStatus = createAsyncThunk(
         congestion,
         lastUpdated: new Date().toISOString(),
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return rejectWithValue(
-        error.message || "Failed to fetch Stellar network status",
+        (error as { message?: string }).message || "Failed to fetch Stellar network status",
       );
     }
   },
@@ -110,7 +108,7 @@ export const getStellarNetworkStatus = createAsyncThunk(
 
 export const deployAccount = createAsyncThunk(
   "account/deploy",
-  async (_, { rejectWithValue }) => {
+  async () => {
     // Mock deploy account - always succeed
     return { success: true, transactionHash: "0xmockdeployhash" };
   },
@@ -118,7 +116,7 @@ export const deployAccount = createAsyncThunk(
 
 export const fundAccount = createAsyncThunk(
   "account/fund",
-  async (_, { rejectWithValue }) => {
+  async () => {
     // Mock fund account - always succeed
     return { success: true, transactionHash: "0xmockfundhash" };
   },
@@ -126,7 +124,7 @@ export const fundAccount = createAsyncThunk(
 
 export const getAutoFundingStats = createAsyncThunk(
   "account/getAutoFundingStats",
-  async (_, { rejectWithValue }) => {
+  async () => {
     // Mock funding stats
     return {
       totalFunded: 10,
@@ -140,7 +138,7 @@ export const getTransactionHistory = createAsyncThunk(
   "account/getTransactionHistory",
   async (publicKey: string, { rejectWithValue }) => {
     try {
-      const response = await fetch(
+      const response = await horizonFetch(
         `https://horizon.stellar.org/accounts/${publicKey}/transactions?order=desc&limit=50`,
       );
       if (!response.ok) {
@@ -148,7 +146,7 @@ export const getTransactionHistory = createAsyncThunk(
       }
       const data = await response.json();
       const transactions: StellarTransaction[] = data._embedded.records.map(
-        (record: any) => ({
+        (record: Record<string, unknown>) => ({
           id: record.id,
           hash: record.hash,
           ledger: record.ledger,
@@ -158,7 +156,7 @@ export const getTransactionHistory = createAsyncThunk(
           operation_count: record.operation_count,
           successful: record.successful,
           operations:
-            record._embedded?.records?.map((op: any) => ({
+            (record._embedded as { records?: Record<string, unknown>[] })?.records?.map((op: Record<string, unknown>) => ({
               id: op.id,
               type: op.type,
               amount: op.amount,
@@ -173,13 +171,34 @@ export const getTransactionHistory = createAsyncThunk(
         }),
       );
       return transactions;
-    } catch (error: any) {
+    } catch (error: unknown) {
       return rejectWithValue(
-        error.message || "Failed to fetch transaction history",
+        (error as { message?: string }).message || "Failed to fetch transaction history",
       );
     }
   },
 );
+
+export const getAccountTransactions = createAsyncThunk(
+  "account/getAccountTransactions",
+  async (
+    { userId, page = 1, limit = 10 }: { userId: string; page?: number; limit?: number },
+    { rejectWithValue }
+  ) => {
+    try {
+      const response = await apiService.getAccountTransactions(userId, page, limit);
+      if (!response.success) {
+        return rejectWithValue(response.message || "Failed to fetch transactions");
+      }
+      return response.data;
+    } catch (error: any) {
+      return rejectWithValue(
+        error.message || "Failed to fetch account transactions",
+      );
+    }
+  },
+);
+
 
 const accountSlice = createSlice({
   name: "account",
@@ -351,6 +370,20 @@ const accountSlice = createSlice({
         state.transactions.error = null;
       })
       .addCase(getTransactionHistory.rejected, (state, action) => {
+        state.transactions.isLoading = false;
+        state.transactions.error = action.payload as string;
+      })
+      // Get Account Transactions
+      .addCase(getAccountTransactions.pending, (state) => {
+        state.transactions.isLoading = true;
+        state.transactions.error = null;
+      })
+      .addCase(getAccountTransactions.fulfilled, (state, action) => {
+        state.transactions.isLoading = false;
+        state.transactions.transactions = action.payload.transactions;
+        state.transactions.error = null;
+      })
+      .addCase(getAccountTransactions.rejected, (state, action) => {
         state.transactions.isLoading = false;
         state.transactions.error = action.payload as string;
       });

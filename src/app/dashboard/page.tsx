@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAppDispatch, useAppSelector } from "@/store";
 import {
   getAccountStatus,
+  getAccountTransactions,
   getBalance,
   getStellarNetworkStatus,
 } from "@/store/slices/accountSlice";
@@ -12,18 +13,22 @@ import { loadUser } from "@/store/slices/authSlice";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ChatLayout } from "@/components/layout/ChatLayout";
+import TransactionTable from "@/components/dashboard/TransactionTable";
+import LiquidityPoolStats from "@/components/widgets/LiquidityPoolStats";
 import {
+  Activity,
+  AlertTriangle,
   Copy,
+  Database,
+  Droplets,
   ExternalLink,
   ShieldCheck,
-  Wallet,
-  Coins,
-  Zap,
-  Activity,
-  Users,
   Server,
+  Users,
+  Wallet,
+  Zap,
+  Coins,
   Cpu,
-  Database,
 } from "lucide-react";
 import { formatAddress, formatTokenAmount } from "@/utils/format";
 import apiService from "@/services/api";
@@ -35,11 +40,15 @@ export default function DashboardPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
-  const { status, balance } = useAppSelector((state) => state.account);
-  // const { messages } = useAppSelector((state) => state.chat);
+  const { status, balance, network, transactions } = useAppSelector(
+    (state) => state.account,
+  );
+  const { messages } = useAppSelector((state) => state.chat);
 
-  // Real-time Metrics State
   const [metrics, setMetrics] = useState<RealtimeMetrics | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -61,7 +70,6 @@ export default function DashboardPage() {
     return () => clearInterval(pollInterval);
   }, [dispatch, isAuthenticated, router, status?.isDeployed, status?.isFunded]);
 
-  // Real-time Metrics Polling (5 seconds)
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
@@ -70,7 +78,7 @@ export default function DashboardPage() {
           setMetrics(response.data);
         }
       } catch (err) {
-        console.error("Failed to fetch real-time stats");
+        console.error("Failed to fetch real-time stats", err);
       }
     };
 
@@ -86,6 +94,36 @@ export default function DashboardPage() {
     const interval = setInterval(refreshNetworkStatus, 15000);
     return () => clearInterval(interval);
   }, [dispatch, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) {
+      return;
+    }
+
+    dispatch(
+      getAccountTransactions({
+        userId: user.id,
+        page: currentPage,
+        limit: pageSize,
+      }),
+    );
+  }, [dispatch, isAuthenticated, user?.id, currentPage, pageSize]);
+
+  useEffect(() => {
+    const transactionCount = transactions?.transactions?.length ?? 0;
+    const count = (currentPage - 1) * pageSize + transactionCount;
+    setTotalCount(count);
+  }, [currentPage, pageSize, transactions?.transactions?.length]);
+
+  const handlePageChange = (page: number) => {
+    if (page < 1) return;
+    setCurrentPage(page);
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  };
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -105,12 +143,51 @@ export default function DashboardPage() {
     },
     {
       title: "View Transactions",
-      description: "Check your transaction history",
+      description: "Review your on-chain history",
       action: () => router.push("/transactions"),
     },
   ];
 
+  const latestMessages = [...(messages || [])]
+    .slice(-3)
+    .reverse();
+
+  const networkStatusLabel =
+    network.status === "healthy"
+      ? "Healthy"
+      : network.status === "degraded"
+        ? "Degraded"
+        : network.status === "down"
+          ? "Down"
+          : "Checking";
+
+  const networkStatusColor =
+    network.status === "healthy"
+      ? "text-green-400"
+      : network.status === "degraded"
+        ? "text-yellow-400"
+        : network.status === "down"
+          ? "text-red-400"
+          : "text-gray-300";
+
+  const syncStatusLabel =
+    network.accountSyncState === "synced"
+      ? "Synced"
+      : network.accountSyncState === "syncing"
+        ? "Syncing"
+        : "Desynced";
+
+  const syncStatusColor =
+    network.accountSyncState === "synced"
+      ? "text-green-400"
+      : network.accountSyncState === "syncing"
+        ? "text-yellow-400"
+        : "text-red-400";
+
   if (!isAuthenticated) return null;
+
+  const transactionList = transactions?.transactions ?? [];
+  const effectiveTotalCount = Math.max(totalCount, transactionList.length);
 
   return (
     <ChatLayout>
@@ -120,17 +197,15 @@ export default function DashboardPage() {
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10 overflow-y-auto">
-          {/* Welcome Section */}
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-white mb-2">
               Welcome back, {user?.name || "User"}!
             </h1>
             <p className="text-gray-300">
-              Overview of your ChenPilot account and system health.
+              Overview of your ChenPilot account, network health, and activity.
             </p>
           </div>
 
-          {/* Admin Real-time Metrics Section */}
           <section className="mb-12">
             <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
               <Activity className="mr-2 h-6 w-6 text-purple-500" />
@@ -196,7 +271,6 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          {/* Account Lifecycle Section */}
           <div className="mb-12">
             <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
               <ShieldCheck className="mr-2 h-6 w-6 text-blue-400" />
@@ -319,25 +393,206 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Quick Actions */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            {quickActions.map((action, i) => (
-              <Card
-                key={i}
-                className="hover:shadow-lg transition-shadow cursor-pointer"
-                onClick={action.action}
-              >
-                <h3 className="text-lg font-semibold text-white mb-1">
-                  {action.title}
-                </h3>
-                <p className="text-sm text-gray-400 mb-4">
-                  {action.description}
-                </p>
-                <Button variant="ghost" size="sm">
-                  Get Started <ExternalLink className="h-4 w-4 ml-1" />
-                </Button>
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-white mb-6">
+              Quick Actions
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {quickActions.map((action, index) => (
+                <Card key={index} className="cursor-pointer hover:shadow-lg transition-shadow">
+                  <div className="space-y-3">
+                    <div>
+                      <h3 className="text-lg font-semibold text-white mb-1">
+                        {action.title}
+                      </h3>
+                      <p className="text-gray-300 mb-4">
+                        {action.description}
+                      </p>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={action.action}>
+                      Get Started
+                      <ExternalLink className="h-4 w-4 ml-1" />
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+
+          <div className="mb-12">
+            <h2 className="text-2xl font-bold text-white mb-6">
+              Recent Activity
+            </h2>
+            <Card>
+              {latestMessages.length > 0 ? (
+                <div className="space-y-4">
+                  {latestMessages.map((message) => (
+                    <div
+                      key={message.id}
+                      className="flex items-start space-x-3 bg-gray-900/70 p-4 rounded-lg border border-gray-800"
+                    >
+                      <span
+                        className={`w-2 h-2 rounded-full mt-1 ${
+                          message.type === "user"
+                            ? "bg-blue-400"
+                            : "bg-green-400"
+                        }`}
+                      />
+                      <div>
+                        <p className="text-sm text-white font-medium">
+                          {message.type === "user" ? "You" : "AI Agent"}
+                        </p>
+                        <p className="text-sm text-gray-300">
+                          {message.content}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(message.timestamp).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <p className="text-gray-400 mb-2">
+                    No recent messages yet.
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Once you start chatting with the AI agent, the most recent messages will appear here.
+                  </p>
+                </div>
+              )}
+            </Card>
+          </div>
+
+          <div className="mb-12">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-white flex items-center">
+                <Droplets className="mr-2 h-6 w-6 text-blue-400" />
+                Liquidity Pool Statistics
+              </h2>
+              <div className="flex items-center space-x-2 bg-gray-900/50 px-3 py-1.5 rounded-full border border-gray-800">
+                <Activity className="h-4 w-4 text-green-400" />
+                <span className="text-xs font-medium text-gray-300">
+                  Live Data
+                </span>
+              </div>
+            </div>
+            <LiquidityPoolStats />
+          </div>
+
+          <div className="mb-12">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-white">
+                Stellar Network
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-300">
+                      Network Status
+                    </p>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <Activity className={`h-4 w-4 ${networkStatusColor}`} />
+                      <span className={`text-lg font-semibold ${networkStatusColor}`}>
+                        {networkStatusLabel}
+                      </span>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => dispatch(getStellarNetworkStatus())}
+                  >
+                    Refresh
+                  </Button>
+                </div>
+                <div className="mt-4 space-y-2 text-sm text-gray-300">
+                  <div className="flex items-center justify-between">
+                    <span>Latest Ledger</span>
+                    <span className="text-white font-medium">
+                      {network.latestLedger ?? "Loading..."}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Ledger Age</span>
+                    <span className="text-white font-medium">
+                      {network.ledgerAgeSeconds !== null
+                        ? `${network.ledgerAgeSeconds}s`
+                        : "Loading..."}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Last Updated</span>
+                    <span className="text-white font-medium">
+                      {network.lastUpdated
+                        ? new Date(network.lastUpdated).toLocaleTimeString()
+                        : "Loading..."}
+                    </span>
+                  </div>
+                </div>
+                {network.congestion && (
+                  <div className="mt-4 flex items-start space-x-2 rounded-lg bg-yellow-500/10 p-3 text-yellow-300">
+                    <AlertTriangle className="h-4 w-4 mt-0.5" />
+                    <span className="text-sm">
+                      Congestion detected. Transactions may take longer to confirm.
+                    </span>
+                  </div>
+                )}
               </Card>
-            ))}
+
+              <Card>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-300">
+                      Account Sync State
+                    </p>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <span className={`text-lg font-semibold ${syncStatusColor}`}>
+                        {syncStatusLabel}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">
+                      Based on the latest ledger signal from Horizon.
+                    </p>
+                  </div>
+                </div>
+                {network.accountSyncState === "desynced" && (
+                  <div className="mt-4 flex items-start space-x-2 rounded-lg bg-red-500/10 p-3 text-red-300">
+                    <AlertTriangle className="h-4 w-4 mt-0.5" />
+                    <span className="text-sm">
+                      Account appears out of sync. Try refreshing or check network conditions.
+                    </span>
+                  </div>
+                )}
+                {network.accountSyncState === "syncing" && (
+                  <div className="mt-4 flex items-start space-x-2 rounded-lg bg-yellow-500/10 p-3 text-yellow-300">
+                    <AlertTriangle className="h-4 w-4 mt-0.5" />
+                    <span className="text-sm">
+                      Syncing with the network. Recent updates may be delayed.
+                    </span>
+                  </div>
+                )}
+              </Card>
+            </div>
+          </div>
+
+          <div className="mb-12">
+            <h2 className="text-2xl font-bold text-white mb-6">
+              On-Chain Transaction History
+            </h2>
+            <TransactionTable
+              transactions={transactionList}
+              isLoading={transactions.isLoading}
+              error={transactions.error}
+              currentPage={currentPage}
+              pageSize={pageSize}
+              totalCount={effectiveTotalCount}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+            />
           </div>
         </div>
       </div>

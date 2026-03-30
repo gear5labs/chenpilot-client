@@ -203,6 +203,7 @@ export interface ChatMessage {
     asset?: string;
     requiresConfirmation?: boolean;
     executionTrace?: ExecutionTrace;
+    rawData?: any;
   };
 }
 
@@ -383,3 +384,50 @@ export type NotificationType = "success" | "error" | "warning" | "info";
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
 export type ModalSize = "sm" | "md" | "lg" | "xl";
+
+// Liquidity Pool Types
+export interface LiquidityPool {
+  id: string;
+  name: string;
+  token1: {
+    symbol: string;
+    name: string;
+    address: string;
+    decimals: number;
+  };
+  token2: {
+    symbol: string;
+    name: string;
+    address: string;
+    decimals: number;
+  };
+  reserve1: string;
+  reserve2: string;
+  totalLiquidity: string;
+  apr: number;
+  volume24h: string;
+  fee: number;
+  isActive: boolean;
+  created_at: string;
+}
+
+export interface LiquidityStats {
+  totalPools: number;
+  totalLiquidity: string;
+  totalVolume24h: string;
+  averageAPR: number;
+  activePools: number;
+  topPools: LiquidityPool[];
+  networkMetrics: {
+    gasPrice: string;
+    blockNumber: number;
+    timestamp: string;
+  };
+}
+
+export interface LiquidityRequest {
+  includeInactive?: boolean;
+  limit?: number;
+  sortBy?: 'liquidity' | 'volume' | 'apr';
+  sortOrder?: 'asc' | 'desc';
+}

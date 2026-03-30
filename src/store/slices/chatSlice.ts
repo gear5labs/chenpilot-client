@@ -70,8 +70,14 @@ export const getOrCreateActiveConversation = createAsyncThunk(
 export const sendMessage = createAsyncThunk(
   'chat/sendMessage',
   async (query: string, { getState, rejectWithValue }) => {
+    const state = getState() as any;
+    
+    // Concurrency guard: prevent multiple simultaneous queries
+    if (state.chat.isLoading || state.chat.isTyping) {
+      return rejectWithValue('A query is already in progress');
+    }
+
     try {
-      const state = getState() as any;
       const userId = state.auth.user?.id;
       const currentConversation = state.chat.currentConversation;
       
@@ -106,22 +112,45 @@ export const sendMessage = createAsyncThunk(
       // Call the API service to get actual response
       const response = await apiService.queryAgent({ userId, query });
       
+      // Handle parsing of the agent response
+      let content = response.result.data;
+      
+      // If the response data is a string that looks like JSON, try to parse it
+      if (typeof content === 'string' && (content.trim().startsWith('{') || content.trim().startsWith('['))) {
+        try {
+          const parsed = JSON.parse(content);
+          // If successfully parsed and it's an object/array, we might want to 
+          // extract a 'message' field if it exists, or just keep it as structured data
+          if (parsed && typeof parsed === 'object') {
+            // If it has a specific 'message' or 'text' field, we might use that for display
+            // but for now we keep the whole object as metadata or stringify it for content
+            console.log('[ChatSlice] Structured agent response:', parsed);
+          }
+        } catch (e) {
+          // Not valid JSON or parsing failed, keep as string
+          console.log('[ChatSlice] Response is not valid JSON, keeping as string');
+        }
+      }
+
       // Create agent message with execution trace if available
       const agentMessage: ChatMessage = {
         id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         type: 'agent',
-        content: response.result.data,
+        content: content,
         timestamp: new Date().toISOString(),
         metadata: {
           success: response.result.success,
           error: response.result.error,
           executionTrace: response.result.executionTrace,
+          // Store raw structured data in metadata if it was JSON
+          rawData: typeof content !== 'string' ? content : undefined
         }
       };
 
       return { response, conversation, userMessage, agentMessage };
     } catch (error: any) {
-      return rejectWithValue(error.response?.data?.message || 'Failed to send message');
+      const errorMsg = error.response?.data?.message || error.message || 'Failed to send message';
+      return rejectWithValue(errorMsg);
     }
   }
 );

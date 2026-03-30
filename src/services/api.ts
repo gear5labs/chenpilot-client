@@ -13,10 +13,15 @@ import {
   AgentQueryResponse,
   ApiResponse,
   ChatMessage,
-  Conversation
-} from '@/types';
-import agentService from './agentService';
-import { tokenRefreshService } from './tokenRefreshService';
+  Conversation,
+  LiquidityPool,
+  LiquidityStats,
+  LiquidityRequest,
+  StellarTransaction,
+} from "@/types";
+import agentService from "./agentService";
+import { tokenRefreshService } from "./tokenRefreshService";
+import { RealtimeMetrics } from "@/types/agent";
 
 class ApiService {
   private api: AxiosInstance;
@@ -55,8 +60,8 @@ class ApiService {
           // Handle 401 by clearing token and redirecting to login
           if (error.response?.status === 401) {
             this.clearToken();
-            if (typeof window !== 'undefined') {
-              window.location.href = '/auth/login';
+            if (typeof window !== "undefined") {
+              window.location.href = "/auth/login";
             }
           }
           return Promise.reject(error);
@@ -67,26 +72,28 @@ class ApiService {
 
         try {
           // Attempt to refresh the token
-          const response = await tokenRefreshService.refreshToken(this.api.defaults.baseURL as string);
+          const response = await tokenRefreshService.refreshToken(
+            this.api.defaults.baseURL as string,
+          );
           const newToken = response.token;
-          
+
           // Update the token in the service and original request
           this.setToken(newToken);
           originalRequest.headers.Authorization = `Bearer ${newToken}`;
-          
+
           // Retry the original request
           return this.api(originalRequest);
         } catch (refreshError) {
           // Refresh failed, clear token and redirect to login
           this.clearToken();
-          
-          if (typeof window !== 'undefined') {
-            window.location.href = '/auth/login';
+
+          if (typeof window !== "undefined") {
+            window.location.href = "/auth/login";
           }
-          
+
           return Promise.reject(refreshError);
         }
-      }
+      },
     );
   }
 
@@ -137,8 +144,11 @@ class ApiService {
       data,
     );
     // Persist token on successful registration to keep the user authenticated
-    if (response.data?.success && (response.data as any)?.data?.token) {
-      this.setToken((response.data as any).data.token);
+    if (
+      response.data?.success &&
+      (response.data as { data?: { token?: string } })?.data?.token
+    ) {
+      this.setToken((response.data as { data: { token: string } }).data.token);
     }
     return response.data;
   }
@@ -220,6 +230,12 @@ class ApiService {
       console.warn("Logout request failed, clearing local token anyway");
     } finally {
       this.clearToken();
+      // Purge all auth-related data from storage
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("user_data");
+        localStorage.removeItem("refresh_token"); // Clear refresh token if stored here
+        sessionStorage.clear(); // Clear session storage as well
+      }
     }
   }
 
@@ -230,12 +246,12 @@ class ApiService {
       {},
       {
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           // Don't send Authorization header for refresh to avoid circular dependency
         },
-      }
+      },
     );
-    
+
     if (response.data?.token) {
       this.setToken(response.data.token);
     }
@@ -243,6 +259,11 @@ class ApiService {
   }
 
   // Protected endpoints
+  async getMe(): Promise<ApiResponse<User>> {
+    const response = await this.api.get<ApiResponse<User>>("/auth/me");
+    return response.data;
+  }
+
   async getProfile(): Promise<ApiResponse<User>> {
     const response = await this.api.get<ApiResponse<User>>("/auth/profile");
     return response.data;
@@ -275,6 +296,29 @@ class ApiService {
       await this.api.delete<ApiResponse<{ message: string }>>("/auth/account");
     this.clearToken();
     return response.data;
+  }
+
+  async exportUserData(): Promise<Blob> {
+    const endpoints = ["/data-export", "/data/export", "/api/data-export"];
+
+    for (const endpoint of endpoints) {
+      try {
+        const response = await this.api.get<Blob>(endpoint, {
+          responseType: "blob",
+        });
+
+        if (response.status === 200 && response.data) {
+          return response.data;
+        }
+      } catch (error: unknown) {
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+          continue; // try next endpoint
+        }
+        throw error;
+      }
+    }
+
+    throw new Error("User data export endpoint not found.");
   }
 
   // Starknet account management
@@ -360,14 +404,42 @@ class ApiService {
     return response.data;
   }
 
+  // Account transaction endpoints
+  async getAccountTransactions(
+    userId: string,
+    page: number = 1,
+    limit: number = 10,
+  ): Promise<
+    ApiResponse<{
+      transactions: StellarTransaction[];
+      total: number;
+      page: number;
+      limit: number;
+    }>
+  > {
+    const response = await this.api.get<
+      ApiResponse<{
+        transactions: StellarTransaction[];
+        total: number;
+        page: number;
+        limit: number;
+      }>
+    >(`/account/${userId}/transactions`, {
+      params: { page, limit },
+    });
+    return response.data;
+  }
+
   // Contact management - Note: Contact endpoints are not available in experimental backend
   // Contact management is handled through the agent query system
   async getContacts(): Promise<ApiResponse<Contact[]>> {
     try {
       const response = await this.api.get<ApiResponse<Contact[]>>("/contacts");
       return response.data;
-    } catch (error: any) {
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      if (
+        (error as { response?: { status?: number } }).response?.status === 404
+      ) {
         // Contact endpoints not available in experimental backend
         return {
           success: true,
@@ -388,8 +460,10 @@ class ApiService {
         data,
       );
       return response.data;
-    } catch (error: any) {
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      if (
+        (error as { response?: { status?: number } }).response?.status === 404
+      ) {
         // Contact endpoints not available in experimental backend
         return {
           success: false,
@@ -412,8 +486,10 @@ class ApiService {
         data,
       );
       return response.data;
-    } catch (error: any) {
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      if (
+        (error as { response?: { status?: number } }).response?.status === 404
+      ) {
         // Contact endpoints not available in experimental backend
         return {
           success: false,
@@ -431,8 +507,10 @@ class ApiService {
         `/contacts/${id}`,
       );
       return response.data;
-    } catch (error: any) {
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      if (
+        (error as { response?: { status?: number } }).response?.status === 404
+      ) {
         // Contact endpoints not available in experimental backend
         return {
           success: false,
@@ -445,7 +523,7 @@ class ApiService {
     }
   }
 
-  // Agent query - Enhanced with experimental agent integration
+  // Agent query - Optimized for backend integration
   async queryAgent(data: AgentQueryRequest): Promise<AgentQueryResponse> {
     // First try the experimental agent service
     try {
@@ -597,7 +675,7 @@ class ApiService {
     }
   }
 
-  async executeAgentTool(toolName: string, params: any) {
+  async executeAgentTool(toolName: string, params: Record<string, unknown>) {
     try {
       return await agentService.executeTool(toolName, params);
     } catch (error) {
@@ -636,14 +714,24 @@ class ApiService {
       activeConversations: number;
     }>
   > {
-    const response =
-      await this.api.get<
-        ApiResponse<{
-          totalConversations: number;
-          totalMessages: number;
-          activeConversations: number;
-        }>
-      >("/chat/stats");
+    const response = await this.api.get<
+      ApiResponse<{
+        totalConversations: number;
+        totalMessages: number;
+        activeConversations: number;
+      }>
+    >("/chat/stats");
+    return response.data;
+  }
+
+  // Liquidity Pool endpoints
+  async getLiquidityStats(
+    request?: LiquidityRequest,
+  ): Promise<ApiResponse<LiquidityStats>> {
+    const response = await this.api.post<ApiResponse<LiquidityStats>>(
+      "/liquidity",
+      request || {},
+    );
     return response.data;
   }
 

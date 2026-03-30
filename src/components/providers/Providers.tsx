@@ -7,6 +7,7 @@ import { store } from '@/store';
 import { initializeAuth } from '@/store/slices/authSlice';
 import { initializeUI } from '@/store/slices/uiSlice';
 import { SocketProvider } from './SocketProvider';
+import { TransactionToastListener } from '@/components/TransactionToastListener';
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -37,6 +38,7 @@ export function Providers({ children }: ProvidersProps) {
         autoConnect={true}
       >
         {children}
+        <TransactionToastListener />
         <Toaster
           position="top-right"
           toastOptions={{

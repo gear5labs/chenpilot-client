@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { User, LoginRequest, RegisterRequest, LoginResponse, RegisterResponse } from '@/types';
+import { User, LoginRequest, RegisterRequest } from '@/types';
 import apiService from '@/services/api';
 
 interface AuthState {
@@ -21,7 +21,7 @@ const initialState: AuthState = {
 // Async thunks
 export const login = createAsyncThunk(
   'auth/login',
-  async (credentials: LoginRequest, { rejectWithValue }) => {
+  async (credentials: LoginRequest) => {
     // Mock login - always succeed
     const mockUser: User = {
       id: 'mock-user-id',
@@ -44,7 +44,7 @@ export const login = createAsyncThunk(
 
 export const register = createAsyncThunk(
   'auth/register',
-  async (userData: RegisterRequest, { rejectWithValue }) => {
+  async (userData: RegisterRequest) => {
     // Mock register - always succeed
     const mockUser: User = {
       id: 'mock-user-id',
@@ -67,10 +67,10 @@ export const register = createAsyncThunk(
 
 export const logout = createAsyncThunk(
   'auth/logout',
-  async (_, { rejectWithValue }) => {
+  async () => {
     try {
       await apiService.logout();
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Even if logout fails on server, clear local state
       console.error('Logout error:', error);
     }
@@ -79,7 +79,7 @@ export const logout = createAsyncThunk(
 
 export const loadUser = createAsyncThunk(
   'auth/loadUser',
-  async (_, { rejectWithValue }) => {
+  async () => {
     // Mock load user - return mock user
     const mockUser: User = {
       id: 'mock-user-id',
@@ -101,7 +101,7 @@ export const loadUser = createAsyncThunk(
 
 export const updateProfile = createAsyncThunk(
   'auth/updateProfile',
-  async (userData: Partial<User>, { rejectWithValue }) => {
+  async (userData: Partial<User>) => {
     // Mock update profile - return updated mock user
     const mockUser: User = {
       id: 'mock-user-id',
@@ -123,7 +123,7 @@ export const updateProfile = createAsyncThunk(
 
 export const changePassword = createAsyncThunk(
   'auth/changePassword',
-  async ({ currentPassword, newPassword }: { currentPassword: string; newPassword: string }, { rejectWithValue }) => {
+  async () => {
     // Mock change password - always succeed
     return { success: true };
   }
@@ -131,7 +131,7 @@ export const changePassword = createAsyncThunk(
 
 export const googleAuth = createAsyncThunk(
   'auth/googleAuth',
-  async (token: string, { rejectWithValue }) => {
+  async () => {
     // Mock google auth - always succeed
     const mockUser: User = {
       id: 'mock-google-user-id',
@@ -156,11 +156,23 @@ export const refreshToken = createAsyncThunk(
   'auth/refreshToken',
   async (_, { rejectWithValue }) => {
     try {
-      // Call the API service refresh token method
       const response = await apiService.refreshToken();
       return { token: response.token };
-    } catch (error: any) {
-      return rejectWithValue(error.message || 'Token refresh failed');
+    } catch (error: unknown) {
+      return rejectWithValue((error as { message?: string }).message || 'Token refresh failed');
+    }
+  }
+);
+
+export const fetchProfile = createAsyncThunk(
+  'auth/fetchProfile',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiService.getMe();
+      if (response.success) return response.data;
+      return rejectWithValue((response as { message?: string }).message);
+    } catch (error: unknown) {
+      return rejectWithValue((error as { message?: string }).message || 'Failed to fetch profile');
     }
   }
 );
@@ -345,10 +357,14 @@ const authSlice = createSlice({
           localStorage.removeItem('auth_token');
           localStorage.removeItem('user_data');
         }
+      })
+      // Fetch Profile
+      .addCase(fetchProfile.fulfilled, (state, action) => {
+        state.user = action.payload;
       });
   },
 });
 
 export const { clearError, setToken, clearAuth, initializeAuth } = authSlice.actions;
-export { login, register, logout, loadUser, updateProfile, changePassword, googleAuth, refreshToken };
+export { login, register, logout, loadUser, updateProfile, changePassword, googleAuth, refreshToken, fetchProfile };
 export default authSlice.reducer;
