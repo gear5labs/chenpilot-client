@@ -431,3 +431,86 @@ export interface LiquidityRequest {
   sortBy?: 'liquidity' | 'volume' | 'apr';
   sortOrder?: 'asc' | 'desc';
 }
+
+// === Audit Log Types ===
+export type AuditAction = 
+  | 'user.login'
+  | 'user.logout'
+  | 'user.register'
+  | 'user.update_profile'
+  | 'user.delete_account'
+  | 'user.password_change'
+  | 'user.email_verify'
+  | 'user.token_refresh'
+  | 'transaction.create'
+  | 'transaction.send'
+  | 'transaction.receive'
+  | 'transaction.swap'
+  | 'contact.create'
+  | 'contact.update'
+  | 'contact.delete'
+  | 'agent.query'
+  | 'agent.tool_execute'
+  | 'auth.google_auth'
+  | 'admin.access'
+  | 'admin.audit_view'
+  | 'settings.update'
+  | 'account.deploy'
+  | 'account.fund'
+  | 'liquidity.query';
+
+export type AuditSeverity = 'info' | 'warning' | 'error' | 'critical';
+
+export interface AuditLogEntry {
+  id: string;
+  userId: string;
+  userEmail: string;
+  userName: string;
+  action: AuditAction;
+  resource: string;
+  resourceId?: string;
+  description: string;
+  metadata: Record<string, unknown>;
+  ipAddress?: string;
+  userAgent?: string;
+  severity: AuditSeverity;
+  status: 'success' | 'failure' | 'pending';
+  duration?: number;
+  timestamp: string;
+  createdAt: string;
+}
+
+export interface AuditLogsQueryParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  userId?: string;
+  action?: AuditAction;
+  severity?: AuditSeverity;
+  status?: 'success' | 'failure' | 'pending';
+  startDate?: string;
+  endDate?: string;
+  sortBy?: 'timestamp' | 'action' | 'userEmail' | 'severity';
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface AuditLogsResponse {
+  success: boolean;
+  data: {
+    logs: AuditLogEntry[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+  message?: string;
+}
+
+export interface AuditLogStats {
+  totalLogs: number;
+  uniqueUsers: number;
+  actionsByType: Record<string, number>;
+  errorsToday: number;
+  warningsToday: number;
+  recentActivity: AuditLogEntry[];
+}

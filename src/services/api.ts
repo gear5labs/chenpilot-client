@@ -735,6 +735,43 @@ class ApiService {
     return response.data;
   }
 
+  // === Audit Log Endpoints ===
+
+  /**
+   * Fetch audit logs with filtering, pagination, and search
+   */
+  async getAuditLogs(params: AuditLogsQueryParams = {}): Promise<AuditLogsResponse> {
+    const response = await this.api.get<AuditLogsResponse>('/audit', { params });
+    return response.data;
+  }
+
+  /**
+   * Fetch a single audit log entry by ID
+   */
+  async getAuditLogById(id: string): Promise<ApiResponse<AuditLogEntry>> {
+    const response = await this.api.get<ApiResponse<AuditLogEntry>>(`/audit/${id}`);
+    return response.data;
+  }
+
+  /**
+   * Fetch aggregated audit log statistics
+   */
+  async getAuditLogStats(): Promise<ApiResponse<AuditLogStats>> {
+    const response = await this.api.get<ApiResponse<AuditLogStats>>('/audit/stats');
+    return response.data;
+  }
+
+  /**
+   * Export audit logs (download as CSV/JSON)
+   */
+  async exportAuditLogs(params: AuditLogsQueryParams = {}): Promise<Blob> {
+    const response = await this.api.get<Blob>('/audit/export', {
+      params,
+      responseType: 'blob',
+    });
+    return response.data;
+  }
+
   // Generic request method for custom endpoints
   async request<T>(config: AxiosRequestConfig): Promise<T> {
     const response = await this.api.request<T>(config);
