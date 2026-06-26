@@ -3,14 +3,19 @@
 export const env = {
   // API Configuration
   API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:2333',
-  
+
+  // Horizon proxy — routes through backend's /proxy pipeline
+  HORIZON_PROXY_URL: typeof window !== 'undefined'
+    ? `${window.location.origin}/horizon`
+    : '/horizon',
+
   // Google OAuth
   GOOGLE_CLIENT_ID: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '',
-  
+
   // Application Configuration
   APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || 'ChenPilot',
   APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION || '1.0.0',
-  
+
   // Environment
   NODE_ENV: process.env.NODE_ENV || 'development',
   IS_DEVELOPMENT: process.env.NODE_ENV === 'development',

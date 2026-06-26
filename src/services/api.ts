@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { 
   RegisterRequest, 
   LoginRequest, 
@@ -13,9 +13,18 @@ import {
   AgentQueryResponse,
   ApiResponse,
   ChatMessage,
-  Conversation
+  Conversation,
+  LiquidityPool,
+  LiquidityStats,
+  LiquidityRequest,
+  StellarTransaction,
+  AuditLogEntry,
+  AuditLogsQueryParams,
+  AuditLogsResponse,
+  AuditLogStats
 } from '@/types';
 import agentService from './agentService';
+import { tokenRefreshService } from './tokenRefreshService';
 
 class ApiService {
   private api: AxiosInstance;
@@ -43,7 +52,7 @@ class ApiService {
       }
     );
 
-    // Response interceptor for error handling
+    // Response interceptor for automatic token refresh
     this.api.interceptors.response.use(
       (response) => {
         // Successful response - potentially clear rate limit if it was set
@@ -54,8 +63,40 @@ class ApiService {
       },
       (error: any) => {
         if (error.response?.status === 401) {
+      (response) => response,
+      async (error) => {
+        const originalRequest = error.config;
+
+        // If error is not 401 or original request already tried refresh, reject
+        if (error.response?.status !== 401 || originalRequest._retry) {
+          // Handle 401 by clearing token and redirecting to login
+          if (error.response?.status === 401) {
+            this.clearToken();
+            if (typeof window !== 'undefined') {
+              window.location.href = '/auth/login';
+            }
+          }
+          return Promise.reject(error);
+        }
+
+        // Mark that we're retrying
+        originalRequest._retry = true;
+
+        try {
+          // Attempt to refresh the token
+          const response = await tokenRefreshService.refreshToken(this.api.defaults.baseURL as string);
+          const newToken = response.token;
+          
+          // Update the token in the service and original request
+          this.setToken(newToken);
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          
+          // Retry the original request
+          return this.api(originalRequest);
+        } catch (refreshError) {
+          // Refresh failed, clear token and redirect to login
           this.clearToken();
-          // Redirect to login or dispatch logout action
+          
           if (typeof window !== 'undefined') {
             window.location.href = '/auth/login';
           }
@@ -68,8 +109,9 @@ class ApiService {
               } 
             }));
           }
+          
+          return Promise.reject(refreshError);
         }
-        return Promise.reject(error);
       }
     );
   }
@@ -118,8 +160,8 @@ class ApiService {
     
     const response = await this.api.post<RegisterResponse>('/auth/register', data);
     // Persist token on successful registration to keep the user authenticated
-    if (response.data?.success && (response.data as any)?.data?.token) {
-      this.setToken((response.data as any).data.token);
+    if (response.data?.success && (response.data as { data?: { token?: string } })?.data?.token) {
+      this.setToken((response.data as { data: { token: string } }).data.token);
     }
     return response.data;
   }
@@ -175,16 +217,48 @@ class ApiService {
 
   async logout(): Promise<void> {
     try {
-      await this.api.post('/auth/logout');
+      // Send the request to invalidate the refresh token on the backend
+      // Using withCredentials: true ensures cookies (if used) are sent
+      await this.api.post('/auth/logout', {}, { withCredentials: true });
     } catch (error) {
-      // Even if logout fails on server, clear local token
-      console.warn('Logout request failed, clearing local token anyway');
+      // Even if logout fails on server, clear local state
+      console.warn('Logout request failed, clearing local state anyway', error);
     } finally {
       this.clearToken();
+      // Purge all auth-related data from storage
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('user_data');
+        localStorage.removeItem('refresh_token'); // Clear refresh token if stored here
+        sessionStorage.clear(); // Clear session storage as well
+      }
     }
   }
 
+  async refreshToken(): Promise<{ token: string }> {
+    // Use direct axios call to avoid interceptor recursion
+    const response = await axios.post<{ token: string }>(
+      `${this.api.defaults.baseURL}/auth/refresh`,
+      {},
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          // Don't send Authorization header for refresh to avoid circular dependency
+        },
+      }
+    );
+    
+    if (response.data?.token) {
+      this.setToken(response.data.token);
+    }
+    return response.data;
+  }
+
   // Protected endpoints
+  async getMe(): Promise<ApiResponse<User>> {
+    const response = await this.api.get<ApiResponse<User>>('/auth/me');
+    return response.data;
+  }
+
   async getProfile(): Promise<ApiResponse<User>> {
     const response = await this.api.get<ApiResponse<User>>('/auth/profile');
     return response.data;
@@ -207,6 +281,29 @@ class ApiService {
     const response = await this.api.delete<ApiResponse<{ message: string }>>('/auth/account');
     this.clearToken();
     return response.data;
+  }
+
+  async exportUserData(): Promise<Blob> {
+    const endpoints = ['/data-export', '/data/export', '/api/data-export'];
+
+    for (const endpoint of endpoints) {
+      try {
+        const response = await this.api.get<Blob>(endpoint, {
+          responseType: 'blob',
+        });
+
+        if (response.status === 200 && response.data) {
+          return response.data;
+        }
+      } catch (error: unknown) {
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+          continue; // try next endpoint
+        }
+        throw error;
+      }
+    }
+
+    throw new Error('User data export endpoint not found.');
   }
 
   // Starknet account management
@@ -246,14 +343,22 @@ class ApiService {
     return response.data;
   }
 
+  // Account transaction endpoints
+  async getAccountTransactions(userId: string, page: number = 1, limit: number = 10): Promise<ApiResponse<{ transactions: StellarTransaction[]; total: number; page: number; limit: number }>> {
+    const response = await this.api.get<ApiResponse<{ transactions: StellarTransaction[]; total: number; page: number; limit: number }>>(`/account/${userId}/transactions`, {
+      params: { page, limit }
+    });
+    return response.data;
+  }
+
   // Contact management - Note: Contact endpoints are not available in experimental backend
   // Contact management is handled through the agent query system
   async getContacts(): Promise<ApiResponse<Contact[]>> {
     try {
       const response = await this.api.get<ApiResponse<Contact[]>>('/contacts');
       return response.data;
-    } catch (error: any) {
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      if ((error as { response?: { status?: number } }).response?.status === 404) {
         // Contact endpoints not available in experimental backend
         return {
           success: true,
@@ -269,8 +374,8 @@ class ApiService {
     try {
       const response = await this.api.post<ApiResponse<Contact>>('/contacts', data);
       return response.data;
-    } catch (error: any) {
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      if ((error as { response?: { status?: number } }).response?.status === 404) {
         // Contact endpoints not available in experimental backend
         return {
           success: false,
@@ -286,8 +391,8 @@ class ApiService {
     try {
       const response = await this.api.put<ApiResponse<Contact>>(`/contacts/${id}`, data);
       return response.data;
-    } catch (error: any) {
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      if ((error as { response?: { status?: number } }).response?.status === 404) {
         // Contact endpoints not available in experimental backend
         return {
           success: false,
@@ -303,8 +408,8 @@ class ApiService {
     try {
       const response = await this.api.delete<ApiResponse<{ message: string }>>(`/contacts/${id}`);
       return response.data;
-    } catch (error: any) {
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      if ((error as { response?: { status?: number } }).response?.status === 404) {
         // Contact endpoints not available in experimental backend
         return {
           success: false,
@@ -316,7 +421,7 @@ class ApiService {
     }
   }
 
-  // Agent query - Enhanced with experimental agent integration
+  // Agent query - Optimized for backend integration
   async queryAgent(data: AgentQueryRequest): Promise<AgentQueryResponse> {
     // First try the experimental agent service
     try {
@@ -325,33 +430,43 @@ class ApiService {
         return await agentService.queryAgent(data);
       }
     } catch (error) {
-      console.warn('[ApiService] Experimental agent service failed, falling back to backend');
+      console.warn('[ApiService] Experimental agent service failed, falling back to backend:', error);
     }
 
     // Fallback to backend API (experimental backend)
     try {
+      if (!data.query || data.query.trim().length === 0) {
+        throw new Error('Query cannot be empty');
+      }
+
+      console.log('[ApiService] Querying backend /query endpoint');
       const response = await this.api.post('/query', data);
       
-      // The experimental backend returns { result: ... } format
+      // The system returns response.data directly or wrapped in { result: ... }
       if (response.data && response.data.result) {
         return {
-          result: response.data.result
+          result: {
+            success: response.data.result.success ?? true,
+            data: response.data.result.data || 'Success',
+            error: response.data.result.error,
+            executionTrace: response.data.result.executionTrace
+          }
         };
       }
       
-      // Fallback if response format is unexpected
+      // Handle the case where the backend returns the result directly
       return {
         result: {
           success: true,
-          data: response.data || 'Query processed successfully',
+          data: typeof response.data === 'string' ? response.data : JSON.stringify(response.data),
           error: undefined
         }
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[ApiService] Backend query failed:', error);
       // Convert technical errors to user-friendly messages
       let friendlyMessage = 'Query failed. Please try again.';
-      const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
+      const errorMsg = (error as { response?: { data?: { message?: string } }; message?: string }).response?.data?.message || (error as { message?: string }).message || 'Unknown error';
       
       if (errorMsg.includes('invalid query')) {
         friendlyMessage = "I didn't understand that. Could you please rephrase your question?";
@@ -360,7 +475,7 @@ class ApiService {
       } else if (errorMsg.includes('network')) {
         friendlyMessage = "I'm having trouble connecting. Please check your internet connection and try again.";
       }
-      
+
       return {
         result: {
           success: false,
@@ -442,7 +557,7 @@ class ApiService {
     }
   }
 
-  async executeAgentTool(toolName: string, params: any) {
+  async executeAgentTool(toolName: string, params: Record<string, unknown>) {
     try {
       return await agentService.executeTool(toolName, params);
     } catch (error) {
@@ -476,6 +591,49 @@ class ApiService {
 
   async getConversationStats(): Promise<ApiResponse<{ totalConversations: number; totalMessages: number; activeConversations: number }>> {
     const response = await this.api.get<ApiResponse<{ totalConversations: number; totalMessages: number; activeConversations: number }>>('/chat/stats');
+    return response.data;
+  }
+
+  // Liquidity Pool endpoints
+  async getLiquidityStats(request?: LiquidityRequest): Promise<ApiResponse<LiquidityStats>> {
+    const response = await this.api.post<ApiResponse<LiquidityStats>>('/liquidity', request || {});
+    return response.data;
+  }
+
+  // === Audit Log Endpoints ===
+
+  /**
+   * Fetch audit logs with filtering, pagination, and search
+   */
+  async getAuditLogs(params: AuditLogsQueryParams = {}): Promise<AuditLogsResponse> {
+    const response = await this.api.get<AuditLogsResponse>('/audit', { params });
+    return response.data;
+  }
+
+  /**
+   * Fetch a single audit log entry by ID
+   */
+  async getAuditLogById(id: string): Promise<ApiResponse<AuditLogEntry>> {
+    const response = await this.api.get<ApiResponse<AuditLogEntry>>(`/audit/${id}`);
+    return response.data;
+  }
+
+  /**
+   * Fetch aggregated audit log statistics
+   */
+  async getAuditLogStats(): Promise<ApiResponse<AuditLogStats>> {
+    const response = await this.api.get<ApiResponse<AuditLogStats>>('/audit/stats');
+    return response.data;
+  }
+
+  /**
+   * Export audit logs (download as CSV/JSON)
+   */
+  async exportAuditLogs(params: AuditLogsQueryParams = {}): Promise<Blob> {
+    const response = await this.api.get<Blob>('/audit/export', {
+      params,
+      responseType: 'blob',
+    });
     return response.data;
   }
 

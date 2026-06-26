@@ -162,7 +162,27 @@ export interface AgentQueryResponse {
     success: boolean;
     data: string;
     error?: string;
+    executionTrace?: ExecutionTrace;
   };
+}
+
+// Execution Trace Types
+export interface ExecutionTrace {
+  steps: ExecutionStep[];
+  totalTime: number;
+  startTime: string;
+  endTime: string;
+}
+
+export interface ExecutionStep {
+  id: string;
+  name: string;
+  type: 'thought' | 'action' | 'tool_call' | 'result' | 'error';
+  timestamp: string;
+  duration: number;
+  description: string;
+  details?: any;
+  substeps?: ExecutionStep[];
 }
 
 // Chat and Message Types
@@ -182,6 +202,8 @@ export interface ChatMessage {
     action?: string;
     asset?: string;
     requiresConfirmation?: boolean;
+    executionTrace?: ExecutionTrace;
+    rawData?: any;
   };
 }
 
@@ -362,3 +384,133 @@ export type NotificationType = "success" | "error" | "warning" | "info";
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
 export type ModalSize = "sm" | "md" | "lg" | "xl";
+
+// Liquidity Pool Types
+export interface LiquidityPool {
+  id: string;
+  name: string;
+  token1: {
+    symbol: string;
+    name: string;
+    address: string;
+    decimals: number;
+  };
+  token2: {
+    symbol: string;
+    name: string;
+    address: string;
+    decimals: number;
+  };
+  reserve1: string;
+  reserve2: string;
+  totalLiquidity: string;
+  apr: number;
+  volume24h: string;
+  fee: number;
+  isActive: boolean;
+  created_at: string;
+}
+
+export interface LiquidityStats {
+  totalPools: number;
+  totalLiquidity: string;
+  totalVolume24h: string;
+  averageAPR: number;
+  activePools: number;
+  topPools: LiquidityPool[];
+  networkMetrics: {
+    gasPrice: string;
+    blockNumber: number;
+    timestamp: string;
+  };
+}
+
+export interface LiquidityRequest {
+  includeInactive?: boolean;
+  limit?: number;
+  sortBy?: 'liquidity' | 'volume' | 'apr';
+  sortOrder?: 'asc' | 'desc';
+}
+
+// === Audit Log Types ===
+export type AuditAction = 
+  | 'user.login'
+  | 'user.logout'
+  | 'user.register'
+  | 'user.update_profile'
+  | 'user.delete_account'
+  | 'user.password_change'
+  | 'user.email_verify'
+  | 'user.token_refresh'
+  | 'transaction.create'
+  | 'transaction.send'
+  | 'transaction.receive'
+  | 'transaction.swap'
+  | 'contact.create'
+  | 'contact.update'
+  | 'contact.delete'
+  | 'agent.query'
+  | 'agent.tool_execute'
+  | 'auth.google_auth'
+  | 'admin.access'
+  | 'admin.audit_view'
+  | 'settings.update'
+  | 'account.deploy'
+  | 'account.fund'
+  | 'liquidity.query';
+
+export type AuditSeverity = 'info' | 'warning' | 'error' | 'critical';
+
+export interface AuditLogEntry {
+  id: string;
+  userId: string;
+  userEmail: string;
+  userName: string;
+  action: AuditAction;
+  resource: string;
+  resourceId?: string;
+  description: string;
+  metadata: Record<string, unknown>;
+  ipAddress?: string;
+  userAgent?: string;
+  severity: AuditSeverity;
+  status: 'success' | 'failure' | 'pending';
+  duration?: number;
+  timestamp: string;
+  createdAt: string;
+}
+
+export interface AuditLogsQueryParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  userId?: string;
+  action?: AuditAction;
+  severity?: AuditSeverity;
+  status?: 'success' | 'failure' | 'pending';
+  startDate?: string;
+  endDate?: string;
+  sortBy?: 'timestamp' | 'action' | 'userEmail' | 'severity';
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface AuditLogsResponse {
+  success: boolean;
+  data: {
+    logs: AuditLogEntry[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+  message?: string;
+}
+
+export interface AuditLogStats {
+  totalLogs: number;
+  uniqueUsers: number;
+  actionsByType: Record<string, number>;
+  errorsToday: number;
+  warningsToday: number;
+  recentActivity: AuditLogEntry[];
+}

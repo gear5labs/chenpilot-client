@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppDispatch, useAppSelector } from '@/store';
-import { getAccountStatus, getBalance, deployAccount, fundAccount, getStellarNetworkStatus } from '@/store/slices/accountSlice';
+import { getAccountStatus, getBalance, deployAccount, fundAccount, getStellarNetworkStatus, getAccountTransactions } from '@/store/slices/accountSlice';
 import { loadUser } from '@/store/slices/authSlice';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ChatLayout } from '@/components/layout/ChatLayout';
+import TransactionTable from '@/components/dashboard/TransactionTable';
 import {
   Copy,
   ExternalLink,
@@ -21,19 +22,25 @@ import {
   ShieldCheck,
   Wallet,
   Coins,
-  Zap
+  Zap,
   Activity,
-  AlertTriangle
+  AlertTriangle,
+  Droplets
 } from 'lucide-react';
 import { formatAddress, formatTokenAmount } from '@/utils/format';
 import toast from 'react-hot-toast';
+import LiquidityPoolStats from '@/components/widgets/LiquidityPoolStats';
 
 export default function DashboardPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
-  const { status, balance, isLoading, network } = useAppSelector((state) => state.account);
+  const { status, balance, isLoading, network, transactions } = useAppSelector((state) => state.account);
   const { messages } = useAppSelector((state) => state.chat);
+  
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -73,6 +80,33 @@ export default function DashboardPage() {
 
     return () => clearInterval(interval);
   }, [dispatch, isAuthenticated]);
+
+  // Fetch transactions
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) {
+      return;
+    }
+
+    dispatch(getAccountTransactions({ userId: user.id, page: currentPage, limit: pageSize }));
+  }, [dispatch, isAuthenticated, user?.id, currentPage, pageSize]);
+
+  // Update total count from API response
+  useEffect(() => {
+    // This will be set when the API response comes back with pagination data
+    if (transactions.transactions.length > 0) {
+      // Mock total count calculation - in production this would come from API
+      setTotalCount(transactions.transactions.length * 2);
+    }
+  }, [transactions.transactions]);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setCurrentPage(1); // Reset to first page when changing page size
+  };
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -314,6 +348,23 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Liquidity Pool Stats */}
+          <div className="mb-12">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-white flex items-center">
+                <Droplets className="mr-2 h-6 w-6 text-blue-400" />
+                Liquidity Pool Statistics
+              </h2>
+              <div className="flex items-center space-x-2 bg-gray-900/50 px-3 py-1.5 rounded-full border border-gray-800">
+                <Activity className="h-4 w-4 text-green-400" />
+                <span className="text-xs font-medium text-gray-300">
+                  Live Data
+                </span>
+              </div>
+            </div>
+            <LiquidityPoolStats />
+          </div>
+
           {/* Recent Activity */}
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-white mb-6">
@@ -490,96 +541,18 @@ export default function DashboardPage() {
           {/* Transaction History */}
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-white mb-6">
-              Transaction History
+              On-Chain Transaction History
             </h2>
-            <Card>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium text-white">
-                    Recent Transactions
-                  </h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      // TODO: Implement transaction history fetch
-                      toast('Transaction history coming soon!');
-                    }}
-                  >
-                    <RefreshCw className="h-4 w-4 mr-1" />
-                    Refresh
-                  </Button>
-                </div>
-
-                {/* Mock transaction data - will be replaced with real data */}
-                <div className="space-y-3">
-                  {status?.deploymentTransactionHash && (
-                    <div className="flex items-center space-x-3 p-3 bg-gray-800/50 rounded-lg">
-                      <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center">
-                        <ArrowUpRight className="h-4 w-4 text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-white">
-                            Account Deployment
-                          </span>
-                          <span className="text-xs text-gray-400">
-                            {new Date().toLocaleDateString()}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-300">
-                          Transaction: {formatAddress(status.deploymentTransactionHash)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-sm text-green-400">Deployed</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {status?.fundingTransactionHash && (
-                    <div className="flex items-center space-x-3 p-3 bg-gray-800/50 rounded-lg">
-                      <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
-                        <ArrowDownLeft className="h-4 w-4 text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-white">
-                            Account Funding
-                          </span>
-                          <span className="text-xs text-gray-400">
-                            {new Date().toLocaleDateString()}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-300">
-                          Transaction: {formatAddress(status.fundingTransactionHash)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-sm text-blue-400">Funded</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {!status?.deploymentTransactionHash && !status?.fundingTransactionHash && (
-                    <div className="text-center py-8">
-                      <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-white mb-2">
-                        No transactions yet
-                      </h3>
-                      <p className="text-gray-300 mb-4">
-                        Your transaction history will appear here once you start using ChenPilot.
-                      </p>
-                      <Button
-                        onClick={() => router.push('/chat')}
-                      >
-                        Start with AI Agent
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Card>
+            <TransactionTable
+              transactions={transactions.transactions}
+              isLoading={transactions.isLoading}
+              error={transactions.error}
+              currentPage={currentPage}
+              pageSize={pageSize}
+              totalCount={totalCount}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+            />
           </div>
 
         </div>
