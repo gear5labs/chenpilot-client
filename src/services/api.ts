@@ -17,11 +17,7 @@ import {
   LiquidityPool,
   LiquidityStats,
   LiquidityRequest,
-  StellarTransaction,
-  AuditLogEntry,
-  AuditLogsQueryParams,
-  AuditLogsResponse,
-  AuditLogStats
+  StellarTransaction
 } from '@/types';
 import agentService from './agentService';
 import { tokenRefreshService } from './tokenRefreshService';

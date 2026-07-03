@@ -3,9 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useTokenRefresh } from '@/hooks/useTokenRefresh';
 import { useAppSelector } from '@/store';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
 
 export function TokenRefreshExample() {
@@ -39,39 +38,38 @@ export function TokenRefreshExample() {
   };
 
   const getTokenStatus = () => {
-    if (!token) return { status: 'No Token', color: 'destructive' };
-    if (isTokenExpired()) return { status: 'Expired', color: 'destructive' };
-    return { status: 'Valid', color: 'default' };
+    if (!token) return { status: 'No Token', color: 'text-red-500' };
+    if (isTokenExpired()) return { status: 'Expired', color: 'text-red-500' };
+    return { status: 'Valid', color: 'text-green-500' };
   };
 
   const tokenStatus = getTokenStatus();
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+    <Card className="w-full max-w-md p-6">
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
           <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
-          JWT Token Auto-Refresh
-        </CardTitle>
-        <CardDescription>
+          <h3 className="text-xl font-bold">JWT Token Auto-Refresh</h3>
+        </div>
+        <p className="text-sm text-gray-400">
           Demonstrates automatic JWT token refresh functionality
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        </p>
+        
         {/* Authentication Status */}
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium">Authentication:</span>
-          <Badge variant={isAuthenticated ? 'default' : 'destructive'}>
+          <span className={`text-sm font-bold ${isAuthenticated ? 'text-green-500' : 'text-red-500'}`}>
             {isAuthenticated ? 'Authenticated' : 'Not Authenticated'}
-          </Badge>
+          </span>
         </div>
 
         {/* Token Status */}
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium">Token Status:</span>
-          <Badge variant={tokenStatus.color as any}>
+          <span className={`text-sm font-bold ${tokenStatus.color}`}>
             {tokenStatus.status}
-          </Badge>
+          </span>
         </div>
 
         {/* Refresh Status */}
@@ -103,7 +101,7 @@ export function TokenRefreshExample() {
           <div className="space-y-2">
             <div className="text-sm">
               <span className="font-medium">Token Preview:</span>
-              <div className="mt-1 p-2 bg-gray-100 rounded text-xs font-mono break-all">
+              <div className="mt-1 p-2 bg-gray-100 dark:bg-gray-800 rounded text-xs font-mono break-all text-gray-600 dark:text-gray-300">
                 {token.substring(0, 50)}...
               </div>
             </div>
@@ -124,7 +122,7 @@ export function TokenRefreshExample() {
           <Button 
             onClick={handleAutoRefresh} 
             disabled={isRefreshing || !isAuthenticated}
-            variant="outline"
+            variant="secondary"
             className="w-full"
           >
             Auto Refresh (if needed)
@@ -132,12 +130,12 @@ export function TokenRefreshExample() {
         </div>
 
         {/* Instructions */}
-        <div className="text-xs text-gray-600 space-y-1">
+        <div className="text-xs text-gray-500 space-y-1">
           <p>• <strong>Manual Refresh:</strong> Forces a token refresh</p>
           <p>• <strong>Auto Refresh:</strong> Only refreshes if token is expired</p>
           <p>• The API service automatically refreshes tokens on 401 errors</p>
         </div>
-      </CardContent>
+      </div>
     </Card>
   );
 }

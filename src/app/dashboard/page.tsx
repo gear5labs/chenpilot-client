@@ -376,8 +376,30 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-medium text-white">
                       Recent Chat Messages
-        {/* Stellar Network */}
-        <div className="mb-8">
+                    </h3>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <h3 className="text-lg font-medium text-white mb-2">
+                    No recent activity
+                  </h3>
+                  <p className="text-gray-300 mb-4">
+                    Your recent interactions will appear here.
+                  </p>
+                  <Button
+                    onClick={() => router.push('/chat')}
+                  >
+                    Start with AI Agent
+                  </Button>
+                </div>
+              )}
+            </Card>
+          </div>
+
+          {/* Stellar Network */}
+          <div className="mb-8">
+
           <h2 className="text-2xl font-bold text-white mb-6">
             Stellar Network
           </h2>
@@ -473,70 +495,37 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Quick Actions */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-white mb-6">
-            Quick Actions
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {quickActions.map((action, index) => (
-              <Card key={index} className="cursor-pointer hover:shadow-lg transition-shadow">
-                <div className="flex items-start space-x-4">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-white mb-1">
-                      {action.title}
-                    </h3>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => router.push('/chat')}
-                    >
-                      View All
-                    </Button>
+          {/* Quick Actions */}
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-white mb-6">
+              Quick Actions
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {quickActions.map((action, index) => (
+                <Card key={index} className="cursor-pointer hover:shadow-lg transition-shadow">
+                  <div className="flex items-start space-x-4">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-white mb-1">
+                        {action.title}
+                      </h3>
+                      <p className="text-gray-300 mb-4">
+                        {action.description}
+                      </p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={action.action}
+                      >
+                        Get Started
+                        <ExternalLink className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="space-y-3">
-                    {messages.slice(-5).reverse().map((message, index) => (
-                      <div key={index} className="flex items-start space-x-2 p-2 bg-gray-800/50 rounded-lg">
-                        <div className={`w-2 h-2 rounded-full mt-2 ${message.type === 'user' ? 'bg-blue-500' : 'bg-green-500'
-                          }`} />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-2 mb-1">
-                            <span className="text-sm font-medium text-white">
-                              {message.type === 'user' ? 'You' : 'AI Agent'}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-300 truncate">
-                            {(() => {
-                              const content = typeof message.content === 'string'
-                                ? message.content
-                                : (message.content as any)?.message || 'Structured data message';
-                              return content.length > 100
-                                ? content.substring(0, 100) + '...'
-                                : content;
-                            })()}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <h3 className="text-lg font-medium text-white mb-2">
-                    No recent activity
-                  </h3>
-                  <p className="text-gray-300 mb-4">
-                    Your recent transactions and interactions will appear here.
-                  </p>
-                  <Button
-                    onClick={() => router.push('/chat')}
-                  >
-                    Start with AI Agent
-                  </Button>
-                </div>
-              )}
-            </Card>
+                </Card>
+              ))}
+            </div>
           </div>
+
 
           {/* Transaction History */}
           <div className="mb-8">
