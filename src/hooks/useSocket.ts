@@ -1,6 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useSocket as useSocketContext } from '@/components/providers/SocketProvider';
-import type { Socket } from 'socket.io-client';
 
 export function useSocket() {
   const context = useSocketContext();
@@ -18,18 +17,33 @@ export function useSocket() {
   };
 }
 
+// Fix #51: Stabilize callback with useRef to prevent constant re-subscription
+// when the callback reference changes on every render.
 export function useSocketEvent(event: string, callback: (...args: any[]) => void) {
   const { socket, on, off } = useSocket();
+  const callbackRef = useRef(callback);
+
+  // Keep the ref up to date without triggering re-subscription
+  useEffect(() => {
+    callbackRef.current = callback;
+  });
 
   useEffect(() => {
     if (socket) {
-      on(event, callback);
-      
+      // Use a stable wrapper that always calls the latest callback via ref
+      const stableCallback = (...args: any[]) => {
+        callbackRef.current(...args);
+      };
+
+      on(event, stableCallback);
+
       return () => {
-        off(event, callback);
+        off(event, stableCallback);
       };
     }
-  }, [socket, event, callback, on, off]);
+    // Only re-subscribe when the socket or event name changes.
+    // The callback ref is excluded to prevent re-subscribe on every render.
+  }, [socket, event, on, off]);
 }
 
 export function useSocketConnection() {

@@ -12,13 +12,24 @@ export interface SocketConfig {
   };
 }
 
+interface PendingEvent {
+  event: string;
+  data?: any;
+}
+
 export class SocketManager {
   private socket: Socket | null = null;
   private config: SocketConfig;
   private reconnectAttempts = 0;
+  private pendingEvents: PendingEvent[] = [];
 
   constructor(config: SocketConfig) {
+    // Fix #50: Merge options properly — config.options extends defaults,
+    // not overwrites them. Extract url separately so ...config doesn't
+    // re-apply raw config.options over the merged block.
+    const { url, options = {} } = config;
     this.config = {
+      url,
       options: {
         transports: ['websocket', 'polling'],
         autoConnect: true,
@@ -26,9 +37,8 @@ export class SocketManager {
         reconnectionDelay: 1000,
         reconnectionAttempts: 5,
         timeout: 20000,
-        ...config.options,
+        ...options,
       },
-      ...config,
     };
   }
 
@@ -42,6 +52,16 @@ export class SocketManager {
     this.socket.on('connect', () => {
       console.log('Socket connected:', this.socket?.id);
       this.reconnectAttempts = 0;
+
+      // Fix #52: Replay pending events after (re)connect
+      if (this.pendingEvents.length > 0) {
+        console.log(`Replaying ${this.pendingEvents.length} pending events`);
+        const events = [...this.pendingEvents];
+        this.pendingEvents = [];
+        for (const { event, data } of events) {
+          this.socket?.emit(event, data);
+        }
+      }
     });
 
     this.socket.on('disconnect', (reason) => {
@@ -88,7 +108,9 @@ export class SocketManager {
     if (this.socket?.connected) {
       this.socket.emit(event, data);
     } else {
-      console.warn('Socket not connected. Cannot emit event:', event);
+      // Fix #52: Queue events when disconnected so they replay on reconnect
+      console.warn('Socket not connected. Queueing event:', event);
+      this.pendingEvents.push({ event, data });
     }
   }
 
