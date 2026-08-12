@@ -5,6 +5,7 @@ import { Provider } from 'react-redux';
 import { Toaster } from 'react-hot-toast';
 import { store } from '@/store';
 import { initializeAuth } from '@/store/slices/authSlice';
+import { initializeUI, setRateLimited } from '@/store/slices/uiSlice';
 import { initializeUI } from '@/store/slices/uiSlice';
 import apiService from '@/services/api';
 import { SocketProvider } from './SocketProvider';
@@ -21,6 +22,25 @@ export function Providers({ children }: ProvidersProps) {
     store.dispatch(initializeAuth());
     // Initialize UI state (theme, etc.)
     store.dispatch(initializeUI());
+
+    // Global API event listeners
+    const handleRateLimit = () => {
+      store.dispatch(setRateLimited(true));
+    };
+    
+    const handleSuccess = () => {
+      // Auto-clear rate limit on successful request? 
+      // Or maybe let the user dismiss it.
+      // For now, let's keep it until manual dismissal or timeout.
+    };
+
+    window.addEventListener('api-rate-limit' as any, handleRateLimit);
+    window.addEventListener('api-success' as any, handleSuccess);
+
+    return () => {
+      window.removeEventListener('api-rate-limit' as any, handleRateLimit);
+      window.removeEventListener('api-success' as any, handleSuccess);
+    };
   }, []);
 
   return (

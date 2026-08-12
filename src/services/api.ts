@@ -55,6 +55,15 @@ class ApiService {
 
     // Response interceptor for automatic token refresh
     this.api.interceptors.response.use(
+      (response) => {
+        // Successful response - potentially clear rate limit if it was set
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('api-success'));
+        }
+        return response;
+      },
+      (error: any) => {
+        if (error.response?.status === 401) {
       (response) => response,
       async (error) => {
         const originalRequest = error.config;
@@ -91,6 +100,15 @@ class ApiService {
           
           if (typeof window !== 'undefined') {
             window.location.href = '/auth/login';
+          }
+        } else if (error.response?.status === 429) {
+          // Rate limited
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('api-rate-limit', { 
+              detail: { 
+                message: error.response?.data?.message || 'You are being rate limited. Please slow down.' 
+              } 
+            }));
           }
           
           return Promise.reject(refreshError);

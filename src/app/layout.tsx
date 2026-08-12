@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Manrope } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers/Providers";
+import { RateLimitBanner } from "@/components/ui/RateLimitBanner";
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -24,6 +25,7 @@ export default function RootLayout({
     <html lang="en" className={manrope.variable}>
       <body className="font-sans antialiased bg-gray-50 dark:bg-gray-900">
         <Providers>
+          <RateLimitBanner />
           {children}
         </Providers>
       </body>
