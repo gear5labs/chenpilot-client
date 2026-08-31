@@ -49,6 +49,39 @@ export class SocketManager {
     this.maxQueueSize = this.config.maxQueueSize ?? 100;
   }
 
+  /** Handler for socket 'connect' event. */
+  private onConnect = (): void => {
+    console.log('Socket connected:', this.socket?.id);
+    this.reconnectAttempts = 0;
+  };
+
+  /** Handler for socket 'disconnect' event. */
+  private onDisconnect = (reason: string): void => {
+    console.log('Socket disconnected:', reason);
+  };
+
+  /** Handler for socket 'connect_error' event. */
+  private onConnectError = (error: Error): void => {
+    console.error('Socket connection error:', error);
+    this.reconnectAttempts++;
+  };
+
+  /** Handler for socket 'reconnect' event. */
+  private onReconnect = (attemptNumber: number): void => {
+    console.log('Socket reconnected after', attemptNumber, 'attempts');
+    this.reconnectAttempts = 0;
+  };
+
+  /** Handler for socket 'reconnect_error' event. */
+  private onReconnectError = (error: Error): void => {
+    console.error('Socket reconnection error:', error);
+  };
+
+  /** Handler for socket 'reconnect_failed' event. */
+  private onReconnectFailed = (): void => {
+    console.error('Socket reconnection failed after', this.reconnectAttempts, 'attempts');
+  };
+
   connect(): Socket {
     if (this.socket?.connected) {
       return this.socket;
@@ -94,6 +127,10 @@ export class SocketManager {
     return this.socket;
   }
 
+  /**
+   * Removes all internally-registered listeners from the socket, then
+   * disconnects and clears the instance.
+   */
   disconnect(): void {
     const socket = this.socket;
 
@@ -211,6 +248,51 @@ export class SocketManager {
       this.registeredHandlers.set(event, handlers);
       this.socket.once(event, callback);
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
+
+  private registerEvent(event: string): void {
+    this.registeredEvents.add(event);
+  }
+
+  private isManagerEvent(event: string): event is ManagerEvent {
+    return (MANAGER_EVENTS as readonly string[]).includes(event);
+  }
+
+  private getHandlerForEvent(event: ManagerEvent): ((...args: unknown[]) => void) | undefined {
+    switch (event) {
+      case 'connect':
+        return this.onConnect;
+      case 'disconnect':
+        return this.onDisconnect;
+      case 'connect_error':
+        return this.onConnectError;
+      case 'reconnect':
+        return this.onReconnect;
+      case 'reconnect_error':
+        return this.onReconnectError;
+      case 'reconnect_failed':
+        return this.onReconnectFailed;
+      default:
+        return undefined;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Test helpers
+  // ---------------------------------------------------------------------------
+
+  /** @internal Returns the number of tracked registered events (for tests). */
+  getRegisteredEventCount(): number {
+    return this.registeredEvents.size;
+  }
+
+  /** @internal Returns whether a specific event is tracked in the registry (for tests). */
+  isEventRegistered(event: string): boolean {
+    return this.registeredEvents.has(event);
   }
 }
 
