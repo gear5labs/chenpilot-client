@@ -18,7 +18,7 @@ interface QueuedEvent {
   event: string;
   data?: unknown;
 }
-type SocketEventHandler = (...args: any[]) => void;
+type SocketEventHandler = (...args: unknown[]) => void;
 
 export class SocketManager {
   private socket: Socket | null = null;
@@ -30,8 +30,6 @@ export class SocketManager {
   private registeredHandlers = new Map<string, Set<SocketEventHandler>>();
 
   constructor(config: SocketConfig) {
-    const defaults = {
-      transports: ['websocket', 'polling'] as ('polling' | 'websocket')[],
     const defaultOptions: NonNullable<SocketConfig['options']> = {
       transports: ['websocket', 'polling'],
       autoConnect: true,
@@ -43,7 +41,7 @@ export class SocketManager {
 
     this.config = {
       ...config,
-      options: { ...defaults, ...(config.options || {}) },
+      options: { ...defaultOptions, ...(config.options || {}) },
     };
     this.queueEnabled = this.config.queueEnabled ?? false;
     this.maxQueueSize = this.config.maxQueueSize ?? 100;
