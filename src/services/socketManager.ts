@@ -10,26 +10,43 @@ export interface SocketConfig {
     reconnectionAttempts?: number;
     timeout?: number;
   };
+  queueEnabled?: boolean;
+  maxQueueSize?: number;
 }
+
+interface QueuedEvent {
+  event: string;
+  data?: unknown;
+}
+type SocketEventHandler = (...args: any[]) => void;
 
 export class SocketManager {
   private socket: Socket | null = null;
   private config: SocketConfig;
   private reconnectAttempts = 0;
+  private eventQueue: QueuedEvent[] = [];
+  private queueEnabled: boolean;
+  private maxQueueSize: number;
+  private registeredHandlers = new Map<string, Set<SocketEventHandler>>();
 
   constructor(config: SocketConfig) {
-    this.config = {
-      options: {
-        transports: ['websocket', 'polling'],
-        autoConnect: true,
-        reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionAttempts: 5,
-        timeout: 20000,
-        ...config.options,
-      },
-      ...config,
+    const defaults = {
+      transports: ['websocket', 'polling'] as ('polling' | 'websocket')[],
+    const defaultOptions: NonNullable<SocketConfig['options']> = {
+      transports: ['websocket', 'polling'],
+      autoConnect: true,
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
+      timeout: 20000,
     };
+
+    this.config = {
+      ...config,
+      options: { ...defaults, ...(config.options || {}) },
+    };
+    this.queueEnabled = this.config.queueEnabled ?? false;
+    this.maxQueueSize = this.config.maxQueueSize ?? 100;
   }
 
   connect(): Socket {
@@ -37,32 +54,40 @@ export class SocketManager {
       return this.socket;
     }
 
+    if (this.socket) {
+      this.removeRegisteredHandlers(this.socket);
+      this.socket.disconnect();
+      this.socket = null;
+    }
+
     this.socket = io(this.config.url, this.config.options);
 
-    this.socket.on('connect', () => {
+    this.registerHandler('connect', () => {
       console.log('Socket connected:', this.socket?.id);
       this.reconnectAttempts = 0;
+      this.flushQueue();
     });
 
-    this.socket.on('disconnect', (reason) => {
+    this.registerHandler('disconnect', (reason) => {
       console.log('Socket disconnected:', reason);
     });
 
-    this.socket.on('connect_error', (error) => {
+    this.registerHandler('connect_error', (error) => {
       console.error('Socket connection error:', error);
       this.reconnectAttempts++;
     });
 
-    this.socket.on('reconnect', (attemptNumber) => {
+    this.registerHandler('reconnect', (attemptNumber) => {
       console.log('Socket reconnected after', attemptNumber, 'attempts');
       this.reconnectAttempts = 0;
+      this.flushQueue();
     });
 
-    this.socket.on('reconnect_error', (error) => {
+    this.registerHandler('reconnect_error', (error) => {
       console.error('Socket reconnection error:', error);
     });
 
-    this.socket.on('reconnect_failed', () => {
+    this.registerHandler('reconnect_failed', () => {
       console.error('Socket reconnection failed after', this.reconnectAttempts, 'attempts');
     });
 
@@ -70,10 +95,15 @@ export class SocketManager {
   }
 
   disconnect(): void {
-    if (this.socket) {
-      this.socket.disconnect();
-      this.socket = null;
+    const socket = this.socket;
+
+    if (!socket) {
+      return;
     }
+
+    this.removeRegisteredHandlers(socket);
+    socket.disconnect();
+    this.socket = null;
   }
 
   getSocket(): Socket | null {
@@ -84,28 +114,101 @@ export class SocketManager {
     return this.socket?.connected || false;
   }
 
-  emit(event: string, data?: any): void {
+  /**
+   * Emits an event immediately when connected, or queues it when queueing is
+   * enabled. The return value indicates whether the event was sent immediately.
+   */
+  emit(event: string, data?: unknown): boolean {
     if (this.socket?.connected) {
-      this.socket.emit(event, data);
-    } else {
+      try {
+        this.socket.emit(event, data);
+        return true;
+      } catch (error) {
+        console.warn('Failed to emit event:', event, error);
+        return false;
+      }
+    }
+
+    if (!this.queueEnabled) {
       console.warn('Socket not connected. Cannot emit event:', event);
+      return false;
+    }
+
+    if (this.eventQueue.length >= this.maxQueueSize) {
+      console.warn('Event queue is full. Dropping event:', event);
+      return false;
+    }
+
+    this.eventQueue.push({ event, data });
+    console.warn('Socket not connected. Event queued:', event);
+    return false;
+  }
+
+  private flushQueue(): void {
+    while (this.eventQueue.length > 0) {
+      if (!this.socket?.connected) {
+        break;
+      }
+
+      const queuedEvent = this.eventQueue.shift();
+      if (!queuedEvent) {
+        break;
+      }
+
+      this.socket.emit(queuedEvent.event, queuedEvent.data);
     }
   }
 
-  on(event: string, callback: (...args: any[]) => void): void {
+  private registerHandler(event: string, callback: SocketEventHandler): void {
+    if (!this.socket) {
+      return;
+    }
+
+    const handlers = this.registeredHandlers.get(event) ?? new Set<SocketEventHandler>();
+    handlers.add(callback);
+    this.registeredHandlers.set(event, handlers);
+    this.socket.on(event, callback);
+  }
+
+  private removeRegisteredHandlers(socket: Socket): void {
+    for (const [event, handlers] of this.registeredHandlers) {
+      for (const handler of handlers) {
+        socket.off(event, handler);
+      }
+    }
+    this.registeredHandlers.clear();
+  }
+
+  on(event: string, callback: (...args: unknown[]) => void): void {
     if (this.socket) {
-      this.socket.on(event, callback);
+      this.registerHandler(event, callback);
     }
   }
 
-  off(event: string, callback?: (...args: any[]) => void): void {
+  off(event: string, callback?: (...args: unknown[]) => void): void {
     if (this.socket) {
       this.socket.off(event, callback);
+
+      const handlers = this.registeredHandlers.get(event);
+      if (handlers) {
+        if (callback) {
+          handlers.delete(callback);
+        } else {
+          handlers.clear();
+        }
+
+        if (handlers.size === 0) {
+          this.registeredHandlers.delete(event);
+        }
+      }
     }
   }
 
-  once(event: string, callback: (...args: any[]) => void): void {
+  once(event: string, callback: (...args: unknown[]) => void): void {
     if (this.socket) {
+      const handlers = this.registeredHandlers.get(event) ?? new Set<SocketEventHandler>();
+      handlers.add(callback);
+      this.registeredHandlers.set(event, handlers);
       this.socket.once(event, callback);
     }
   }

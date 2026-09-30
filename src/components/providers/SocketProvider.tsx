@@ -10,7 +10,7 @@ interface SocketContextType {
   isConnected: boolean;
   connect: () => void;
   disconnect: () => void;
-  emit: (event: string, data?: any) => void;
+  emit: (event: string, data?: any) => boolean;
   on: (event: string, callback: (...args: any[]) => void) => void;
   off: (event: string, callback?: (...args: any[]) => void) => void;
   once: (event: string, callback: (...args: any[]) => void) => void;
@@ -21,10 +21,11 @@ const SocketContext = createContext<SocketContextType | undefined>(undefined);
 interface SocketProviderProps {
   children: ReactNode;
   config: SocketConfig;
+  configKey?: string;
   autoConnect?: boolean;
 }
 
-export function SocketProvider({ children, config, autoConnect = true }: SocketProviderProps) {
+export function SocketProvider({ children, config, configKey, autoConnect = true }: SocketProviderProps) {
   const [socketManager, setSocketManager] = useState<SocketManager | null>(null);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -38,17 +39,14 @@ export function SocketProvider({ children, config, autoConnect = true }: SocketP
       setSocket(socketInstance);
       setIsConnected(socketInstance.connected);
 
-      // Update connection status
-      socketInstance.on('connect', () => setIsConnected(true));
-      socketInstance.on('disconnect', () => setIsConnected(false));
+      manager.on('connect', () => setIsConnected(true));
+      manager.on('disconnect', () => setIsConnected(false));
     }
 
     return () => {
-      if (autoConnect) {
-        manager.disconnect();
-      }
+      manager.disconnect();
     };
-  }, [config, autoConnect]);
+  }, [configKey, autoConnect]);
 
   const connect = () => {
     if (socketManager) {
@@ -56,8 +54,8 @@ export function SocketProvider({ children, config, autoConnect = true }: SocketP
       setSocket(socketInstance);
       setIsConnected(socketInstance.connected);
 
-      socketInstance.on('connect', () => setIsConnected(true));
-      socketInstance.on('disconnect', () => setIsConnected(false));
+      socketManager.on('connect', () => setIsConnected(true));
+      socketManager.on('disconnect', () => setIsConnected(false));
     }
   };
 
@@ -69,8 +67,8 @@ export function SocketProvider({ children, config, autoConnect = true }: SocketP
     }
   };
 
-  const emit = (event: string, data?: any) => {
-    socketManager?.emit(event, data);
+  const emit = (event: string, data?: any): boolean => {
+    return socketManager?.emit(event, data) ?? false;
   };
 
   const on = (event: string, callback: (...args: any[]) => void) => {

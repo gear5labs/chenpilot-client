@@ -1,10 +1,11 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { ChatMessage } from '@/types';
-import { Copy, Check, Edit2, Check as CheckIcon, X } from 'lucide-react';
+import React, { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { ChatMessage } from "@/types";
+import { Copy, Check, Edit2, Check as CheckIcon, X, Clock } from "lucide-react";
+import { useAppSelector } from "@/store";
 
 interface UserMessageProps {
   message: ChatMessage;
@@ -12,13 +13,26 @@ interface UserMessageProps {
   onEdit?: (messageId: string, newContent: string) => void;
 }
 
-export default function UserMessage({ message, onCopy, onEdit }: UserMessageProps) {
+export default function UserMessage({
+  message,
+  onCopy,
+  onEdit,
+}: UserMessageProps) {
+  const { pendingMessages } = useAppSelector((state) => state.chat);
+  const isPending = pendingMessages.has(message.id);
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [editContent, setEditContent] = useState(typeof message.content === 'string' ? message.content : JSON.stringify(message.content));
+  const [editContent, setEditContent] = useState(
+    typeof message.content === "string"
+      ? message.content
+      : JSON.stringify(message.content),
+  );
 
   const handleCopy = async () => {
-    const content = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
+    const content =
+      typeof message.content === "string"
+        ? message.content
+        : JSON.stringify(message.content);
     try {
       await navigator.clipboard.writeText(content);
       setCopied(true);
@@ -27,13 +41,17 @@ export default function UserMessage({ message, onCopy, onEdit }: UserMessageProp
       }
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      console.error('Failed to copy text:', error);
+      console.error("Failed to copy text:", error);
     }
   };
 
   const handleEdit = () => {
     setIsEditing(true);
-    setEditContent(typeof message.content === 'string' ? message.content : JSON.stringify(message.content));
+    setEditContent(
+      typeof message.content === "string"
+        ? message.content
+        : JSON.stringify(message.content),
+    );
   };
 
   const handleSaveEdit = () => {
@@ -45,20 +63,32 @@ export default function UserMessage({ message, onCopy, onEdit }: UserMessageProp
 
   const handleCancelEdit = () => {
     setIsEditing(false);
-    setEditContent(typeof message.content === 'string' ? message.content : JSON.stringify(message.content));
+    setEditContent(
+      typeof message.content === "string"
+        ? message.content
+        : JSON.stringify(message.content),
+    );
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSaveEdit();
-    } else if (e.key === 'Escape') {
+    } else if (e.key === "Escape") {
       handleCancelEdit();
     }
   };
 
   return (
-    <div className="max-w-3xl bg-[#7C3AED] text-white rounded-2xl px-6 py-4 group relative">
+    <div
+      className={`max-w-3xl ${isPending ? "opacity-75" : ""} bg-[#7C3AED] text-white rounded-2xl px-6 py-4 group relative`}
+    >
+      {isPending && (
+        <div className="absolute -left-8 top-4 flex items-center gap-1 text-xs text-yellow-400">
+          <Clock className="h-3 w-3 animate-spin" />
+          <span>Sending...</span>
+        </div>
+      )}
       {isEditing ? (
         <div className="space-y-2">
           <textarea
@@ -66,7 +96,7 @@ export default function UserMessage({ message, onCopy, onEdit }: UserMessageProp
             onChange={(e) => setEditContent(e.target.value)}
             onKeyDown={handleKeyDown}
             className="w-full bg-transparent text-white placeholder:text-gray-300 focus:outline-none resize-none"
-            rows={Math.max(1, editContent.split('\n').length)}
+            rows={Math.max(1, editContent.split("\n").length)}
             autoFocus
           />
           <div className="flex items-center space-x-2">
@@ -89,20 +119,66 @@ export default function UserMessage({ message, onCopy, onEdit }: UserMessageProp
       ) : (
         <>
           <div className="prose prose-invert prose-lg max-w-none leading-relaxed pr-12">
-            <ReactMarkdown 
+            <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
-                p: ({ children, ...props }: any) => <p className="mb-2 last:mb-0" {...props}>{children}</p>,
-                strong: ({ children, ...props }: any) => <strong className="font-semibold text-white" {...props}>{children}</strong>,
-                em: ({ children, ...props }: any) => <em className="italic text-gray-200" {...props}>{children}</em>,
-                code: ({ children, ...props }: any) => <code className="bg-gray-800 text-green-400 px-1 py-0.5 rounded text-sm" {...props}>{children}</code>,
-                pre: ({ children, ...props }: any) => <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto my-2" {...props}>{children}</pre>,
-                ul: ({ children, ...props }: any) => <ul className="list-disc list-inside mb-2 space-y-1" {...props}>{children}</ul>,
-                ol: ({ children, ...props }: any) => <ol className="list-decimal list-inside mb-2 space-y-1" {...props}>{children}</ol>,
-                li: ({ children, ...props }: any) => <li className="text-gray-200" {...props}>{children}</li>,
+                p: ({ children, ...props }: any) => (
+                  <p className="mb-2 last:mb-0" {...props}>
+                    {children}
+                  </p>
+                ),
+                strong: ({ children, ...props }: any) => (
+                  <strong className="font-semibold text-white" {...props}>
+                    {children}
+                  </strong>
+                ),
+                em: ({ children, ...props }: any) => (
+                  <em className="italic text-gray-200" {...props}>
+                    {children}
+                  </em>
+                ),
+                code: ({ children, ...props }: any) => (
+                  <code
+                    className="bg-gray-800 text-green-400 px-1 py-0.5 rounded text-sm"
+                    {...props}
+                  >
+                    {children}
+                  </code>
+                ),
+                pre: ({ children, ...props }: any) => (
+                  <pre
+                    className="bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto my-2"
+                    {...props}
+                  >
+                    {children}
+                  </pre>
+                ),
+                ul: ({ children, ...props }: any) => (
+                  <ul
+                    className="list-disc list-inside mb-2 space-y-1"
+                    {...props}
+                  >
+                    {children}
+                  </ul>
+                ),
+                ol: ({ children, ...props }: any) => (
+                  <ol
+                    className="list-decimal list-inside mb-2 space-y-1"
+                    {...props}
+                  >
+                    {children}
+                  </ol>
+                ),
+                li: ({ children, ...props }: any) => (
+                  <li className="text-gray-200" {...props}>
+                    {children}
+                  </li>
+                ),
               }}
             >
-              {typeof message.content === 'string' ? message.content : JSON.stringify(message.content, null, 2)}
+              {typeof message.content === "string"
+                ? message.content
+                : JSON.stringify(message.content, null, 2)}
             </ReactMarkdown>
           </div>
           <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-1">

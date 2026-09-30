@@ -1,21 +1,26 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
-import { useAppDispatch, useAppSelector } from '@/store';
-import { logout } from '@/store/slices/authSlice';
-import { toggleTheme } from '@/store/slices/uiSlice';
-import { clearMessages, startNewChat, loadChatHistory, deleteChatHistory, loadConversationsLocally, deleteConversationLocally } from '@/store/slices/chatSlice';
-import { Button } from '@/components/ui/Button';
-import toast from 'react-hot-toast';
-import { 
-  X,
-  Menu,
-  PanelLeft,
-  Plus
-} from 'lucide-react';
-import { cn } from '@/utils/cn';
-import Image from 'next/image';
+import React, { useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import { useAppDispatch, useAppSelector } from "@/store";
+import { logout } from "@/store/slices/authSlice";
+import { toggleTheme } from "@/store/slices/uiSlice";
+import {
+  clearMessages,
+  startNewChat,
+  loadChatHistory,
+  deleteChatHistory,
+  loadConversationsLocally,
+  deleteConversationLocally,
+} from "@/store/slices/chatSlice";
+import { ConversationManager } from "@/components/chat/ConversationManager";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { Button } from "@/components/ui/Button";
+import toast from "react-hot-toast";
+import { X, Menu, PanelLeft, Plus } from "lucide-react";
+import { cn } from "@/utils/cn";
+import Image from "next/image";
+import Image from "next/image";
 
 interface ChatLayoutProps {
   children: React.ReactNode;
@@ -26,68 +31,82 @@ export function ChatLayout({ children }: ChatLayoutProps) {
   const pathname = usePathname();
   const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
-  const theme = useAppSelector((state) => state.ui) || { mode: 'dark' };
+  const theme = useAppSelector((state) => state.ui) || { mode: "dark" };
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Get chat history from Redux store
-  const { chatHistory, currentConversation } = useAppSelector((state) => state.chat);
-  
+  const { chatHistory, currentConversation } = useAppSelector(
+    (state) => state.chat,
+  );
+
   // Convert chat history object to array for display
   const chatHistoryList = React.useMemo(() => {
-    return Object.entries(chatHistory).map(([conversationId, messages]) => {
-      const lastMessage = messages[messages.length - 1];
-      const firstUserMessage = messages.find(msg => msg.type === 'user');
-      return {
-        id: conversationId,
-        title: firstUserMessage ? 
-          (typeof firstUserMessage.content === 'string' && firstUserMessage.content.length > 50 ? 
-            firstUserMessage.content.substring(0, 50) + '...' : 
-            typeof firstUserMessage.content === 'string' ? firstUserMessage.content : 'New Chat') : 
-          'New Chat',
-        lastMessage: typeof lastMessage?.content === 'string' ? lastMessage.content : '',
-        timestamp: lastMessage?.timestamp || new Date().toISOString(),
-        messageCount: messages.length,
-      };
-    }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    return Object.entries(chatHistory)
+      .map(([conversationId, messages]) => {
+        const lastMessage = messages[messages.length - 1];
+        const firstUserMessage = messages.find((msg) => msg.type === "user");
+        return {
+          id: conversationId,
+          title: firstUserMessage
+            ? typeof firstUserMessage.content === "string" &&
+              firstUserMessage.content.length > 50
+              ? firstUserMessage.content.substring(0, 50) + "..."
+              : typeof firstUserMessage.content === "string"
+                ? firstUserMessage.content
+                : "New Chat"
+            : "New Chat",
+          lastMessage:
+            typeof lastMessage?.content === "string" ? lastMessage.content : "",
+          timestamp: lastMessage?.timestamp || new Date().toISOString(),
+          messageCount: messages.length,
+        };
+      })
+      .sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+      )
       .slice(0, 10); // Show last 10 conversations
   }, [chatHistory]);
 
   const profileMenuItems = [
     {
-      name: 'Dashboard',
-      href: '/dashboard',
+      name: "Dashboard",
+      href: "/dashboard",
     },
     {
-      name: 'Contacts',
-      href: '/contacts',
+      name: "Contacts",
+      href: "/contacts",
     },
     {
-      name: 'Settings',
-      href: '/settings',
+      name: "Settings",
+      href: "/settings",
     },
   ];
 
   const handleNewChat = () => {
     // Start new chat - this will save current conversation and clear messages
     dispatch(startNewChat());
-    toast.success('Starting new chat...');
-    router.push('/chat');
+    toast.success("Starting new chat...");
+    router.push("/chat");
     setSidebarOpen(false);
   };
 
   const handleLoadChat = (conversationId: string) => {
     // Load chat history for the selected conversation
     dispatch(loadChatHistory(conversationId));
-    router.push('/chat');
+    router.push("/chat");
     setSidebarOpen(false);
   };
 
-  const handleDeleteChat = (conversationId: string, event: React.MouseEvent) => {
+  const handleDeleteChat = (
+    conversationId: string,
+    event: React.MouseEvent,
+  ) => {
     event.stopPropagation();
     dispatch(deleteConversationLocally(conversationId));
-    toast.success('Chat deleted');
+    toast.success("Chat deleted");
   };
 
   const handleNavigation = (href: string) => {
@@ -99,10 +118,13 @@ export function ChatLayout({ children }: ChatLayoutProps) {
   const handleLogout = async () => {
     try {
       await dispatch(logout()).unwrap();
-      toast.success('Successfully logged out!');
-      router.push('/auth/login');
+      toast.success("Successfully logged out!");
+      router.push("/auth/login");
     } catch (error: any) {
-      const errorMessage = error instanceof Error ? error.message : String(error || 'Logout failed');
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : String(error || "Logout failed");
       toast.error(errorMessage);
     }
   };
@@ -124,7 +146,7 @@ export function ChatLayout({ children }: ChatLayoutProps) {
     <div className="h-screen flex bg-gray-50 dark:bg-gray-900">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         >
@@ -133,17 +155,19 @@ export function ChatLayout({ children }: ChatLayoutProps) {
       )}
 
       {/* Sidebar */}
-      <div className={cn(
-        "fixed inset-y-0 left-0 z-50 bg-[#2D1B69] shadow-lg transform transition-all duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
-        sidebarOpen ? "translate-x-0" : "-translate-x-full",
-        sidebarCollapsed ? "w-16" : "w-72"
-      )}>
+      <div
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 bg-[#2D1B69] shadow-lg transform transition-all duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full",
+          sidebarCollapsed ? "w-16" : "w-72",
+        )}
+      >
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="flex items-center justify-between h-16 px-4 border-b border-gray-700">
             <div className="flex items-center space-x-2">
               {sidebarCollapsed ? (
-                <button 
+                <button
                   onClick={toggleSidebar}
                   className="flex items-center hover:opacity-80 transition-opacity"
                   title="Expand sidebar"
@@ -161,24 +185,27 @@ export function ChatLayout({ children }: ChatLayoutProps) {
                       className="rounded-full object-cover"
                     />
                   </div>
-                  <span className="text-xl font-thin text-[#C4B5FD] tracking-tight" style={{ fontFamily: 'Manrope' }}>
+                  <span
+                    className="text-xl font-thin text-[#C4B5FD] tracking-tight"
+                    style={{ fontFamily: "Manrope" }}
+                  >
                     ChenPilot
                   </span>
                 </div>
               )}
             </div>
-            
+
             {!sidebarCollapsed && (
-  <div className="absolute top-4 right-4">
-    <button
-      onClick={toggleSidebar}
-      className="p-2 text-[#C4B5FD] hover:bg-gray-800/50 rounded transition-colors"
-      title="Collapse sidebar"
-    >
-      <PanelLeft className="h-6 w-6" />
-    </button>
-  </div>
-)}
+              <div className="absolute top-4 right-4">
+                <button
+                  onClick={toggleSidebar}
+                  className="p-2 text-[#C4B5FD] hover:bg-gray-800/50 rounded transition-colors"
+                  title="Collapse sidebar"
+                >
+                  <PanelLeft className="h-6 w-6" />
+                </button>
+              </div>
+            )}
 
             <div className="flex items-center space-x-2">
               <Button
@@ -198,7 +225,7 @@ export function ChatLayout({ children }: ChatLayoutProps) {
               onClick={handleNewChat}
               className={cn(
                 "w-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-medium py-3 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl",
-                sidebarCollapsed ? "px-3" : "px-4"
+                sidebarCollapsed ? "px-3" : "px-4",
               )}
             >
               {sidebarCollapsed ? (
@@ -211,47 +238,31 @@ export function ChatLayout({ children }: ChatLayoutProps) {
 
           {/* Chat History */}
           <div className="flex-1 overflow-y-auto px-4">
-            <div className="space-y-1">
-              {!sidebarCollapsed && (
-                <h3 className="text-sm font-medium text-gray-300 mb-3 px-2">
-                  Recents
-                </h3>
-              )}
-              {chatHistoryList.map((chat) => (
-                <div
-                  key={chat.id}
-                  className={cn(
-                    "w-full rounded-lg hover:bg-gray-800/30 transition-all duration-200 group relative",
-                    sidebarCollapsed ? "p-1" : "p-2"
-                  )}
-                >
+            {!sidebarCollapsed && (
+              <ConversationManager
+                onSelectConversation={(conv) => {
+                  dispatch(loadChatHistory(conv.id));
+                  router.push("/chat");
+                  setSidebarOpen(false);
+                }}
+              />
+            )}
+            {sidebarCollapsed && (
+              <div className="space-y-1">
+                {chatHistoryList.slice(0, 5).map((chat) => (
                   <button
+                    key={chat.id}
                     onClick={() => handleLoadChat(chat.id)}
-                    className="w-full text-left"
-                    title={sidebarCollapsed ? (typeof chat.title === 'string' ? chat.title : 'Chat') : undefined}
+                    className="w-full p-1 rounded-lg hover:bg-gray-800/30 transition-all duration-200"
+                    title={typeof chat.title === "string" ? chat.title : "Chat"}
                   >
-                    <div className="flex items-start space-x-2">
-                      {!sidebarCollapsed && (
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-gray-200 group-hover:text-white transition-colors truncate leading-relaxed">
-                            {typeof chat.title === 'string' ? chat.title : 'Chat'}
-                          </p>
-                        </div>
-                      )}
+                    <div className="w-full h-8 bg-gray-700/30 rounded flex items-center justify-center text-xs text-gray-400">
+                      •
                     </div>
                   </button>
-                  {!sidebarCollapsed && (
-                    <button
-                      onClick={(e) => handleDeleteChat(chat.id, e)}
-                      className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-red-400 p-1 rounded"
-                      title="Delete chat"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Profile Section */}
@@ -261,34 +272,37 @@ export function ChatLayout({ children }: ChatLayoutProps) {
                 onClick={() => setProfileMenuOpen(!profileMenuOpen)}
                 className={cn(
                   "w-full flex items-center rounded-xl hover:bg-gray-800/50 transition-all duration-200",
-                  sidebarCollapsed ? "justify-center p-2" : "justify-between p-3"
+                  sidebarCollapsed
+                    ? "justify-center p-2"
+                    : "justify-between p-3",
                 )}
                 title={sidebarCollapsed ? user?.name || user?.email : undefined}
               >
                 <div className="flex items-center space-x-3">
                   <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
                     <span className="text-white text-sm font-medium">
-                      {(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
+                      {(user?.name || user?.email || "U")
+                        .charAt(0)
+                        .toUpperCase()}
                     </span>
                   </div>
                   {!sidebarCollapsed && (
                     <div className="flex-1 min-w-0 text-left">
                       <p className="text-sm font-medium text-white truncate">
-                        {user?.name || 'Test User'}
+                        {user?.name || "Test User"}
                       </p>
                       <p className="text-xs text-gray-400 truncate">
-                        {user?.email || 'test@example.com'}
+                        {user?.email || "test@example.com"}
                       </p>
                     </div>
                   )}
                 </div>
-                {!sidebarCollapsed && (
-                  profileMenuOpen ? (
+                {!sidebarCollapsed &&
+                  (profileMenuOpen ? (
                     <span className="text-gray-400">^</span>
                   ) : (
                     <span className="text-gray-400">v</span>
-                  )
-                )}
+                  ))}
               </button>
 
               {/* Profile Menu Dropdown */}
@@ -306,6 +320,12 @@ export function ChatLayout({ children }: ChatLayoutProps) {
                     );
                   })}
                   <div className="border-t border-gray-700">
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <span className="text-sm text-gray-200">Theme</span>
+                      <ThemeToggle />
+                    </div>
+                  </div>
+                  <div className="border-t border-gray-700">
                     <button
                       onClick={handleLogout}
                       className="w-full flex items-center space-x-3 px-4 py-3 text-sm text-red-400 hover:bg-red-900/20 transition-all duration-200"
@@ -317,7 +337,6 @@ export function ChatLayout({ children }: ChatLayoutProps) {
               )}
             </div>
           </div>
-
         </div>
       </div>
 
@@ -341,17 +360,18 @@ export function ChatLayout({ children }: ChatLayoutProps) {
                 className="rounded-full object-cover"
               />
             </div>
-            <h1 className="text-lg font-thin text-gray-900 dark:text-white" style={{ fontFamily: 'Manrope' }}>
+            <h1
+              className="text-lg font-thin text-gray-900 dark:text-white"
+              style={{ fontFamily: "Manrope" }}
+            >
               ChenPilot
             </h1>
           </div>
           <div className="w-10" /> {/* Spacer for centering */}
         </div>
-        
+
         {/* Page content */}
-        <main className="flex-1 overflow-hidden">
-          {children}
-        </main>
+        <main className="flex-1 overflow-hidden">{children}</main>
       </div>
     </div>
   );

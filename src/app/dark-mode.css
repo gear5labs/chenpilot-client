@@ -1,0 +1,229 @@
+/* Dark Mode Enhancements */
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  @apply bg-gray-900 text-white;
+}
+
+/* Base Elements */
+html.dark a {
+  @apply text-blue-400 hover:text-blue-300 transition-colors;
+}
+
+html.dark button {
+  @apply transition-colors duration-200;
+}
+
+html.dark input,
+html.dark textarea,
+html.dark select {
+  @apply bg-gray-800 text-white border-gray-700;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  @apply text-gray-500;
+}
+
+html.dark input:focus,
+html.dark textarea:focus,
+html.dark select:focus {
+  @apply border-gray-600 outline-none ring-2 ring-purple-600/20;
+}
+
+/* Cards and Sections */
+html.dark .card {
+  @apply bg-gray-800/50 border-gray-700;
+}
+
+html.dark section {
+  @apply bg-gray-900;
+}
+
+/* Headers and Text */
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark h5,
+html.dark h6 {
+  @apply text-white;
+}
+
+html.dark .prose {
+  @apply text-gray-200;
+}
+
+html.dark .prose a {
+  @apply text-blue-400 hover:text-blue-300;
+}
+
+html.dark .prose strong {
+  @apply text-white;
+}
+
+html.dark .prose code {
+  @apply bg-gray-800 text-green-400;
+}
+
+html.dark .prose pre {
+  @apply bg-gray-900 border-gray-700;
+}
+
+/* Tables */
+html.dark table {
+  @apply border-gray-700;
+}
+
+html.dark th {
+  @apply bg-gray-800 text-white border-gray-700;
+}
+
+html.dark td {
+  @apply border-gray-700;
+}
+
+html.dark tr:hover {
+  @apply bg-gray-800/50;
+}
+
+/* Scrollbar */
+html.dark ::-webkit-scrollbar {
+  @apply w-2 h-2;
+}
+
+html.dark ::-webkit-scrollbar-track {
+  @apply bg-gray-900;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  @apply bg-gray-700 rounded hover:bg-gray-600;
+}
+
+/* Modals and Dialogs */
+html.dark dialog {
+  @apply bg-gray-800 text-white;
+}
+
+html.dark .modal-backdrop {
+  @apply bg-black/50;
+}
+
+/* Toast Notifications */
+html.dark .toast {
+  @apply bg-gray-800 text-white border-gray-700;
+}
+
+/* Sidebar */
+html.dark aside {
+  @apply bg-gray-800 border-gray-700;
+}
+
+/* Navigation */
+html.dark nav {
+  @apply bg-gray-800 border-gray-700;
+}
+
+html.dark nav a {
+  @apply text-gray-300 hover:text-white transition-colors;
+}
+
+html.dark nav a.active {
+  @apply text-white font-semibold;
+}
+
+/* Links and Buttons */
+html.dark .btn-primary {
+  @apply bg-purple-600 hover:bg-purple-700 text-white;
+}
+
+html.dark .btn-secondary {
+  @apply bg-gray-700 hover:bg-gray-600 text-white;
+}
+
+html.dark .btn-ghost {
+  @apply text-gray-300 hover:bg-gray-800 hover:text-white;
+}
+
+/* Focus States */
+html.dark *:focus-visible {
+  @apply outline-2 outline-offset-2 outline-purple-500;
+}
+
+/* Selection */
+html.dark ::selection {
+  @apply bg-purple-600 text-white;
+}
+
+html.dark ::-moz-selection {
+  @apply bg-purple-600 text-white;
+}
+
+/* Code Highlighting */
+html.dark .hljs {
+  @apply bg-gray-900 text-gray-100;
+}
+
+html.dark .hljs-string {
+  @apply text-green-400;
+}
+
+html.dark .hljs-number {
+  @apply text-orange-400;
+}
+
+html.dark .hljs-literal {
+  @apply text-blue-400;
+}
+
+html.dark .hljs-attr {
+  @apply text-purple-400;
+}
+
+html.dark .hljs-title {
+  @apply text-yellow-400;
+}
+
+html.dark .hljs-variable {
+  @apply text-white;
+}
+
+html.dark .hljs-type {
+  @apply text-cyan-400;
+}
+
+html.dark .hljs-built_in {
+  @apply text-pink-400;
+}
+
+html.dark .hljs-punctuation {
+  @apply text-gray-500;
+}
+
+/* Badges and Tags */
+html.dark .badge {
+  @apply bg-gray-800 text-gray-200 border-gray-700;
+}
+
+/* Alerts */
+html.dark .alert {
+  @apply bg-gray-800 border-gray-700;
+}
+
+html.dark .alert-info {
+  @apply text-blue-300 border-blue-700;
+}
+
+html.dark .alert-warning {
+  @apply text-yellow-300 border-yellow-700;
+}
+
+html.dark .alert-error {
+  @apply text-red-300 border-red-700;
+}
+
+html.dark .alert-success {
+  @apply text-green-300 border-green-700;
+}

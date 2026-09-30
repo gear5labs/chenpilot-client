@@ -177,7 +177,7 @@ export interface ExecutionTrace {
 export interface ExecutionStep {
   id: string;
   name: string;
-  type: 'thought' | 'action' | 'tool_call' | 'result' | 'error';
+  type: "thought" | "action" | "tool_call" | "result" | "error";
   timestamp: string;
   duration: number;
   description: string;
@@ -217,6 +217,31 @@ export interface Conversation {
   userId: string;
   messageCount: number;
   messages?: ChatMessage[];
+  tags?: string[];
+}
+
+export interface ConversationTag {
+  id: string;
+  name: string;
+  color?: string;
+  userId: string;
+}
+
+export interface PromptVersionRecord {
+  [key: string]: unknown;
+}
+
+export interface PromptVersion {
+  id: string;
+  label: string;
+  description: string;
+  template: string;
+  version: string;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  tags: string[];
+  raw: PromptVersionRecord;
 }
 
 // API Response Types
@@ -294,12 +319,12 @@ export interface AccountState {
   isLoading: boolean;
   error: string | null;
   network: {
-    status: 'healthy' | 'degraded' | 'down' | 'unknown';
+    status: "healthy" | "degraded" | "down" | "unknown";
     latestLedger: number | null;
     ledgerCloseTimeMs: number | null;
     ledgerAgeSeconds: number | null;
     congestion: boolean;
-    accountSyncState: 'synced' | 'syncing' | 'desynced';
+    accountSyncState: "synced" | "syncing" | "desynced";
     lastUpdated: string | null;
     isLoading: boolean;
     error: string | null;
@@ -428,26 +453,70 @@ export interface LiquidityStats {
 export interface LiquidityRequest {
   includeInactive?: boolean;
   limit?: number;
-  sortBy?: 'liquidity' | 'volume' | 'apr';
-  sortOrder?: 'asc' | 'desc';
+  sortBy?: "liquidity" | "volume" | "apr";
+  sortOrder?: "asc" | "desc";
 }
 
-// A/B Testing Types
-export interface ABTestMetrics {
-  latency: number;
-  cost: number;
-  accuracy: number;
-  score?: number;
-}
+// === Audit Log Types ===
+export type AuditAction =
+  | "user.login"
+  | "user.logout"
+  | "user.register"
+  | "user.update_profile"
+  | "user.delete_account"
+  | "user.password_change"
+  | "user.email_verify"
+  | "user.token_refresh"
+  | "transaction.create"
+  | "transaction.send"
+  | "transaction.receive"
+  | "transaction.swap"
+  | "contact.create"
+  | "contact.update"
+  | "contact.delete"
+  | "agent.query"
+  | "agent.tool_execute"
+  | "auth.google_auth"
+  | "admin.access"
+  | "admin.audit_view"
+  | "settings.update"
+  | "account.deploy"
+  | "account.fund"
+  | "liquidity.query";
 
-export interface PromptComparisonData {
+export type AuditSeverity = "info" | "warning" | "error" | "critical";
+
+export interface AuditLogEntry {
   id: string;
-  name: string;
-  metrics: ABTestMetrics;
-  history?: {
-    timestamp: string;
-    metrics: ABTestMetrics;
-  }[];
+  userId: string;
+  userEmail: string;
+  userName: string;
+  action: AuditAction;
+  resource: string;
+  resourceId?: string;
+  description: string;
+  metadata: Record<string, unknown>;
+  ipAddress?: string;
+  userAgent?: string;
+  severity: AuditSeverity;
+  status: "success" | "failure" | "pending";
+  duration?: number;
+  timestamp: string;
+  createdAt: string;
+}
+
+export interface AuditLogsQueryParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  userId?: string;
+  action?: AuditAction;
+  severity?: AuditSeverity;
+  status?: "success" | "failure" | "pending";
+  startDate?: string;
+  endDate?: string;
+  sortBy?: "timestamp" | "action" | "userEmail" | "severity";
+  sortOrder?: "asc" | "desc";
 }
 
 export interface ABTestComparisonResponse {
@@ -468,3 +537,11 @@ export interface ABTestComparisonResponse {
   };
 }
 
+export interface AuditLogStats {
+  totalLogs: number;
+  uniqueUsers: number;
+  actionsByType: Record<string, number>;
+  errorsToday: number;
+  warningsToday: number;
+  recentActivity: AuditLogEntry[];
+}
