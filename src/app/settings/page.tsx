@@ -3,14 +3,11 @@
 import React, { useEffect } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { fetchProfile } from '@/store/slices/authSlice';
-import React, { useState } from 'react';
-import axios from 'axios';
-import { useAppSelector } from '@/store';
 import { ChatLayout } from '@/components/layout/ChatLayout';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
-import apiService from '@/services/api';
+
 
 export default function SettingsPage() {
   const dispatch = useAppDispatch();

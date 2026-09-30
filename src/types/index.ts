@@ -519,16 +519,22 @@ export interface AuditLogsQueryParams {
   sortOrder?: "asc" | "desc";
 }
 
-export interface AuditLogsResponse {
+export interface ABTestComparisonResponse {
   success: boolean;
-  data: {
-    logs: AuditLogEntry[];
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  };
   message?: string;
+  data: {
+    prompt1: PromptComparisonData;
+    prompt2: PromptComparisonData;
+    comparisonResult: {
+      winner: string | null;
+      confidence: number;
+      improvements: {
+        latency: number;
+        cost: number;
+        accuracy: number;
+      };
+    };
+  };
 }
 
 export interface AuditLogStats {

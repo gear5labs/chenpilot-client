@@ -516,8 +516,30 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-medium text-white">
                       Recent Chat Messages
-        {/* Stellar Network */}
-        <div className="mb-8">
+                    </h3>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <h3 className="text-lg font-medium text-white mb-2">
+                    No recent activity
+                  </h3>
+                  <p className="text-gray-300 mb-4">
+                    Your recent interactions will appear here.
+                  </p>
+                  <Button
+                    onClick={() => router.push('/chat')}
+                  >
+                    Start with AI Agent
+                  </Button>
+                </div>
+              )}
+            </Card>
+          </div>
+
+          {/* Stellar Network */}
+          <div className="mb-8">
+
           <h2 className="text-2xl font-bold text-white mb-6">
             Stellar Network
           </h2>
@@ -834,24 +856,11 @@ export default function DashboardPage() {
           </section>
                     ))}
                   </div>
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <h3 className="text-lg font-medium text-white mb-2">
-                    No recent activity
-                  </h3>
-                  <p className="text-gray-300 mb-4">
-                    Your recent transactions and interactions will appear here.
-                  </p>
-                  <Button
-                    onClick={() => router.push('/chat')}
-                  >
-                    Start with AI Agent
-                  </Button>
-                </div>
-              )}
-            </Card>
+                </Card>
+              ))}
+            </div>
           </div>
+
 
           {/* Transaction History */}
           <div className="mb-8">
