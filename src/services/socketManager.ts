@@ -18,7 +18,7 @@ interface QueuedEvent {
   event: string;
   data?: unknown;
 }
-type SocketEventHandler = (...args: any[]) => void;
+type SocketEventHandler = (...args: unknown[]) => void;
 
 export class SocketManager {
   private socket: Socket | null = null;
@@ -32,8 +32,6 @@ export class SocketManager {
   constructor(config: SocketConfig) {
     const defaults = {
       transports: ['websocket', 'polling'] as ('polling' | 'websocket')[],
-    const defaultOptions: NonNullable<SocketConfig['options']> = {
-      transports: ['websocket', 'polling'],
       autoConnect: true,
       reconnection: true,
       reconnectionDelay: 1000,

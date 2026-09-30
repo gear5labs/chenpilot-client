@@ -366,5 +366,4 @@ const authSlice = createSlice({
 });
 
 export const { clearError, setToken, clearAuth, initializeAuth } = authSlice.actions;
-export { login, register, logout, loadUser, updateProfile, changePassword, googleAuth, refreshToken, fetchProfile };
 export default authSlice.reducer;

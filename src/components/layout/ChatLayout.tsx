@@ -1,46 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import { useAppDispatch, useAppSelector } from "@/store";
-import { logout } from "@/store/slices/authSlice";
-import { toggleTheme } from "@/store/slices/uiSlice";
-import {
-  clearMessages,
-  startNewChat,
-  loadChatHistory,
-  deleteChatHistory,
-  loadConversationsLocally,
-  deleteConversationLocally,
-} from "@/store/slices/chatSlice";
-import { ConversationManager } from "@/components/chat/ConversationManager";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { Button } from "@/components/ui/Button";
-import toast from "react-hot-toast";
-import { X, Menu, PanelLeft, Plus } from "lucide-react";
-import { cn } from "@/utils/cn";
-import Image from "next/image";
-import Image from "next/image";
-
 interface ChatLayoutProps {
   children: React.ReactNode;
 }
 
 export function ChatLayout({ children }: ChatLayoutProps) {
   const router = useRouter();
-  const pathname = usePathname();
   const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
-  const theme = useAppSelector((state) => state.ui) || { mode: "dark" };
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-
-  // Get chat history from Redux store
-  const { chatHistory, currentConversation } = useAppSelector(
-    (state) => state.chat,
-  );
-
   // Convert chat history object to array for display
   const chatHistoryList = React.useMemo(() => {
     return Object.entries(chatHistory)
@@ -118,19 +88,19 @@ export function ChatLayout({ children }: ChatLayoutProps) {
   const handleLogout = async () => {
     try {
       await dispatch(logout()).unwrap();
-      toast.success("Successfully logged out!");
-      router.push("/auth/login");
-    } catch (error: any) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : String(error || "Logout failed");
       toast.error(errorMessage);
     }
   };
 
-  const handleThemeToggle = () => {
-    dispatch(toggleTheme());
+  const handleExport = (format: 'md' | 'json') => {
+    if (isChatEmpty(messages)) {
+      toast.error('Chat is empty. Nothing to export.');
+      return;
+    }
+    const result = exportChatMessages(messages, format, currentConversation?.id);
+    if (result.success) {
+      toast.success(`Chat exported as ${format === 'json' ? 'JSON' : 'Markdown'}`);
+    }
   };
 
   // Load conversations from localStorage on component mount
@@ -264,6 +234,75 @@ export function ChatLayout({ children }: ChatLayoutProps) {
               </div>
             )}
           </div>
+
+          {/* Active Chat Export Actions */}
+          {!sidebarCollapsed && (
+            <div className="border-t border-gray-700/60 px-4 py-3" data-testid="chat-layout-export">
+              <div className="flex items-center justify-between mb-2 px-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                  Export Chat
+                </span>
+                {isChatEmptyState && (
+                  <span className="text-[10px] text-gray-500 italic">Empty</span>
+                )}
+              </div>
+              <div className="space-y-1">
+                <div className="relative group">
+                  <button
+                    type="button"
+                    onClick={() => handleExport('md')}
+                    disabled={isChatEmptyState}
+                    title={isChatEmptyState ? 'Chat is empty (nothing to export)' : 'Export as Markdown'}
+                    className={cn(
+                      'w-full flex items-center space-x-2 px-3 py-2 text-xs rounded-lg transition-colors text-left',
+                      isChatEmptyState
+                        ? 'text-gray-500 bg-gray-800/20 cursor-not-allowed opacity-60'
+                        : 'text-gray-200 hover:text-white hover:bg-gray-800/60 bg-gray-800/40'
+                    )}
+                    aria-label="Export as Markdown"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-purple-400" />
+                    <span>Export as Markdown</span>
+                  </button>
+                  {isChatEmptyState && (
+                    <div
+                      role="tooltip"
+                      className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-30 px-2 py-1 text-xs text-gray-300 bg-gray-900 border border-gray-700 rounded shadow-lg whitespace-nowrap"
+                    >
+                      Chat is empty (nothing to export)
+                    </div>
+                  )}
+                </div>
+
+                <div className="relative group">
+                  <button
+                    type="button"
+                    onClick={() => handleExport('json')}
+                    disabled={isChatEmptyState}
+                    title={isChatEmptyState ? 'Chat is empty (nothing to export)' : 'Export as JSON'}
+                    className={cn(
+                      'w-full flex items-center space-x-2 px-3 py-2 text-xs rounded-lg transition-colors text-left',
+                      isChatEmptyState
+                        ? 'text-gray-500 bg-gray-800/20 cursor-not-allowed opacity-60'
+                        : 'text-gray-200 hover:text-white hover:bg-gray-800/60 bg-gray-800/40'
+                    )}
+                    aria-label="Export as JSON"
+                  >
+                    <FileJson className="h-3.5 w-3.5 text-blue-400" />
+                    <span>Export as JSON</span>
+                  </button>
+                  {isChatEmptyState && (
+                    <div
+                      role="tooltip"
+                      className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-30 px-2 py-1 text-xs text-gray-300 bg-gray-900 border border-gray-700 rounded shadow-lg whitespace-nowrap"
+                    >
+                      Chat is empty (nothing to export)
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Profile Section */}
           <div className="border-t border-gray-700 p-4">

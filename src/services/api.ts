@@ -14,7 +14,7 @@ import {
   ApiResponse,
   ChatMessage,
   Conversation,
-  PromptVersionRecord
+  PromptVersionRecord,
   LiquidityPool,
   LiquidityStats,
   LiquidityRequest,
@@ -584,6 +584,9 @@ class ApiService {
 
   async activatePromptVersion(id: string): Promise<ApiResponse<PromptVersionRecord> | PromptVersionRecord> {
     const response = await this.api.patch<ApiResponse<PromptVersionRecord> | PromptVersionRecord>(`/versions/${id}/activate`);
+    return response.data;
+  }
+
   // Liquidity Pool endpoints
   async getLiquidityStats(request?: LiquidityRequest): Promise<ApiResponse<LiquidityStats>> {
     const response = await this.api.post<ApiResponse<LiquidityStats>>('/liquidity', request || {});

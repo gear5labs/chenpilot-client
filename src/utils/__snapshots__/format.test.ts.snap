@@ -1,0 +1,68 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`format.ts chat export utilities > serializeChatToMarkdown > matches snapshot for complete conversation with execution trace and structured content 1`] = `
+"## User
+*Timestamp: 2026-09-29T10:00:00.000Z*
+
+Hello, what is my wallet balance?
+
+---
+
+## Agent
+*Timestamp: 2026-09-29T10:00:02.000Z*
+
+Your wallet balance is 250.50 XLM.
+
+---
+
+## User
+*Timestamp: 2026-09-29T11:00:00.000Z*
+
+Show me available liquidity pools
+
+---
+
+## Agent
+*Timestamp: 2026-09-29T11:00:03.000Z*
+
+\`\`\`json
+{
+  "pools": [
+    {
+      "pair": "XLM/USDC",
+      "tvl": "$1,200,000",
+      "apy": "7.5%"
+    },
+    {
+      "pair": "AQUA/XLM",
+      "tvl": "$850,000",
+      "apy": "12.3%"
+    }
+  ]
+}
+\`\`\`
+
+### Metadata
+\`\`\`json
+{
+  "tokenType": "XLM",
+  "status": "success",
+  "action": "query_pools"
+}
+\`\`\`
+
+### Execution Trace Summary
+- **Total Duration:** 320ms
+- **Start Time:** 2026-09-29T11:00:01.000Z
+- **End Time:** 2026-09-29T11:00:01.320Z
+- **Steps (2):**
+  - **[thought] Parse Query** (20ms): Identified request for liquidity pool data
+  - **[tool_call] Fetch Soroswap Pools** (300ms): Retrieved pool statistics from Soroswap API
+    \`\`\`json
+    {
+      "endpoint": "/api/v1/pools",
+      "status": 200
+    }
+    \`\`\`
+    - **[action] Filter active pools** (50ms): Filtered pools by minimum TVL threshold"
+`;

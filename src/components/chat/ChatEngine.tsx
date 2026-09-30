@@ -1,37 +1,3 @@
-"use client";
-
-import React, { useState, useEffect, useRef } from "react";
-import { useAppDispatch, useAppSelector } from "@/store";
-import {
-  sendMessage,
-  clearMessages,
-  updateMessage,
-  saveConversationLocally,
-  queueMessage,
-  addMessage as reduxAddMessage,
-  addPendingMessage,
-} from "@/store/slices/chatSlice";
-import AgentMessage from "@/components/chat/AgentMessage";
-import UserMessage from "@/components/chat/UserMessage";
-import { TagWidget } from "@/components/chat/TagWidget";
-import { OfflineIndicator } from "@/components/chat/OfflineIndicator";
-import { useOfflineQueue } from "@/hooks/useOfflineQueue";
-import {
-  Send,
-  Mic,
-  Square,
-  Zap,
-  DollarSign,
-  Bitcoin,
-  Building2,
-  Sun,
-  CheckCircle,
-  Clock,
-  Copy,
-} from "lucide-react";
-import toast from "react-hot-toast";
-import { ChatMessage } from "@/types";
-
 // Speech Recognition types
 interface SpeechRecognition extends EventTarget {
   continuous: boolean;
@@ -98,8 +64,6 @@ export const ChatEngine: React.FC = () => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [showTools, setShowTools] = useState(false);
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
-  const [speechResult, setSpeechResult] = useState("");
-  const [isListening, setIsListening] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -240,8 +204,6 @@ export const ChatEngine: React.FC = () => {
       }
 
       await dispatch(sendMessage(queryWithTool)).unwrap();
-    } catch (error: any) {
-      toast.error(error || "Failed to send message");
     }
   };
 
@@ -305,6 +267,19 @@ export const ChatEngine: React.FC = () => {
 
   const handleToolSelect = (toolName: string) => {
     setSelectedTool(selectedTool === toolName ? null : toolName);
+  };
+
+  const isChatEmptyState = isChatEmpty(messages);
+
+  const handleExport = (format: 'md' | 'json') => {
+    if (isChatEmpty(messages)) {
+      toast.error('Chat is empty. Nothing to export.');
+      return;
+    }
+    const result = exportChatMessages(messages, format, currentConversation?.id);
+    if (result.success) {
+      toast.success(`Chat exported as ${format === 'json' ? 'JSON' : 'Markdown'}`);
+    }
   };
 
   const renderInput = (isSticky: boolean = false) => (
@@ -438,7 +413,6 @@ export const ChatEngine: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col bg-[#0F0F23] text-white overflow-hidden relative">
-      <OfflineIndicator />
       <div className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center p-8">
