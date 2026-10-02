@@ -358,6 +358,10 @@ export interface AuthState {
 export interface AccountState {
   status: AccountStatus | null;
   balance: WalletBalance | null;
+  balanceUpdatedAt: string | null;
+  isBalanceLoading: boolean;
+  isBalanceRefreshing: boolean;
+  balanceError: string | null;
   transactions: TransactionHistory;
   isLoading: boolean;
   error: string | null;

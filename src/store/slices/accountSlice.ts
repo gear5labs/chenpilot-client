@@ -6,6 +6,7 @@ import {
   AccountState,
 } from "@/types";
 import { horizonFetch } from "@/utils/horizonFetch";
+import apiService from "@/services/api";
 
 type NetworkHealthStatus = "healthy" | "degraded" | "down" | "unknown";
 type AccountSyncState = "synced" | "syncing" | "desynced";
@@ -13,6 +14,10 @@ type AccountSyncState = "synced" | "syncing" | "desynced";
 const initialState: AccountState = {
   status: null,
   balance: null,
+  balanceUpdatedAt: null,
+  isBalanceLoading: false,
+  isBalanceRefreshing: false,
+  balanceError: null,
   transactions: {
     transactions: [],
     isLoading: false,
@@ -53,9 +58,14 @@ export const getAccountStatus = createAsyncThunk(
 
 export const getBalance = createAsyncThunk(
   "account/getBalance",
-  async () => {
-    // Mock balance
-    return "1000000000000000000"; // 1 ETH in wei
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiService.getBalance();
+      if (!response.success) return rejectWithValue("Failed to fetch balance");
+      return response.data;
+    } catch (error: unknown) {
+      return rejectWithValue((error as { message?: string }).message || "Failed to fetch balance");
+    }
   },
 );
 
@@ -248,17 +258,21 @@ const accountSlice = createSlice({
       })
       // Get Balance
       .addCase(getBalance.pending, (state) => {
-        state.isLoading = true;
-        state.error = null;
+        state.isBalanceLoading = state.balance === null;
+        state.isBalanceRefreshing = state.balance !== null;
+        state.balanceError = null;
       })
       .addCase(getBalance.fulfilled, (state, action) => {
-        state.isLoading = false;
         state.balance = action.payload;
-        state.error = null;
+        state.balanceUpdatedAt = new Date().toISOString();
+        state.isBalanceLoading = false;
+        state.isBalanceRefreshing = false;
+        state.balanceError = null;
       })
       .addCase(getBalance.rejected, (state, action) => {
-        state.isLoading = false;
-        state.error = action.payload as string;
+        state.isBalanceLoading = false;
+        state.isBalanceRefreshing = false;
+        state.balanceError = action.payload as string;
       })
       // Get Stellar Network Status
       .addCase(getStellarNetworkStatus.pending, (state) => {

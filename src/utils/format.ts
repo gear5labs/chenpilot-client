@@ -8,7 +8,7 @@
  * @returns Formatted address string
  */
 export function formatAddress(address: string, startChars: number = 6, endChars: number = 4): string {
-  if (!address || address.length < startChars + endChars) {
+  if (!address || address.length <= startChars + endChars) {
     return address;
   }
   return `${address.slice(0, startChars)}...${address.slice(-endChars)}`;
@@ -78,9 +78,8 @@ export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOpt
  * @param date - Date string or Date object
  * @returns Relative time string
  */
-export function formatRelativeTime(date: string | Date): string {
+export function formatRelativeTime(date: string | Date, now: Date = new Date()): string {
   const dateObj = typeof date === 'string' ? new Date(date) : date;
-  const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - dateObj.getTime()) / 1000);
 
   if (diffInSeconds < 60) {
@@ -183,5 +182,5 @@ export function truncateText(text: string, maxLength: number, suffix: string = '
   if (text.length <= maxLength) {
     return text;
   }
-  return text.slice(0, maxLength - suffix.length) + suffix;
+  return text.slice(0, Math.max(0, maxLength - suffix.length)).trimEnd() + suffix;
 }

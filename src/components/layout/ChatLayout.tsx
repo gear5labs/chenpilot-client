@@ -12,7 +12,6 @@ import {
   deleteChatHistory,
   loadConversationsLocally,
   deleteConversationLocally,
-  setCurrentConversation,
 } from "@/store/slices/chatSlice";
 import { ConversationManager } from "@/components/chat/ConversationManager";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
@@ -21,6 +20,7 @@ import toast from "react-hot-toast";
 import { X, Menu, PanelLeft, Plus } from "lucide-react";
 import { cn } from "@/utils/cn";
 import Image from "next/image";
+import { EmailVerificationBanner } from "@/components/auth/EmailVerificationBanner";
 
 interface ChatLayoutProps {
   children: React.ReactNode;
@@ -37,7 +37,7 @@ export function ChatLayout({ children }: ChatLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Get chat history from Redux store
-  const { chatHistory, currentConversation, conversations } = useAppSelector(
+  const { chatHistory, currentConversation } = useAppSelector(
     (state) => state.chat,
   );
 
@@ -94,10 +94,9 @@ export function ChatLayout({ children }: ChatLayoutProps) {
   };
 
   const handleLoadChat = (conversationId: string) => {
-    const conversation = conversations.find((item) => item.id === conversationId);
+    // Load chat history for the selected conversation
     dispatch(loadChatHistory(conversationId));
-    if (conversation) dispatch(setCurrentConversation(conversation));
-    router.push(`/chat/${encodeURIComponent(conversationId)}`);
+    router.push("/chat");
     setSidebarOpen(false);
   };
 
@@ -243,8 +242,7 @@ export function ChatLayout({ children }: ChatLayoutProps) {
               <ConversationManager
                 onSelectConversation={(conv) => {
                   dispatch(loadChatHistory(conv.id));
-                  dispatch(setCurrentConversation(conv));
-                  router.push(`/chat/${encodeURIComponent(conv.id)}`);
+                  router.push("/chat");
                   setSidebarOpen(false);
                 }}
               />
@@ -373,7 +371,10 @@ export function ChatLayout({ children }: ChatLayoutProps) {
         </div>
 
         {/* Page content */}
-        <main className="flex-1 overflow-hidden">{children}</main>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {pathname && (pathname.startsWith('/dashboard') || pathname.startsWith('/chat') || pathname.startsWith('/settings')) && <EmailVerificationBanner />}
+          <main className="min-h-0 flex-1 overflow-auto">{children}</main>
+        </div>
       </div>
     </div>
   );
