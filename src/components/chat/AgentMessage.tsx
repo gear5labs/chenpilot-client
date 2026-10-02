@@ -1,11 +1,12 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import React, { useState } from "react";
 import { logger } from "../../utils/logger";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChatMessage } from "@/types";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, MessageSquare } from "lucide-react";
 import { CodeBlock } from "./CodeBlock";
 import ExecutionTrace from "./ExecutionTrace";
 
@@ -273,12 +274,27 @@ export default function AgentMessage({ message, onCopy, onReply }: AgentMessageP
                 {children}
               </em>
             ),
-            code: ({ inline, className, children, ...props }: any) => (
-              <CodeBlock className={className} inline={inline}>
-                {String(children).replace(/\n$/, "")}
-              </CodeBlock>
-            ),
-            pre: ({ children, ...props }: any) => <>{children}</>,
+            code: ({ inline, className, children, ...props }: any) => {
+              const match = /language-(\w+)/.exec(className || '');
+              const isInline = inline || (!match && !String(children).includes('\n'));
+              if (isInline) {
+                return (
+                  <code
+                    className="bg-gray-800 text-green-400 px-1.5 py-0.5 rounded text-sm font-mono"
+                    {...props}
+                  >
+                    {children}
+                  </code>
+                );
+              }
+              return (
+                <CodeBlock
+                  code={String(children).replace(/\n$/, '')}
+                  language={match ? match[1] : undefined}
+                />
+              );
+            },
+            pre: ({ children }: any) => <>{children}</>,
             ul: ({ children, ...props }: any) => (
               <ul className="list-disc list-inside mb-3 space-y-1" {...props}>
                 {children}
@@ -331,17 +347,42 @@ export default function AgentMessage({ message, onCopy, onReply }: AgentMessageP
         <ExecutionTrace trace={message.metadata.executionTrace} />
       )}
 
-      <button
-        onClick={() => onReply(message.id)}
-        className="mt-1.5 flex items-center space-x-1 text-xs text-purple-400 hover:text-purple-300 transition-colors"
-        aria-label={`View ${message.replyCount} ${message.replyCount === 1 ? 'reply' : 'replies'}`}
-      >
-        <MessageSquare className="h-3.5 w-3.5" />
-        <span>
-          {message.replyCount} {message.replyCount === 1 ? 'reply' : 'replies'}
-        </span>
-      </button>
-    )}
+      {/* Hover actions: copy + reply */}
+      <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-1 p-1">
+        <button
+          onClick={handleCopy}
+          className="p-1 text-gray-400 hover:text-white transition-colors"
+          title="Copy message"
+        >
+          {copied ? (
+            <Check className="h-4 w-4 text-green-400" />
+          ) : (
+            <Copy className="h-4 w-4" />
+          )}
+        </button>
+        {onReply && (
+          <button
+            onClick={() => onReply(message.id)}
+            className="p-1 text-gray-400 hover:text-white transition-colors"
+            title="Reply in thread"
+          >
+            <MessageSquare className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {(message.replyCount ?? 0) > 0 && onReply && (
+        <button
+          onClick={() => onReply(message.id)}
+          className="mt-1.5 flex items-center space-x-1 text-xs text-purple-400 hover:text-purple-300 transition-colors"
+          aria-label={`View ${message.replyCount} ${message.replyCount === 1 ? 'reply' : 'replies'}`}
+        >
+          <MessageSquare className="h-3.5 w-3.5" />
+          <span>
+            {message.replyCount} {message.replyCount === 1 ? 'reply' : 'replies'}
+          </span>
+        </button>
+      )}
     </div>
   );
 }
