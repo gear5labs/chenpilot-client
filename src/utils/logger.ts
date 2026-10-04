@@ -9,7 +9,7 @@
 
 const isDev = process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test";
 
-const SENSITIVE_KEY_REGEX = /^(password|token|secret|credential|auth|bearer|privatekey|secretkey|seed|prompttext|rawprompt|email)$/i;
+const SENSITIVE_KEY_REGEX = /(password|token|secret|credential|auth|bearer|privatekey|secretkey|seed|prompttext|rawprompt|email)/i;
 
 /**
  * Deterministic hash helper to convert high-cardinality user values into safe correlation IDs.
