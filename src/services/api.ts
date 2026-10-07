@@ -46,6 +46,10 @@ type MinimalStore = {
 
 let _store: MinimalStore | null = null;
 
+/**
+ * Main API service handling HTTP requests, authentication state,
+ * error retries, background token refreshes, and backend integrations.
+ */
 class ApiService {
   private api: AxiosInstance;
   private token: string | null = null;
@@ -169,28 +173,41 @@ class ApiService {
   }
 
   /**
-   * Inject the Redux store reference.  Call this once after the store is
-   * created (e.g. in src/store/index.ts) to avoid circular imports.
+   * Inject the Redux store reference to avoid circular imports.
+   * Call this once after the store is created (e.g. in src/store/index.ts).
+   *
+   * @param store - Minimal Redux store reference with dispatch capability.
    */
   setStore(store: MinimalStore): void {
     _store = store;
   }
 
-  setToken(token: string) {
+  /**
+   * Set and persist the JWT authentication token in memory and browser localStorage.
+   *
+   * @param token - Bearer JWT token string.
+   */
+  setToken(token: string): void {
     this.token = token;
     if (typeof window !== 'undefined') {
       localStorage.setItem('auth_token', token);
     }
   }
 
-  clearToken() {
+  /**
+   * Clear the active JWT authentication token from memory and browser localStorage.
+   */
+  clearToken(): void {
     this.token = null;
     if (typeof window !== 'undefined') {
       localStorage.removeItem('auth_token');
     }
   }
 
-  loadTokenFromStorage() {
+  /**
+   * Load the active JWT authentication token from browser localStorage into memory if present.
+   */
+  loadTokenFromStorage(): void {
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('auth_token');
       if (token) {
@@ -200,6 +217,14 @@ class ApiService {
   }
 
   // Authentication endpoints
+
+  /**
+   * Register a new user account.
+   *
+   * @param data - Registration details including email, password, and optional name.
+   * @returns Promise resolving to `RegisterResponse` containing registration result and optional token.
+   * @throws {Error} Throws an Error if data validation fails (e.g., missing email or password) or HTTP request fails.
+   */
   async register(data: RegisterRequest): Promise<RegisterResponse> {
     // Validate input data before processing
     if (!data || typeof data !== 'object') {
@@ -226,6 +251,13 @@ class ApiService {
     return response.data;
   }
 
+  /**
+   * Authenticate a user using email and password.
+   *
+   * @param data - Login credentials containing email and password.
+   * @returns Promise resolving to `LoginResponse` containing token and user profile data.
+   * @throws {Error} Throws an Error if input validation fails or if network/auth request fails.
+   */
   async login(data: LoginRequest): Promise<LoginResponse> {
     // Validate input data before processing
     if (!data || typeof data !== 'object') {
@@ -247,6 +279,13 @@ class ApiService {
     return response.data;
   }
 
+  /**
+   * Authenticate with Google OAuth ID token.
+   *
+   * @param token - Google OAuth ID token string.
+   * @returns Promise resolving to `LoginResponse`.
+   * @throws {AxiosError} Throws if Google authentication request fails.
+   */
   async googleAuth(token: string): Promise<LoginResponse> {
     const response = await this.api.post<LoginResponse>('/auth/google-auth', { token });
     if (response.data.success && response.data.data.token) {
@@ -255,26 +294,61 @@ class ApiService {
     return response.data;
   }
 
+  /**
+   * Verify email address using verification token.
+   *
+   * @param token - Email verification token string.
+   * @returns Promise resolving to standard ApiResponse envelope with message.
+   * @throws {AxiosError} Throws if verification token is invalid or request fails.
+   */
   async verifyEmail(token: string): Promise<ApiResponse<{ message: string }>> {
     const response = await this.api.get<ApiResponse<{ message: string }>>(`/auth/verify-email/${token}`);
     return response.data;
   }
 
+  /**
+   * Resend verification email to user.
+   *
+   * @param email - Target user email address string.
+   * @returns Promise resolving to standard ApiResponse envelope.
+   * @throws {AxiosError} Throws if request fails.
+   */
   async resendVerification(email: string): Promise<ApiResponse<{ message: string }>> {
     const response = await this.api.post<ApiResponse<{ message: string }>>('/auth/resend-verification', { email });
     return response.data;
   }
 
+  /**
+   * Request password reset email for an account.
+   *
+   * @param email - User email address string.
+   * @returns Promise resolving to standard ApiResponse envelope.
+   * @throws {AxiosError} Throws if request fails.
+   */
   async forgotPassword(email: string): Promise<ApiResponse<{ message: string }>> {
     const response = await this.api.post<ApiResponse<{ message: string }>>('/auth/forgot-password', { email });
     return response.data;
   }
 
+  /**
+   * Reset user password using token received via email.
+   *
+   * @param token - Password reset token string.
+   * @param password - New user password string.
+   * @returns Promise resolving to standard ApiResponse envelope.
+   * @throws {AxiosError} Throws if token is invalid or request fails.
+   */
   async resetPassword(token: string, password: string): Promise<ApiResponse<{ message: string }>> {
     const response = await this.api.post<ApiResponse<{ message: string }>>(`/auth/reset-password/${token}`, { password });
     return response.data;
   }
 
+  /**
+   * Logout user by invalidating backend session and purging all local auth state.
+   * Never throws errors; catches backend failures and ensures local token/storage cleanup.
+   *
+   * @returns Promise resolving when logout cleanup completes.
+   */
   async logout(): Promise<void> {
     try {
       // Send the request to invalidate the refresh token on the backend
@@ -294,6 +368,12 @@ class ApiService {
     }
   }
 
+  /**
+   * Explicitly refresh current authentication token using bare Axios POST request.
+   *
+   * @returns Promise resolving to object containing new JWT token string.
+   * @throws {AxiosError} Throws if token refresh endpoint fails.
+   */
   async refreshToken(): Promise<{ token: string }> {
     // Use a bare axios call (not this.api) to avoid triggering the response
     // interceptor recursively on a 401 from the refresh endpoint itself.
@@ -315,21 +395,49 @@ class ApiService {
   }
 
   // Protected endpoints
+
+  /**
+   * Retrieve current authenticated user details from `/auth/me`.
+   *
+   * @returns Promise resolving to `ApiResponse<User>`.
+   * @throws {AxiosError} Throws if unauthenticated or request fails.
+   */
   async getMe(): Promise<ApiResponse<User>> {
     const response = await this.api.get<ApiResponse<User>>('/auth/me');
     return response.data;
   }
 
+  /**
+   * Retrieve user profile details from `/auth/profile`.
+   *
+   * @returns Promise resolving to `ApiResponse<User>`.
+   * @throws {AxiosError} Throws if request fails.
+   */
   async getProfile(): Promise<ApiResponse<User>> {
     const response = await this.api.get<ApiResponse<User>>('/auth/profile');
     return response.data;
   }
 
+  /**
+   * Update authenticated user profile fields.
+   *
+   * @param data - Partial `User` data object to update.
+   * @returns Promise resolving to updated `ApiResponse<User>`.
+   * @throws {AxiosError} Throws if update fails.
+   */
   async updateProfile(data: Partial<User>): Promise<ApiResponse<User>> {
     const response = await this.api.put<ApiResponse<User>>('/auth/profile', data);
     return response.data;
   }
 
+  /**
+   * Change password for currently logged-in user.
+   *
+   * @param currentPassword - Existing account password string.
+   * @param newPassword - New password string.
+   * @returns Promise resolving to standard ApiResponse envelope with status message.
+   * @throws {AxiosError} Throws if current password is incorrect or request fails.
+   */
   async changePassword(currentPassword: string, newPassword: string): Promise<ApiResponse<{ message: string }>> {
     const response = await this.api.post<ApiResponse<{ message: string }>>('/auth/change-password', {
       currentPassword,
@@ -338,12 +446,25 @@ class ApiService {
     return response.data;
   }
 
+  /**
+   * Delete user account permanently and clear stored authentication token.
+   *
+   * @returns Promise resolving to standard ApiResponse envelope.
+   * @throws {AxiosError} Throws if deletion request fails.
+   */
   async deleteAccount(): Promise<ApiResponse<{ message: string }>> {
     const response = await this.api.delete<ApiResponse<{ message: string }>>('/auth/account');
     this.clearToken();
     return response.data;
   }
 
+  /**
+   * Export all user data as a binary file Blob.
+   * Iterates through candidate endpoints (`/data-export`, `/data/export`, `/api/data-export`).
+   *
+   * @returns Promise resolving to downloadable `Blob`.
+   * @throws {Error} Throws Error if user data export endpoint is not found or fails.
+   */
   async exportUserData(): Promise<Blob> {
     const endpoints = ['/data-export', '/data/export', '/api/data-export'];
 
@@ -368,43 +489,98 @@ class ApiService {
   }
 
   // Starknet account management
+
+  /**
+   * Deploy Starknet user account smart contract.
+   *
+   * @returns Promise resolving to `ApiResponse` containing transaction hash and contract address.
+   * @throws {AxiosError} Throws if contract deployment fails.
+   */
   async deployAccount(): Promise<ApiResponse<{ transactionHash: string; contractAddress: string }>> {
     const response = await this.api.post<ApiResponse<{ transactionHash: string; contractAddress: string }>>('/auth/starknet/deploy');
     return response.data;
   }
 
+  /**
+   * Retrieve Starknet account balance breakdown.
+   *
+   * @returns Promise resolving to `BalanceResponse`.
+   * @throws {AxiosError} Throws if balance request fails.
+   */
   async getBalance(): Promise<BalanceResponse> {
     const response = await this.api.get<BalanceResponse>('/auth/starknet/balance');
     return response.data;
   }
 
+  /**
+   * Check deployment and funding status of Starknet account.
+   *
+   * @returns Promise resolving to `ApiResponse` with deployment state flags and address details.
+   * @throws {AxiosError} Throws if status query fails.
+   */
   async getAccountStatus(): Promise<ApiResponse<{ isDeployed: boolean; isFunded: boolean; address: string; publicKey: string }>> {
     const response = await this.api.get<ApiResponse<{ isDeployed: boolean; isFunded: boolean; address: string; publicKey: string }>>('/auth/starknet/status');
     return response.data;
   }
 
   // Auto-funding
+
+  /**
+   * Trigger account funding via auto-faucet.
+   *
+   * @returns Promise resolving to `ApiResponse` containing transaction hash and funded amount string.
+   * @throws {AxiosError} Throws if funding request fails.
+   */
   async fundAccount(): Promise<ApiResponse<{ transactionHash: string; amount: string }>> {
     const response = await this.api.post<ApiResponse<{ transactionHash: string; amount: string }>>('/auth/funding/fund-account');
     return response.data;
   }
 
+  /**
+   * Retrieve global auto-funding statistics.
+   *
+   * @returns Promise resolving to `ApiResponse` with total funded count, total accounts, and average amount.
+   * @throws {AxiosError} Throws if statistics request fails.
+   */
   async getAutoFundingStats(): Promise<ApiResponse<{ totalFunded: number; totalAccounts: number; averageAmount: string }>> {
     const response = await this.api.get<ApiResponse<{ totalFunded: number; totalAccounts: number; averageAmount: string }>>('/auth/funding/auto-funding-stats');
     return response.data;
   }
 
+  /**
+   * Fetch current funded account balance state.
+   *
+   * @returns Promise resolving to `ApiResponse` with balance string and boolean flag.
+   * @throws {AxiosError} Throws if request fails.
+   */
   async getFundedAccountBalance(): Promise<ApiResponse<{ balance: string; hasBalance: boolean }>> {
     const response = await this.api.get<ApiResponse<{ balance: string; hasBalance: boolean }>>('/auth/funding/funded-account-balance');
     return response.data;
   }
 
+  /**
+   * Batch fund multiple account balances with an array of amounts.
+   *
+   * @param amounts - Array of numerical amount strings.
+   * @returns Promise resolving to `ApiResponse` with array of transaction hashes and total funded amount.
+   * @throws {AxiosError} Throws if batch funding fails.
+   */
   async batchFund(amounts: string[]): Promise<ApiResponse<{ transactionHashes: string[]; totalAmount: string }>> {
     const response = await this.api.post<ApiResponse<{ transactionHashes: string[]; totalAmount: string }>>('/auth/funding/batch-fund', { amounts });
     return response.data;
   }
 
   // Account transaction endpoints
+
+  /**
+   * Retrieve paginated transaction history for a user account.
+   *
+   * @param userId - Target user identifier string.
+   * @param page - Page index (1-based, defaults to 1).
+   * @param limit - Page size limit (defaults to 10).
+   * @returns Promise resolving to `ApiResponse` containing Stellar transactions array and pagination meta.
+   * @throws {AxiosError} Throws if transaction lookup fails.
+   */
   async getAccountTransactions(userId: string, page: number = 1, limit: number = 10): Promise<ApiResponse<{ transactions: StellarTransaction[]; total: number; page: number; limit: number }>> {
     const response = await this.api.get<ApiResponse<{ transactions: StellarTransaction[]; total: number; page: number; limit: number }>>(`/account/${userId}/transactions`, {
       params: { page, limit }
@@ -414,6 +590,14 @@ class ApiService {
 
   // Contact management - Note: Contact endpoints are not available in experimental backend
   // Contact management is handled through the agent query system
+
+  /**
+   * Retrieve list of user contacts.
+   * Catches HTTP 404 error if experimental backend lacks contact endpoints and resolves to fallback envelope instead of throwing.
+   *
+   * @returns Promise resolving to `ApiResponse<Contact[]>`.
+   * @throws {AxiosError} Throws for non-404 errors.
+   */
   async getContacts(): Promise<ApiResponse<Contact[]>> {
     try {
       const response = await this.api.get<ApiResponse<Contact[]>>('/contacts');
@@ -431,6 +615,14 @@ class ApiService {
     }
   }
 
+  /**
+   * Create a new contact.
+   * Catches 404 status from experimental backend and returns fallback response envelope with 404 code instead of throwing.
+   *
+   * @param data - `CreateContactRequest` payload.
+   * @returns Promise resolving to `ApiResponse<Contact>`.
+   * @throws {AxiosError} Throws for non-404 errors.
+   */
   async createContact(data: CreateContactRequest): Promise<ApiResponse<Contact>> {
     try {
       const response = await this.api.post<ApiResponse<Contact>>('/contacts', data);
@@ -448,6 +640,15 @@ class ApiService {
     }
   }
 
+  /**
+   * Update an existing contact by ID.
+   * Catches 404 status from experimental backend and returns fallback response envelope with 404 code instead of throwing.
+   *
+   * @param id - Contact identifier string.
+   * @param data - `UpdateContactRequest` payload.
+   * @returns Promise resolving to `ApiResponse<Contact>`.
+   * @throws {AxiosError} Throws for non-404 errors.
+   */
   async updateContact(id: string, data: UpdateContactRequest): Promise<ApiResponse<Contact>> {
     try {
       const response = await this.api.put<ApiResponse<Contact>>(`/contacts/${id}`, data);
@@ -465,6 +666,14 @@ class ApiService {
     }
   }
 
+  /**
+   * Delete contact by ID.
+   * Catches 404 status from experimental backend and returns fallback response envelope with 404 code instead of throwing.
+   *
+   * @param id - Contact identifier string.
+   * @returns Promise resolving to `ApiResponse<{ message: string }>`.
+   * @throws {AxiosError} Throws for non-404 errors.
+   */
   async deleteContact(id: string): Promise<ApiResponse<{ message: string }>> {
     try {
       const response = await this.api.delete<ApiResponse<{ message: string }>>(`/contacts/${id}`);
@@ -483,6 +692,26 @@ class ApiService {
   }
 
   // Agent query - Optimized for backend integration
+
+  /**
+   * Send a query to the AI agent. Attempts connected experimental agent service first, falling back to backend `/query`.
+   * Does NOT throw on backend/execution error; catches exceptions and returns a resolved `AgentQueryResponse` object with `success: false` and friendly message.
+   *
+   * @param data - Request payload containing user query string.
+   * @returns Promise resolving to `AgentQueryResponse` containing result envelope.
+   *
+   * @example
+   * ```ts
+   * import { apiService } from '@/services/api';
+   * 
+   * const response = await apiService.queryAgent({ query: 'Swap 10 XLM for USDC' });
+   * if (response.result.success) {
+   *   console.log('Agent output:', response.result.data);
+   * } else {
+   *   console.error('Agent query error:', response.result.error);
+   * }
+   * ```
+   */
   async queryAgent(data: AgentQueryRequest): Promise<AgentQueryResponse> {
     // First try the experimental agent service
     try {
@@ -548,6 +777,12 @@ class ApiService {
   }
 
   // Agent-specific methods
+
+  /**
+   * Retrieve agent status summary. Does NOT throw on failure; returns default offline status object if underlying call fails.
+   *
+   * @returns Promise resolving to agent status object.
+   */
   async getAgentStatus() {
     try {
       return await agentService.getStatus();
@@ -571,6 +806,11 @@ class ApiService {
     }
   }
 
+  /**
+   * Retrieve agent capabilities configuration. Does NOT throw on failure; returns default empty capabilities object on error.
+   *
+   * @returns Promise resolving to agent capabilities object.
+   */
   async getAgentCapabilities() {
     try {
       return await agentService.getCapabilities();
@@ -600,6 +840,12 @@ class ApiService {
     }
   }
 
+  /**
+   * Perform direct health check on agent service.
+   *
+   * @returns Promise resolving to health check status object.
+   * @throws Throws error if agent service health check fails.
+   */
   async checkAgentHealth() {
     try {
       return await agentService.healthCheck();
@@ -609,6 +855,11 @@ class ApiService {
     }
   }
 
+  /**
+   * Retrieve available agent tools list. Does NOT throw on failure; returns empty array on error.
+   *
+   * @returns Promise resolving to tools array.
+   */
   async getAgentTools() {
     try {
       return await agentService.getTools();
@@ -618,6 +869,14 @@ class ApiService {
     }
   }
 
+  /**
+   * Execute specified agent tool with parameters.
+   *
+   * @param toolName - Identifier of tool to execute.
+   * @param params - Parameter payload object for the tool execution.
+   * @returns Promise resolving to tool execution output.
+   * @throws Throws error if tool execution fails.
+   */
   async executeAgentTool(toolName: string, params: Record<string, unknown>) {
     try {
       return await agentService.executeTool(toolName, params);
@@ -627,6 +886,12 @@ class ApiService {
     }
   }
 
+  /**
+   * Retrieve stored agent memory records for a given user. Does NOT throw on failure; returns empty array on error.
+   *
+   * @param userId - User ID string.
+   * @returns Promise resolving to array of memory record strings.
+   */
   async getAgentMemory(userId: string) {
     try {
       return await agentService.getMemory(userId);
@@ -636,6 +901,13 @@ class ApiService {
     }
   }
 
+  /**
+   * Clear agent stored memory records for a given user.
+   *
+   * @param userId - User ID string.
+   * @returns Promise resolving to void.
+   * @throws Throws error if memory clear operation fails.
+   */
   async clearAgentMemory(userId: string) {
     try {
       await agentService.clearMemory(userId);
@@ -650,22 +922,49 @@ class ApiService {
 
   // Removed: getOrCreateActiveConversation - now handled client-side
 
+  /**
+   * Fetch conversation statistics from server.
+   *
+   * @returns Promise resolving to `ApiResponse` with conversation counts.
+   * @throws {AxiosError} Throws if request fails.
+   */
   async getConversationStats(): Promise<ApiResponse<{ totalConversations: number; totalMessages: number; activeConversations: number }>> {
     const response = await this.api.get<ApiResponse<{ totalConversations: number; totalMessages: number; activeConversations: number }>>('/chat/stats');
     return response.data;
   }
 
+  /**
+   * Retrieve prompt version records.
+   *
+   * @returns Promise resolving to array or single `PromptVersionRecord` or `ApiResponse`.
+   * @throws {AxiosError} Throws if request fails.
+   */
   async getPromptVersions(): Promise<PromptVersionRecord[] | ApiResponse<PromptVersionRecord[]> | PromptVersionRecord> {
     const response = await this.api.get<PromptVersionRecord[] | ApiResponse<PromptVersionRecord[]> | PromptVersionRecord>('/versions');
     return response.data;
   }
 
+  /**
+   * Activate prompt version by version ID.
+   *
+   * @param id - Version ID string.
+   * @returns Promise resolving to `ApiResponse<PromptVersionRecord>` or `PromptVersionRecord`.
+   * @throws {AxiosError} Throws if activation fails.
+   */
   async activatePromptVersion(id: string): Promise<ApiResponse<PromptVersionRecord> | PromptVersionRecord> {
     const response = await this.api.patch<ApiResponse<PromptVersionRecord> | PromptVersionRecord>(`/versions/${id}/activate`);
     return response.data;
   }
 
   // Liquidity Pool endpoints
+
+  /**
+   * Retrieve liquidity pool statistics.
+   *
+   * @param request - Optional `LiquidityRequest` filters.
+   * @returns Promise resolving to `ApiResponse<LiquidityStats>`.
+   * @throws {AxiosError} Throws if request fails.
+   */
   async getLiquidityStats(request?: LiquidityRequest): Promise<ApiResponse<LiquidityStats>> {
     const response = await this.api.post<ApiResponse<LiquidityStats>>('/liquidity', request || {});
     return response.data;
@@ -674,7 +973,11 @@ class ApiService {
   // === Audit Log Endpoints ===
 
   /**
-   * Fetch audit logs with filtering, pagination, and search
+   * Fetch audit logs with filtering, pagination, and search parameters.
+   *
+   * @param params - Optional `AuditLogsQueryParams` filtering object.
+   * @returns Promise resolving to `AuditLogsResponse`.
+   * @throws {AxiosError} Throws if request fails.
    */
   async getAuditLogs(params: AuditLogsQueryParams = {}): Promise<AuditLogsResponse> {
     const response = await this.api.get<AuditLogsResponse>('/audit', { params });
@@ -682,7 +985,11 @@ class ApiService {
   }
 
   /**
-   * Fetch a single audit log entry by ID
+   * Fetch a single audit log entry by ID.
+   *
+   * @param id - Audit log entry ID string.
+   * @returns Promise resolving to `ApiResponse<AuditLogEntry>`.
+   * @throws {AxiosError} Throws if audit log entry is not found or request fails.
    */
   async getAuditLogById(id: string): Promise<ApiResponse<AuditLogEntry>> {
     const response = await this.api.get<ApiResponse<AuditLogEntry>>(`/audit/${id}`);
@@ -690,7 +997,10 @@ class ApiService {
   }
 
   /**
-   * Fetch aggregated audit log statistics
+   * Fetch aggregated audit log statistics.
+   *
+   * @returns Promise resolving to `ApiResponse<AuditLogStats>`.
+   * @throws {AxiosError} Throws if request fails.
    */
   async getAuditLogStats(): Promise<ApiResponse<AuditLogStats>> {
     const response = await this.api.get<ApiResponse<AuditLogStats>>('/audit/stats');
@@ -698,7 +1008,11 @@ class ApiService {
   }
 
   /**
-   * Export audit logs (download as CSV/JSON)
+   * Export audit logs as downloadable Blob (CSV/JSON).
+   *
+   * @param params - Optional `AuditLogsQueryParams` export filter parameters.
+   * @returns Promise resolving to binary file `Blob`.
+   * @throws {AxiosError} Throws if export request fails.
    */
   async exportAuditLogs(params: AuditLogsQueryParams = {}): Promise<Blob> {
     const response = await this.api.get<Blob>('/audit/export', {
@@ -708,7 +1022,14 @@ class ApiService {
     return response.data;
   }
 
-  // Generic request method for custom endpoints
+  /**
+   * Generic request method for custom endpoints.
+   *
+   * @template T - Expected response payload type.
+   * @param config - Axios request configuration.
+   * @returns Promise resolving to data payload of type T.
+   * @throws {AxiosError} Throws if request fails.
+   */
   async request<T>(config: AxiosRequestConfig): Promise<T> {
     const response = await this.api.request<T>(config);
     return response.data;
