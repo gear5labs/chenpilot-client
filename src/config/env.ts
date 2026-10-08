@@ -32,7 +32,12 @@ export const validateEnv = () => {
   const missing = required.filter(key => !process.env[key]);
   
   if (missing.length > 0) {
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    const missingKeys = missing.join(', ');
+    throw new Error(
+      `[Env Config Error] Missing required environment variable(s): ${missingKeys}.\n` +
+      `Please create or update your '.env.local' file in the project root with valid settings (e.g. NEXT_PUBLIC_API_BASE_URL=http://localhost:2333).\n` +
+      `For help troubleshooting environment configuration, see docs/TROUBLESHOOTING.md.`
+    );
   }
 };
 

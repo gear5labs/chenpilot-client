@@ -1,9 +1,10 @@
-
 # ChenPilot Client
 
 A modern, responsive web client for **ChenPilot** - a crypto wallet management system with AI agent capabilities. Built with Next.js, TypeScript, and Tailwind CSS.
 
 ## Getting Started
+
+> 💡 **Troubleshooting**: Having issues setting up locally? Check out our [Troubleshooting Guide](./docs/TROUBLESHOOTING.md) for solutions to common environment, port, socket, and git hook problems.
 
 ### Prerequisites
 
@@ -148,6 +149,8 @@ pnpm exec husky install
 chmod +x .husky/pre-commit
 ```
 
+For more detailed failure modes, see [Troubleshooting Guide](./docs/TROUBLESHOOTING.md).
+
 **Skip hooks (emergency only):**
 
 ```bash
@@ -162,11 +165,7 @@ Ensure all required environment variables are set in your deployment platform.
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+For guidelines on contributing code, submitting Architectural Decision Records (ADRs), and code styles, see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 
@@ -177,10 +176,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 For support and questions:
 
 - Create an issue in the repository
-- Check the documentation
+- Check the [Troubleshooting Guide](./docs/TROUBLESHOOTING.md) and documentation
 - Contact the development team
 
 ---
 
 Built with love by the ChenPilot Team
-

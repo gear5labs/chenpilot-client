@@ -9,6 +9,9 @@ import {
 } from '@/types/agent';
 import agentConfig from '@/config/agent';
 
+/**
+ * Direct client service for communicating with the AI Agent backend.
+ */
 class AgentService {
   private api: AxiosInstance;
   private baseURL: string;
@@ -55,7 +58,10 @@ class AgentService {
   }
 
   /**
-   * Check if the agent service is available and healthy
+   * Check if the agent service is available and healthy using a HEAD probe request.
+   * Catches errors internally and returns an unhealthy status object without throwing.
+   *
+   * @returns Promise resolving to `AgentHealthCheck` object indicating health status ('healthy' | 'unhealthy') and metrics.
    */
   async healthCheck(): Promise<AgentHealthCheck> {
     try {
@@ -108,7 +114,9 @@ class AgentService {
   }
 
   /**
-   * Get agent status and capabilities
+   * Get current agent status and connected protocol services status.
+   *
+   * @returns Promise resolving to `AgentStatus` envelope.
    */
   async getStatus(): Promise<AgentStatus> {
     // Since the experimental backend doesn't have a /status endpoint,
@@ -130,7 +138,9 @@ class AgentService {
   }
 
   /**
-   * Get available agent capabilities
+   * Get available agent capabilities, supported actions, assets, and protocols.
+   *
+   * @returns Promise resolving to `AgentCapabilities` configuration.
    */
   async getCapabilities(): Promise<AgentCapabilities> {
     // Since the experimental backend doesn't have a /capabilities endpoint,
@@ -164,7 +174,23 @@ class AgentService {
   }
 
   /**
-   * Send a query to the agent
+   * Send an intent query to the AI Agent service endpoint (`/query`).
+   * Never throws directly on HTTP error; catches exceptions and returns a resolved `AgentQueryResponse` object with `success: false` and a user-friendly error message.
+   *
+   * @param request - Query request envelope containing user prompt string.
+   * @returns Promise resolving to `AgentQueryResponse` (`{ result: { success, data, error, executionTrace } }`).
+   *
+   * @example
+   * ```ts
+   * import { agentService } from '@/services/agentService';
+   * 
+   * const response = await agentService.queryAgent({ query: 'What is my current XLM balance?' });
+   * if (response.result.success) {
+   *   console.log('Response:', response.result.data);
+   * } else {
+   *   console.error('Error:', response.result.error);
+   * }
+   * ```
    */
   async queryAgent(request: AgentQueryRequest): Promise<AgentQueryResponse> {
     try {
@@ -217,7 +243,11 @@ class AgentService {
   }
 
   /**
-   * Get agent memory for a specific user
+   * Get conversation memory entries for a specific user ID.
+   * Does NOT throw on HTTP failure; logs warning and returns an empty array.
+   *
+   * @param userId - Target user identifier string.
+   * @returns Promise resolving to array of string memory entries.
    */
   async getMemory(userId: string): Promise<string[]> {
     try {
@@ -230,7 +260,11 @@ class AgentService {
   }
 
   /**
-   * Clear agent memory for a specific user
+   * Clear agent memory entries for a specific user ID.
+   *
+   * @param userId - Target user identifier string.
+   * @returns Promise resolving to void when memory deletion completes.
+   * @throws {Error} Throws Error with message 'Failed to clear agent memory' if API call fails.
    */
   async clearMemory(userId: string): Promise<void> {
     try {
@@ -242,7 +276,10 @@ class AgentService {
   }
 
   /**
-   * Get available tools and their status
+   * Fetch list of available tools and their operational status.
+   * Does NOT throw on HTTP error; logs warning and returns an empty array.
+   *
+   * @returns Promise resolving to array of tool definitions.
    */
   async getTools(): Promise<any[]> {
     try {
@@ -255,7 +292,12 @@ class AgentService {
   }
 
   /**
-   * Execute a specific tool
+   * Execute a specific agent tool by name with parameters.
+   *
+   * @param toolName - Identifier name of the tool to execute.
+   * @param params - Parameters payload object for tool execution.
+   * @returns Promise resolving to tool execution response output.
+   * @throws {Error} Throws Error if tool execution fails.
    */
   async executeTool(toolName: string, params: any): Promise<any> {
     try {
@@ -268,21 +310,28 @@ class AgentService {
   }
 
   /**
-   * Get connection status
+   * Check if agent is currently marked as connected based on recent health checks or network requests.
+   *
+   * @returns Synchronous boolean flag (`true` if connected, `false` otherwise).
    */
   isAgentConnected(): boolean {
     return this.isConnected;
   }
 
   /**
-   * Get last health check time
+   * Retrieve timestamp of the most recent health check execution.
+   *
+   * @returns `Date` instance of last health check, or `null` if health check has not been run.
    */
   getLastHealthCheck(): Date | null {
     return this.lastHealthCheck;
   }
 
   /**
-   * Initialize the agent service
+   * Initialize the agent service by executing an initial health check.
+   * Catches errors internally and logs a warning without throwing.
+   *
+   * @returns Promise resolving to void.
    */
   async initialize(): Promise<void> {
     try {
@@ -294,7 +343,12 @@ class AgentService {
   }
 
   /**
-   * Generic request method for custom endpoints
+   * Generic low-level request method for agent endpoints.
+   *
+   * @template T - Expected response payload type.
+   * @param config - Axios request configuration object.
+   * @returns Promise resolving to response data of type T.
+   * @throws {AxiosError} Throws on HTTP request error.
    */
   async request<T>(config: AxiosRequestConfig): Promise<T> {
     const response = await this.api.request<T>(config);
