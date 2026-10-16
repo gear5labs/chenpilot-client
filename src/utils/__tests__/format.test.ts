@@ -19,7 +19,7 @@ describe("formatAddress", () => {
     ["GABC", 6, 4, "GABC", "short address unchanged"],
     ["", 6, 4, "", "empty string passes through"],
     ["GABCDEF12", 6, 4, "GABCDEF12", "address length exactly startChars+endChars-1 unchanged"],
-    ["GABCDEF1234", 6, 4, "GABCDEF1234", "address length exactly startChars+endChars unchanged"],
+    ["GABCDE1234", 6, 4, "GABCDE1234", "address length exactly startChars+endChars unchanged"],
     ["GABCDEF12345", 6, 4, "GABCDE...2345", "address length startChars+endChars+1 truncated"],
   ];
   for (const [input, start, end, expected, name] of cases) {
@@ -121,7 +121,7 @@ describe("truncateText", () => {
   const cases: Array<[string, number, string | undefined, string, string]> = [
     ["hello", 10, undefined, "hello", "no truncation needed"],
     ["hello world", 8, undefined, "hello...", "default suffix"],
-    ["hello world", 8, ">", "hello >", "custom suffix"],
+    ["hello world", 8, ">", "hello w>", "custom suffix"],
     ["hello world", 11, "...", "hello world", "exact length no truncation"],
     ["", 5, "...", "", "empty input"],
   ];

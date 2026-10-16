@@ -30,8 +30,8 @@ interface ChatState {
   selectedTags: string[];
   isOnline: boolean;
   messageQueue: Array<{ id: string; query: string; timestamp: string }>;
-  pendingMessages: Set<string>;
-  optimisticUpdates: Map<string, ChatMessage>;
+  pendingMessages: string[];
+  optimisticUpdates: Record<string, ChatMessage>;
 }
 
 const initialState: ChatState = {
@@ -51,8 +51,8 @@ const initialState: ChatState = {
   selectedTags: [],
   isOnline: typeof window !== "undefined" && navigator.onLine,
   messageQueue: [],
-  pendingMessages: new Set(),
-  optimisticUpdates: new Map(),
+  pendingMessages: [],
+  optimisticUpdates: {},
 };
 
 // Async thunks
@@ -185,17 +185,6 @@ export const sendMessage = createAsyncThunk(
           messageCount: 0,
         };
       }
-
-      // Generate server timestamp (should come from server in production)
-      const serverTimestamp = new Date().toISOString();
-
-      // Save user message with server timestamp
-      const userMessage: ChatMessage = {
-        id: `msg_user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        type: "user",
-        content: query,
-        timestamp: serverTimestamp,
-      };
 
       // Call the API service to get actual response
       const response = await apiService.queryAgent({ userId, query });
@@ -697,16 +686,18 @@ state.messages[index] = {
       }
     },
     addPendingMessage: (state, action: PayloadAction<string>) => {
-      state.pendingMessages.add(action.payload);
+      if (!state.pendingMessages.includes(action.payload)) {
+        state.pendingMessages.push(action.payload);
+      }
     },
     removePendingMessage: (state, action: PayloadAction<string>) => {
-      state.pendingMessages.delete(action.payload);
+      state.pendingMessages = state.pendingMessages.filter((id) => id !== action.payload);
     },
     storeOptimisticUpdate: (state, action: PayloadAction<ChatMessage>) => {
-      state.optimisticUpdates.set(action.payload.id, action.payload);
+      state.optimisticUpdates[action.payload.id] = action.payload;
     },
     removeOptimisticUpdate: (state, action: PayloadAction<string>) => {
-      state.optimisticUpdates.delete(action.payload);
+      delete state.optimisticUpdates[action.payload];
     },
     resolveOptimisticUpdate: (
       state,
@@ -714,7 +705,7 @@ state.messages[index] = {
     ) => {
       const { clientId, serverMessage } = action.payload;
       // Remove optimistic update and add resolved message
-      state.optimisticUpdates.delete(clientId);
+      delete state.optimisticUpdates[clientId];
       // Remove the old optimistic message if it exists
       state.messages = state.messages.filter((msg) => msg.id !== clientId);
       // Add the server version and resort

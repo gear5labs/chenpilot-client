@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { StellarTransaction } from '@/types';
+import React from 'react';
+import { StellarOperation, StellarTransaction } from '@/types';
 import { formatAddress, formatTokenAmount } from '@/utils/format';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -9,13 +9,14 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowUpRight,
-  ArrowDownLeft,
   ExternalLink,
   Check,
   AlertCircle,
   Loader2,
+  Download,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { serializeTransactionsToCsv } from '@/utils/transactionCsv';
 
 interface TransactionTableProps {
   transactions: StellarTransaction[];
@@ -62,13 +63,24 @@ export default function TransactionTable({
     toast.success('Transaction hash copied');
   };
 
-  const getOperationType = (operations: any[]): string => {
+  const handleExport = () => {
+    if (transactions.length === 0) return;
+    const blob = new Blob([serializeTransactionsToCsv(transactions)], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'transaction-history.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const getOperationType = (operations: StellarOperation[]): string => {
     if (!operations || operations.length === 0) return 'Unknown';
     const mainOp = operations[0];
     return OPERATION_TYPE_LABELS[mainOp.type] || mainOp.type;
   };
 
-  const getOperationDetails = (operations: any[]): string | null => {
+  const getOperationDetails = (operations: StellarOperation[]): string | null => {
     if (!operations || operations.length === 0) return null;
     const mainOp = operations[0];
     return mainOp.amount ? `${formatTokenAmount(mainOp.amount, 2)} ${mainOp.asset}` : null;
@@ -99,6 +111,13 @@ export default function TransactionTable({
   if (transactions.length === 0) {
     return (
       <Card>
+        <div className="flex justify-end">
+          <span title="There are no transactions to export.">
+            <Button variant="ghost" size="sm" onClick={handleExport} disabled>
+              <Download className="h-4 w-4 mr-2" /> Export CSV
+            </Button>
+          </span>
+        </div>
         <div className="text-center py-12">
           <p className="text-gray-400 mb-2">No transactions found</p>
           <p className="text-xs text-gray-500">
@@ -112,6 +131,13 @@ export default function TransactionTable({
   return (
     <Card>
       <div className="space-y-4">
+        <div className="flex justify-end">
+          <span title={transactions.length === 0 ? 'There are no transactions to export.' : undefined}>
+            <Button variant="ghost" size="sm" onClick={handleExport} disabled={transactions.length === 0}>
+              <Download className="h-4 w-4 mr-2" /> Export CSV
+            </Button>
+          </span>
+        </div>
         {/* Transactions Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
