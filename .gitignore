@@ -45,3 +45,9 @@ next-env.d.ts
 # tsc output logs (#135)
 tsc_output.txt
 *.tsc_output.txt
+
+# Prevent competing npm lockfile (#337)
+package-lock.json
+
+# Prevent competing npm lockfile (#337)
+package-lock.json
