@@ -20,8 +20,7 @@ import { ChatLayout } from '@/components/layout/ChatLayout';
 import { Users, Plus, Search, Edit, Trash2, Copy, QrCode, Sparkles } from 'lucide-react';
 import { formatAddress } from '@/utils/format';
 import { Contact, CreateContactRequest } from '@/types';
-import { PAGINATION } from '@/constants';
-import { buildClipboardFallbackMessage, copyTextToClipboard } from '@/utils/clipboard';
+import { SUPPORTED_ASSETS, TOKEN_DISPLAY_NAMES, isSupportedAsset, getUnsupportedAssetMessage } from '@/constants';
 import toast from 'react-hot-toast';
 
 const createEmptyContactForm = (): CreateContactRequest => ({
@@ -43,7 +42,11 @@ export default function ContactsPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAddressChangeConfirmationOpen, setIsAddressChangeConfirmationOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const [formData, setFormData] = useState<CreateContactRequest>(createEmptyContactForm());
+  const [formData, setFormData] = useState<CreateContactRequest>({
+    name: '',
+    address: '',
+    tokenType: 'XLM',
+  });
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -68,7 +71,7 @@ export default function ContactsPage() {
       })).unwrap();
       toast.success('Contact created successfully!');
       setIsCreateModalOpen(false);
-      setFormData(createEmptyContactForm());
+      setFormData({ name: '', address: '', tokenType: 'XLM' });
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : String(error || 'Failed to create contact');
       toast.error(errorMessage);
@@ -101,9 +104,18 @@ export default function ContactsPage() {
     e.preventDefault();
     if (!editingContact) return;
 
-    if (formData.address.trim() !== editingContact.address) {
-      setIsAddressChangeConfirmationOpen(true);
-      return;
+    try {
+      await dispatch(updateContact({
+        id: editingContact.id,
+        data: formData,
+      })).unwrap();
+      toast.success('Contact updated successfully!');
+      setIsEditModalOpen(false);
+      setEditingContact(null);
+      setFormData({ name: '', address: '', tokenType: 'XLM' });
+    } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : String(error || 'Failed to update contact');
+      toast.error(errorMessage);
     }
 
     await persistContactUpdate();
@@ -516,9 +528,11 @@ export default function ContactsPage() {
               onChange={(e) => setFormData({ ...formData, tokenType: e.target.value as any })}
               className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
             >
-              <option value="STRK">STRK</option>
-              <option value="ETH">ETH</option>
-              <option value="DAI">DAI</option>
+              {SUPPORTED_ASSETS.map((asset) => (
+                <option key={asset} value={asset}>
+                  {asset} - {TOKEN_DISPLAY_NAMES[asset]}
+                </option>
+              ))}
             </select>
           </div>
           
@@ -597,9 +611,11 @@ export default function ContactsPage() {
               onChange={(e) => setFormData({ ...formData, tokenType: e.target.value as any })}
               className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
             >
-              <option value="STRK">STRK</option>
-              <option value="ETH">ETH</option>
-              <option value="DAI">DAI</option>
+              {SUPPORTED_ASSETS.map((asset) => (
+                <option key={asset} value={asset}>
+                  {asset} - {TOKEN_DISPLAY_NAMES[asset]}
+                </option>
+              ))}
             </select>
           </div>
           

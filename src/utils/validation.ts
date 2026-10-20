@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { VALIDATION_MESSAGES, PAYMENT_LIMITS, SECURITY_VALIDATION, TOKEN_DECIMALS } from '@/constants';
+import { VALIDATION_MESSAGES, PAYMENT_LIMITS, SECURITY_VALIDATION, SUPPORTED_ASSETS, getUnsupportedAssetMessage } from '@/constants';
 
 // Email validation schema
 export const emailSchema = z
@@ -54,20 +54,27 @@ export const hasValidAssetPrecision = (amount: string, tokenType?: string): bool
 };
 
 // Contact validation schemas
+export const supportedAssetSchema = z.enum(SUPPORTED_ASSETS, {
+  required_error: 'Please select a token type',
+  invalid_type_error: `Unsupported asset. Supported assets are: ${SUPPORTED_ASSETS.join(', ')}`,
+  errorMap: (issue, ctx) => {
+    if (issue.code === z.ZodIssueCode.invalid_enum_value) {
+      return { message: getUnsupportedAssetMessage(ctx.data) };
+    }
+    return { message: ctx.defaultError };
+  },
+});
+
 export const createContactSchema = z.object({
   name: nameSchema,
   address: stellarAddressSchema,
-  tokenType: z.enum(['XLM', 'STRK', 'USDC', 'USDT', 'BTC', 'ETH', 'AQUA'], {
-    required_error: 'Please select a token type',
-  }),
-  note: z.string().max(280, 'Contact notes are limited to 280 characters').optional(),
+  tokenType: supportedAssetSchema,
 });
 
 export const updateContactSchema = z.object({
   name: nameSchema.optional(),
   address: stellarAddressSchema.optional(),
-  tokenType: z.enum(['XLM', 'STRK', 'USDC', 'USDT', 'BTC', 'ETH', 'AQUA']).optional(),
-  note: z.string().max(280, 'Contact notes are limited to 280 characters').optional(),
+  tokenType: supportedAssetSchema.optional(),
 });
 
 // Authentication schemas

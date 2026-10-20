@@ -35,6 +35,18 @@ export const TOKEN_TYPES = {
   AQUA: 'AQUA',
 } as const;
 
+export const SUPPORTED_ASSETS = ['XLM', 'USDC', 'USDT', 'BTC', 'ETH', 'AQUA'] as const;
+export const LEGACY_UNSUPPORTED_ASSETS = ['STRK', 'DAI'] as const;
+
+export function isSupportedAsset(asset: unknown): asset is (typeof SUPPORTED_ASSETS)[number] {
+  return typeof asset === 'string' && (SUPPORTED_ASSETS as readonly string[]).includes(asset);
+}
+
+export function getUnsupportedAssetMessage(asset: unknown): string {
+  const label = typeof asset === 'string' && asset.trim() ? asset.trim().toUpperCase() : 'Unknown';
+  return `Unsupported asset "${label}". Please select one of the supported Stellar wallet assets: ${SUPPORTED_ASSETS.join(', ')}.`;
+}
+
 export const TOKEN_DISPLAY_NAMES = {
   [TOKEN_TYPES.XLM]: 'Stellar Lumens',
   [TOKEN_TYPES.USDC]: 'USD Coin',

@@ -123,15 +123,13 @@ export interface Contact {
 export interface CreateContactRequest {
   name: string;
   address: string;
-  tokenType: "XLM" | "STRK" | "USDC" | "USDT" | "BTC" | "ETH" | "AQUA";
-  note?: string;
+  tokenType: TokenType;
 }
 
 export interface UpdateContactRequest {
   name?: string;
   address?: string;
-  tokenType?: "XLM" | "STRK" | "USDC" | "USDT" | "BTC" | "ETH" | "AQUA";
-  note?: string;
+  tokenType?: TokenType;
 }
 
 // Balance and Wallet Types
