@@ -1,13 +1,13 @@
-import axios, { AxiosInstance, AxiosRequestConfig } from "axios";
-import { logger } from "../utils/logger";
-import {
-  RegisterRequest,
-  LoginRequest,
-  RegisterResponse,
-  LoginResponse,
-  User,
-  Contact,
-  CreateContactRequest,
+import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import { logger, generateCorrelationId } from "../utils/logger";
+import { 
+  RegisterRequest, 
+  LoginRequest, 
+  RegisterResponse, 
+  LoginResponse, 
+  User, 
+  Contact, 
+  CreateContactRequest, 
   UpdateContactRequest,
   SendPaymentRequest,
   BalanceResponse,
@@ -45,19 +45,6 @@ import {
   isPaymentOutcomeUnknown,
 } from "@/utils/paymentOutcome";
 
-/**
- * Local trustline types keep this service independent of whether the
- * application-wide @/types barrel exports these types.
- */
-export interface Trustline {
-  assetCode: string;
-  assetIssuer: string;
-  balance: string;
-  limit: string;
-  assetType?: string;
-  buyingLiabilities?: string;
-  sellingLiabilities?: string;
-}
 
 export interface AddTrustlineRequest {
   assetCode: string;
@@ -213,7 +200,9 @@ class ApiService {
         if (this.token) {
           config.headers.Authorization = `Bearer ${this.token}`;
         }
-
+        if (!config.headers['X-Request-ID']) {
+          config.headers['X-Request-ID'] = generateCorrelationId('req');
+        }
         return config;
       },
       (error) => Promise.reject(error),
