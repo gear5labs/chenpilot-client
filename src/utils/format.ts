@@ -185,3 +185,22 @@ export function truncateText(text: string, maxLength: number, suffix: string = '
   }
   return text.slice(0, maxLength - suffix.length) + suffix;
 }
+
+export function groupOperationsByParentTransaction<
+  T extends { id: string; hash: string; operations?: Array<{ id: string; type: string; amount?: string; asset?: string }> }
+>(transactions: T[]): Array<T & { operationCount: number }> {
+  const byHash = new Map<string, T & { operationCount: number }>();
+  for (const tx of transactions) {
+    const key = tx.hash || tx.id;
+    const ops = tx.operations ?? [];
+    if (!byHash.has(key)) {
+      byHash.set(key, { ...tx, operations: [...ops], operationCount: ops.length });
+    } else {
+      const existing = byHash.get(key)!;
+      const mergedOps = [...(existing.operations ?? []), ...ops];
+      existing.operations = mergedOps;
+      existing.operationCount = mergedOps.length;
+    }
+  }
+  return Array.from(byHash.values());
+}
