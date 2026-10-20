@@ -45,3 +45,9 @@ Ensure you have Node.js (v18+) and **pnpm** installed on your system.
    git clone [https://github.com/gear5labs/chenpilot-client.git](https://github.com/gear5labs/chenpilot-client.git)
    cd chenpilot-client
    pnpm install
+
+## Safe Wallet UI Changes Checklist
+1. **Transaction Review UX**: Always show the full recipient address (or verified contact), exact asset symbol/issuer, network fee estimate, and pending vs ledger-confirmed state.
+2. **Testnet-Only Fixtures**: Never commit mainnet private keys or real user addresses in tests or story fixtures; use Stellar testnet addresses (`G...`).
+3. **7-Decimal Precision**: Format and validate amounts using 7-decimal stroop precision without floating-point rounding drift.
+4. **API Contract Sync**: Update `docs/API_CONTRACT.md` whenever request/response envelopes or error codes change.
