@@ -173,3 +173,22 @@ const contactsSlice = createSlice({
 
 export const { clearError, setSelectedContact, clearSelectedContact, searchContacts } = contactsSlice.actions;
 export default contactsSlice.reducer;
+
+export function sortContactsDeterministically(
+  contacts: Contact[],
+  mode: 'alphabetical' | 'recent' = 'alphabetical',
+): Contact[] {
+  return [...contacts].sort((a, b) => {
+    if (mode === 'recent') {
+      const aTime = a.lastUsed ? Date.parse(a.lastUsed) : NaN;
+      const bTime = b.lastUsed ? Date.parse(b.lastUsed) : NaN;
+      const aValid = !Number.isNaN(aTime);
+      const bValid = !Number.isNaN(bTime);
+      if (aValid && bValid && aTime !== bTime) return bTime - aTime;
+      if (aValid !== bValid) return aValid ? -1 : 1;
+    }
+    const byName = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    if (byName !== 0) return byName;
+    return a.id.localeCompare(b.id);
+  });
+}
