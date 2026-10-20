@@ -100,7 +100,7 @@ export default function TransactionsPage() {
                 <div
                   className={`font-semibold ${getStatusColor(tx.successful)}`}
                 >
-                  {tx.successful ? "Confirmed" : "Failed"}
+                  {(tx as any).confirmation_status === "pending" ? "Pending Confirmation" : tx.successful ? "Confirmed" : "Failed"}
                 </div>
               </div>
 
