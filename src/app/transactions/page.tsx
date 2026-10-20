@@ -22,19 +22,24 @@ import {
 import { Language } from "@/lib/i18n/i18n";
 import { RefreshCw, ReceiptText } from "lucide-react";
 
-/**
- * Format a timestamp for display, tolerating missing/invalid values so a bad
- * value never renders "Invalid Date" to the user.
- */
-function formatLastUpdated(value: string | null): string | null {
-  if (!value) {
-    return null;
+
+export function getSafeTransactionFailureMessage(tx: {
+  successful: boolean;
+  failure_reason?: string;
+  result_codes?: { transaction?: string; operations?: string[] };
+}): string | null {
+  if (tx.successful) return null;
+  const code = tx.result_codes?.transaction || tx.failure_reason || "";
+  if (code.includes("insufficient_balance") || code.includes("underfunded")) {
+    return "Transaction failed due to insufficient available balance to cover the amount and network reserve.";
   }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
+  if (code.includes("no_destination")) {
+    return "Transaction failed because the destination Stellar account is not yet funded/activated.";
   }
-  return formatRelativeTime(parsed);
+  if (code.includes("bad_auth")) {
+    return "Transaction signature verification failed. Please retry from an authenticated session.";
+  }
+  return tx.failure_reason || "Transaction failed on the Stellar network. Verify balance, trustlines, and recipient address.";
 }
 
 export default function TransactionsPage() {

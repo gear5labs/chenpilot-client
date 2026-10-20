@@ -208,6 +208,8 @@ export interface StellarTransaction {
   fee_charged: string;
   operation_count: number;
   successful: boolean;
+  failure_reason?: string;
+  result_codes?: { transaction?: string; operations?: string[] };
   operations: StellarOperation[];
   direction?: TransactionDirection;
 }
