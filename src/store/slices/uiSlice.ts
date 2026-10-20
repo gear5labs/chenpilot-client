@@ -5,11 +5,13 @@ import { createSlice, PayloadAction, createAction } from "@reduxjs/toolkit";
 export interface ThemeState {
   mode: "light" | "dark";
   language: "en" | "ar" | "es" | "fr";
+  hideBalances: boolean;
 }
 
 const initialState: ThemeState = {
   mode: "dark", // Default to dark mode
   language: "en", // Default to English
+  hideBalances: false,
 };
 
 // Create action for initialization
@@ -60,6 +62,18 @@ export const uiSlice = createSlice({
         localStorage.setItem("language", state.language);
       }
     },
+    toggleHideBalances: (state) => {
+      state.hideBalances = !state.hideBalances;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("hide_balances", String(state.hideBalances));
+      }
+    },
+    setHideBalances: (state, action: PayloadAction<boolean>) => {
+      state.hideBalances = action.payload;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("hide_balances", String(state.hideBalances));
+      }
+    },
     /**
      * Called by the retry interceptor before each retry attempt.
      * Overwrites any previous status with the latest attempt info.
@@ -83,5 +97,5 @@ export const uiSlice = createSlice({
   },
 });
 
-export const { toggleTheme, setTheme, setRetryStatus, clearRetryStatus } = uiSlice.actions;
+export const { toggleTheme, setTheme, toggleHideBalances, setHideBalances, setRetryStatus, clearRetryStatus } = uiSlice.actions;
 export default uiSlice.reducer;
