@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { RootState, AppDispatch } from "@/store";
@@ -21,6 +21,23 @@ import {
 } from "@/utils/format";
 import { Language } from "@/lib/i18n/i18n";
 import { RefreshCw, ReceiptText } from "lucide-react";
+import { StellarTransaction } from "@/types";
+
+export type TransactionStatusFilter = "all" | "confirmed" | "failed" | "pending";
+
+export function filterTransactionsByStatus(
+  items: StellarTransaction[],
+  statusFilter: TransactionStatusFilter,
+): StellarTransaction[] {
+  if (statusFilter === "all") return items;
+  return items.filter((tx) => {
+    const isPending = (tx as StellarTransaction & { status?: string }).status === "pending";
+    if (statusFilter === "pending") return isPending;
+    if (statusFilter === "confirmed") return !isPending && tx.successful === true;
+    if (statusFilter === "failed") return !isPending && tx.successful === false;
+    return true;
+  });
+}
 
 /**
  * Format a timestamp for display, tolerating missing/invalid values so a bad
@@ -43,18 +60,7 @@ export default function TransactionsPage() {
   const { status, transactions } = useSelector(
     (state: RootState) => state.account,
   );
-  const language = useSelector((state: RootState) => state.ui?.language) as Language | undefined;
-
-  const publicKey = status?.publicKey ?? null;
-  const hasHistory = transactions.transactions.length > 0;
-  const lastUpdatedLabel = useMemo(
-    () => formatLastUpdated(transactions.lastUpdatedAt),
-    [transactions.lastUpdatedAt],
-  );
-  const pendingConfirmations = useMemo(
-    () => transactions.pending.filter((entry) => entry.status === "pending"),
-    [transactions.pending],
-  );
+  const [statusFilter, setStatusFilter] = useState<TransactionStatusFilter>("all");
 
   useEffect(() => {
     if (publicKey) {
@@ -92,6 +98,11 @@ export default function TransactionsPage() {
       }),
     );
   }, [dispatch, publicKey, transactions.nextCursor]);
+
+  const filteredTransactions = useMemo(
+    () => filterTransactionsByStatus(transactions.transactions, statusFilter),
+    [transactions.transactions, statusFilter],
+  );
 
   const getStatusColor = (successful: boolean) => {
     return successful ? "text-green-600" : "text-red-600";
@@ -147,31 +158,25 @@ export default function TransactionsPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Transaction History</h1>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            {transactions.isRefreshing
-              ? "Refreshing newest transactions..."
-              : lastUpdatedLabel
-                ? `Last updated ${lastUpdatedLabel}`
-                : "Not yet updated"}
-          </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <h1 className="text-2xl font-bold">Transaction History</h1>
+        <div className="flex items-center gap-2" role="group" aria-label="Filter transactions by status">
+          {(["all", "confirmed", "failed", "pending"] as TransactionStatusFilter[]).map((filter) => (
+            <button
+              key={filter}
+              type="button"
+              aria-pressed={statusFilter === filter}
+              onClick={() => setStatusFilter(filter)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize border transition-colors ${
+                statusFilter === filter
+                  ? "bg-primary-600 text-white border-primary-600"
+                  : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-700"
+              }`}
+            >
+              {filter}
+            </button>
+          ))}
         </div>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={handleRefresh}
-          disabled={!publicKey}
-          loading={transactions.isRefreshing}
-          aria-label="Refresh transaction history"
-          className="inline-flex items-center gap-2"
-        >
-          {!transactions.isRefreshing && (
-            <RefreshCw aria-hidden="true" className="h-4 w-4" />
-          )}
-          {transactions.isRefreshing ? "Refreshing" : "Refresh"}
-        </Button>
       </div>
 
       {transactions.refreshError && (
@@ -221,9 +226,16 @@ export default function TransactionsPage() {
           description="Your completed transactions will appear here. Start with a wallet transfer or payment."
           action={{ label: "Go to dashboard", onClick: () => router.push("/dashboard") }}
         />
+      ) : filteredTransactions.length === 0 ? (
+        <EmptyState
+          icon={<ReceiptText aria-hidden="true" className="h-8 w-8" />}
+          title={`No ${statusFilter} transactions`}
+          description={`There are no transactions with status "${statusFilter}".`}
+          action={{ label: "Show all transactions", onClick: () => setStatusFilter("all") }}
+        />
       ) : (
         <div className="space-y-4">
-          {transactions.transactions.map((tx) => (
+          {filteredTransactions.map((tx) => (
             <Card key={tx.id} className="p-4">
               <div className="flex justify-between items-start mb-2">
                 <div>
