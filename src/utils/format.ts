@@ -475,3 +475,11 @@ export function truncateText(text: string, maxLength: number, suffix: string = '
   }
   return text.slice(0, maxLength - suffix.length) + suffix;
 }
+
+export function formatIssuedAssetIdentity(assetCode?: string, assetIssuer?: string): string {
+  const code = (assetCode || 'XLM').trim() || 'XLM';
+  if (code === 'XLM' || !assetIssuer) return code;
+  const trimmed = assetIssuer.trim();
+  if (trimmed.length <= 10) return `${code} (${trimmed})`;
+  return `${code} (${trimmed.slice(0, 4)}…${trimmed.slice(-4)})`;
+}

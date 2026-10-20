@@ -190,9 +190,7 @@ export interface StellarOperation {
   type: string; // e.g., 'payment', 'create_account', 'trust', etc.
   amount?: string;
   asset?: string;
-  asset_code?: string;
   asset_issuer?: string;
-  asset_type?: string;
   from?: string;
   to?: string;
   source_account: string;
