@@ -45,3 +45,13 @@ export const validateEnv = () => {
 if (typeof window === 'undefined') {
   validateEnv();
 }
+
+const FORBIDDEN_PUBLIC_SECRET_PATTERNS = [/SECRET/i, /PRIVATE_KEY/i, /API_KEY/i, /TOKEN/i, /PASSWORD/i];
+
+export const assertNoPublicSecrets = (envVars: Record<string, string | undefined> = process.env): void => {
+  for (const key of Object.keys(envVars)) {
+    if (key.startsWith('NEXT_PUBLIC_') && FORBIDDEN_PUBLIC_SECRET_PATTERNS.some((rx) => rx.test(key))) {
+      throw new Error(`[Security Error] Server secret "${key}" must not use the NEXT_PUBLIC_ prefix.`);
+    }
+  }
+};
