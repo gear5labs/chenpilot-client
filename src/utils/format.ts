@@ -185,3 +185,20 @@ export function truncateText(text: string, maxLength: number, suffix: string = '
   }
   return text.slice(0, maxLength - suffix.length) + suffix;
 }
+
+export function formatRelativeTimestamp(dateInput: string | number | Date, nowMs: number = Date.now()): {
+  relative: string;
+  exactLabel: string;
+} {
+  const d = new Date(dateInput);
+  if (Number.isNaN(d.getTime())) {
+    return { relative: 'Unknown time', exactLabel: 'Unknown timestamp' };
+  }
+  const diffSec = Math.round((nowMs - d.getTime()) / 1000);
+  let relative: string;
+  if (Math.abs(diffSec) < 60) relative = 'Just now';
+  else if (Math.abs(diffSec) < 3600) relative = `${Math.floor(Math.abs(diffSec) / 60)}m ago`;
+  else if (Math.abs(diffSec) < 86400) relative = `${Math.floor(Math.abs(diffSec) / 3600)}h ago`;
+  else relative = `${Math.floor(Math.abs(diffSec) / 86400)}d ago`;
+  return { relative, exactLabel: d.toLocaleString() };
+}
