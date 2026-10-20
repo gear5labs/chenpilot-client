@@ -185,3 +185,19 @@ export function truncateText(text: string, maxLength: number, suffix: string = '
   }
   return text.slice(0, maxLength - suffix.length) + suffix;
 }
+
+export function sanitizeAgentPayloadForLog(
+  payload: { query?: string; response?: string },
+  debugVerbose: boolean = false,
+): { queryPreview: string; responseLength: number } {
+  if (debugVerbose) {
+    return {
+      queryPreview: payload.query || '',
+      responseLength: (payload.response || '').length,
+    };
+  }
+  return {
+    queryPreview: '[REDACTED_AGENT_PROMPT]',
+    responseLength: (payload.response || '').length,
+  };
+}
