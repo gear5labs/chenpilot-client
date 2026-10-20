@@ -134,3 +134,17 @@ export const logger = {
 };
 
 export default logger;
+
+export function sanitizeAxiosError(err: unknown): Record<string, unknown> {
+  if (!err || typeof err !== 'object') return { error: String(err) };
+  const raw = err as Record<string, any>;
+  return {
+    name: raw.name,
+    message: raw.message,
+    code: raw.code,
+    status: raw.response?.status,
+    url: raw.config?.url,
+    method: raw.config?.method,
+    headersRedacted: Boolean(raw.config?.headers?.Authorization || raw.config?.headers?.authorization),
+  };
+}
