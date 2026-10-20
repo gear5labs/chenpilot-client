@@ -184,3 +184,11 @@ For support and questions:
 ---
 
 Built with love by the ChenPilot Team
+
+## Supported Node.js & Package Manager Matrix (#338)
+
+| Runtime / Tool | Supported Version | Notes |
+|---|---|---|
+| **Node.js** | `>=20.0.0` (LTS `20.x` / `22.x`) | Pinned in `.nvmrc` (`20`) |
+| **pnpm** | `>=9.0.0` / `10.x` | Recommended workspace package manager |
+| **npm** | `>=10.0.0` | Supported for standard scripts (`npm run dev`, `npm test`) |
