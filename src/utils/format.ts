@@ -185,3 +185,16 @@ export function truncateText(text: string, maxLength: number, suffix: string = '
   }
   return text.slice(0, maxLength - suffix.length) + suffix;
 }
+
+export function formatLocalizedTransactionAmount(
+  amount: string | number,
+  locale: string = 'en-US',
+  maxFractionDigits: number = 7,
+): string {
+  const num = typeof amount === 'number' ? amount : Number(amount);
+  if (!Number.isFinite(num)) return '0';
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: maxFractionDigits,
+  }).format(num);
+}
