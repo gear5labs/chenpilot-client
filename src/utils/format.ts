@@ -185,3 +185,16 @@ export function truncateText(text: string, maxLength: number, suffix: string = '
   }
   return text.slice(0, maxLength - suffix.length) + suffix;
 }
+
+export function assertOnlineForWalletMutation(isOnline: boolean = typeof navigator !== 'undefined' ? navigator.onLine : true): {
+  allowed: boolean;
+  reason?: string;
+} {
+  if (!isOnline) {
+    return {
+      allowed: false,
+      reason: 'You are currently offline. Wallet and contact mutations require an active network connection.',
+    };
+  }
+  return { allowed: true };
+}
