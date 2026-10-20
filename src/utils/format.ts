@@ -185,3 +185,10 @@ export function truncateText(text: string, maxLength: number, suffix: string = '
   }
   return text.slice(0, maxLength - suffix.length) + suffix;
 }
+
+export function parseHorizonRateLimitRetryAfterMs(retryAfterHeader?: string | number | null, defaultMs: number = 5000): number {
+  if (retryAfterHeader === null || retryAfterHeader === undefined || retryAfterHeader === '') return defaultMs;
+  const seconds = Number(retryAfterHeader);
+  if (Number.isFinite(seconds) && seconds > 0) return Math.min(seconds * 1000, 60000);
+  return defaultMs;
+}
