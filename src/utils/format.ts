@@ -185,3 +185,13 @@ export function truncateText(text: string, maxLength: number, suffix: string = '
   }
   return text.slice(0, maxLength - suffix.length) + suffix;
 }
+
+export function formatAgentMetricOrUnavailable(
+  metricValue: number | string | null | undefined,
+  unit: string = '',
+): string {
+  if (metricValue === null || metricValue === undefined || metricValue === '' || Number.isNaN(Number(metricValue))) {
+    return 'Unavailable';
+  }
+  return `${metricValue}${unit ? ` ${unit}` : ''}`;
+}
