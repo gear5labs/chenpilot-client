@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { RootState, AppDispatch } from "@/store";
@@ -13,14 +13,20 @@ import { singleFlight } from "@/services/api";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
-import {
-  formatRelativeTime,
-  formatTransactionAmount,
-  formatTransactionDate,
-  formatTransactionFee,
-} from "@/utils/format";
-import { Language } from "@/lib/i18n/i18n";
-import { RefreshCw, ReceiptText } from "lucide-react";
+import { formatDate, formatTokenAmount } from "@/utils/format";
+import { RefreshCw, ReceiptText, Search, X } from "lucide-react";
+import { StellarTransaction } from "@/types";
+
+export function filterTransactionsByHash(
+  items: StellarTransaction[],
+  hashQuery: string,
+): StellarTransaction[] {
+  const normalized = hashQuery.trim().toLowerCase();
+  if (!normalized) return items;
+  return items.filter((tx) =>
+    (tx.hash || "").toLowerCase().includes(normalized),
+  );
+}
 
 /**
  * Format a timestamp for display, tolerating missing/invalid values so a bad
@@ -43,18 +49,7 @@ export default function TransactionsPage() {
   const { status, transactions } = useSelector(
     (state: RootState) => state.account,
   );
-  const language = useSelector((state: RootState) => state.ui?.language) as Language | undefined;
-
-  const publicKey = status?.publicKey ?? null;
-  const hasHistory = transactions.transactions.length > 0;
-  const lastUpdatedLabel = useMemo(
-    () => formatLastUpdated(transactions.lastUpdatedAt),
-    [transactions.lastUpdatedAt],
-  );
-  const pendingConfirmations = useMemo(
-    () => transactions.pending.filter((entry) => entry.status === "pending"),
-    [transactions.pending],
-  );
+  const [hashQuery, setHashQuery] = useState("");
 
   useEffect(() => {
     if (publicKey) {
@@ -92,6 +87,11 @@ export default function TransactionsPage() {
       }),
     );
   }, [dispatch, publicKey, transactions.nextCursor]);
+
+  const filteredTransactions = useMemo(
+    () => filterTransactionsByHash(transactions.transactions, hashQuery),
+    [transactions.transactions, hashQuery],
+  );
 
   const getStatusColor = (successful: boolean) => {
     return successful ? "text-green-600" : "text-red-600";
@@ -147,31 +147,34 @@ export default function TransactionsPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Transaction History</h1>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            {transactions.isRefreshing
-              ? "Refreshing newest transactions..."
-              : lastUpdatedLabel
-                ? `Last updated ${lastUpdatedLabel}`
-                : "Not yet updated"}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={handleRefresh}
-          disabled={!publicKey}
-          loading={transactions.isRefreshing}
-          aria-label="Refresh transaction history"
-          className="inline-flex items-center gap-2"
-        >
-          {!transactions.isRefreshing && (
-            <RefreshCw aria-hidden="true" className="h-4 w-4" />
-          )}
-          {transactions.isRefreshing ? "Refreshing" : "Refresh"}
-        </Button>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <h1 className="text-2xl font-bold">Transaction History</h1>
+        {transactions.transactions.length > 0 && (
+          <div className="relative w-full sm:w-80">
+            <Search
+              aria-hidden="true"
+              className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"
+            />
+            <input
+              type="search"
+              aria-label="Search by full transaction hash"
+              placeholder="Search by transaction hash..."
+              value={hashQuery}
+              onChange={(e) => setHashQuery(e.target.value)}
+              className="w-full pl-9 pr-8 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800"
+            />
+            {hashQuery && (
+              <button
+                type="button"
+                aria-label="Clear transaction hash search"
+                onClick={() => setHashQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {transactions.refreshError && (
@@ -221,13 +224,20 @@ export default function TransactionsPage() {
           description="Your completed transactions will appear here. Start with a wallet transfer or payment."
           action={{ label: "Go to dashboard", onClick: () => router.push("/dashboard") }}
         />
+      ) : filteredTransactions.length === 0 ? (
+        <EmptyState
+          icon={<Search aria-hidden="true" className="h-8 w-8" />}
+          title="No matching transaction hash"
+          description={`No transaction matched "${hashQuery.trim()}". Check the full hash or reset your search.`}
+          action={{ label: "Reset search", onClick: () => setHashQuery("") }}
+        />
       ) : (
         <div className="space-y-4">
-          {transactions.transactions.map((tx) => (
+          {filteredTransactions.map((tx) => (
             <Card key={tx.id} className="p-4">
               <div className="flex justify-between items-start mb-2">
                 <div>
-                  <h3 className="font-semibold">
+                  <h3 className="font-semibold" title={tx.hash}>
                     Transaction {tx.hash.slice(0, 8)}...
                   </h3>
                   <p className="text-sm text-gray-600">
