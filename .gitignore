@@ -52,3 +52,7 @@ next-env.d.ts
 # tsc output logs (#135)
 tsc_output.txt
 *.tsc_output.txt
+
+# generated install and test output logs (#336)
+npm-install.log
+vitest-out.txt
