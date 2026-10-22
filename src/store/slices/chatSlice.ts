@@ -49,7 +49,12 @@ const initialState: ChatState = {
   chatHistory: {},
   tags: {},
   selectedTags: [],
-  isOnline: typeof window !== "undefined" && navigator.onLine,
+  // Do not read navigator.onLine at module-initialisation time: the module is
+  // loaded during SSR where navigator is undefined, and the value would be
+  // frozen for the lifetime of the module even on the client. The real online
+  // status is set by the OfflineIndicator component (setOnlineStatus action)
+  // after mount, and by the browser's online/offline events.
+  isOnline: false,
   messageQueue: [],
   pendingMessages: new Set(),
   optimisticUpdates: new Map(),
