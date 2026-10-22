@@ -563,9 +563,18 @@ state.messages[index] = {
         const savedHistory = localStorage.getItem("chat_history");
         if (savedHistory) {
           try {
-            state.chatHistory = JSON.parse(savedHistory);
-          } catch (error) {
-            console.error("Failed to parse chat history:", error);
+            const parsed = JSON.parse(savedHistory);
+            if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+              state.chatHistory = parsed;
+            } else {
+              // Unexpected schema (e.g. array or primitive from an old version) — clear the key.
+              logger.warn('[initializeChatHistory] Unexpected schema in localStorage key "chat_history"; clearing key and recovering to empty history.');
+              localStorage.removeItem("chat_history");
+              state.chatHistory = {};
+            }
+          } catch {
+            logger.warn('[initializeChatHistory] Malformed JSON in localStorage key "chat_history"; clearing key and recovering to empty history.');
+            localStorage.removeItem("chat_history");
             state.chatHistory = {};
           }
         }
@@ -587,9 +596,18 @@ state.messages[index] = {
 
       // Save to localStorage
       if (typeof window !== "undefined") {
-        const conversations = JSON.parse(
-          localStorage.getItem("conversations") || "[]",
-        );
+        let conversations: Conversation[] = [];
+        try {
+          const raw = JSON.parse(localStorage.getItem("conversations") || "[]");
+          conversations = Array.isArray(raw) ? raw : [];
+          if (!Array.isArray(raw)) {
+            logger.warn('[saveConversationLocally] Unexpected schema in localStorage key "conversations"; recovering to empty list.');
+            localStorage.removeItem("conversations");
+          }
+        } catch {
+          logger.warn('[saveConversationLocally] Malformed JSON in localStorage key "conversations"; clearing key and recovering to empty list.');
+          localStorage.removeItem("conversations");
+        }
         const existingIndex = conversations.findIndex((item: Conversation) => item.id === conversation.id);
         if (existingIndex >= 0) conversations[existingIndex] = conversation;
         else conversations.unshift(conversation);
@@ -602,7 +620,13 @@ state.messages[index] = {
         try {
           const conversations = JSON.parse(localStorage.getItem("conversations") || "[]");
           state.conversations = Array.isArray(conversations) ? conversations : [];
+          if (!Array.isArray(conversations)) {
+            logger.warn('[loadConversationsLocally] Unexpected schema in localStorage key "conversations"; clearing key and recovering to empty list.');
+            localStorage.removeItem("conversations");
+          }
         } catch {
+          logger.warn('[loadConversationsLocally] Malformed JSON in localStorage key "conversations"; clearing key and recovering to empty list.');
+          localStorage.removeItem("conversations");
           state.conversations = [];
         }
       }
@@ -616,9 +640,18 @@ state.messages[index] = {
 
       // Update localStorage
       if (typeof window !== "undefined") {
-        const conversations = JSON.parse(
-          localStorage.getItem("conversations") || "[]",
-        );
+        let conversations: Conversation[] = [];
+        try {
+          const rawConvs = JSON.parse(localStorage.getItem("conversations") || "[]");
+          conversations = Array.isArray(rawConvs) ? rawConvs : [];
+          if (!Array.isArray(rawConvs)) {
+            logger.warn('[deleteConversationLocally] Unexpected schema in localStorage key "conversations"; clearing key.');
+            localStorage.removeItem("conversations");
+          }
+        } catch {
+          logger.warn('[deleteConversationLocally] Malformed JSON in localStorage key "conversations"; clearing key.');
+          localStorage.removeItem("conversations");
+        }
         const updatedConversations = conversations.filter(
           (conv: Conversation) => conv.id !== conversationId,
         );
@@ -627,9 +660,18 @@ state.messages[index] = {
           JSON.stringify(updatedConversations),
         );
 
-        const chatHistory = JSON.parse(
-          localStorage.getItem("chat_history") || "{}",
-        );
+        let chatHistory: Record<string, unknown> = {};
+        try {
+          const rawHistory = JSON.parse(localStorage.getItem("chat_history") || "{}");
+          chatHistory = (typeof rawHistory === 'object' && rawHistory !== null && !Array.isArray(rawHistory)) ? rawHistory : {};
+          if (typeof rawHistory !== 'object' || rawHistory === null || Array.isArray(rawHistory)) {
+            logger.warn('[deleteConversationLocally] Unexpected schema in localStorage key "chat_history"; clearing key.');
+            localStorage.removeItem("chat_history");
+          }
+        } catch {
+          logger.warn('[deleteConversationLocally] Malformed JSON in localStorage key "chat_history"; clearing key.');
+          localStorage.removeItem("chat_history");
+        }
         delete chatHistory[conversationId];
         localStorage.setItem("chat_history", JSON.stringify(chatHistory));
       }
@@ -649,9 +691,18 @@ state.messages[index] = {
         }
         // Persist to localStorage
         if (typeof window !== "undefined") {
-          const conversations = JSON.parse(
-            localStorage.getItem("conversations") || "[]",
-          );
+          let conversations: Conversation[] = [];
+          try {
+            const raw = JSON.parse(localStorage.getItem("conversations") || "[]");
+            conversations = Array.isArray(raw) ? raw : [];
+            if (!Array.isArray(raw)) {
+              logger.warn('[addTag] Unexpected schema in localStorage key "conversations"; clearing key.');
+              localStorage.removeItem("conversations");
+            }
+          } catch {
+            logger.warn('[addTag] Malformed JSON in localStorage key "conversations"; clearing key.');
+            localStorage.removeItem("conversations");
+          }
           const index = conversations.findIndex(
             (c: Conversation) => c.id === conversationId,
           );
@@ -677,9 +728,18 @@ state.messages[index] = {
         conversation.tags = conversation.tags.filter((t) => t !== tag);
         // Persist to localStorage
         if (typeof window !== "undefined") {
-          const conversations = JSON.parse(
-            localStorage.getItem("conversations") || "[]",
-          );
+          let conversations: Conversation[] = [];
+          try {
+            const raw = JSON.parse(localStorage.getItem("conversations") || "[]");
+            conversations = Array.isArray(raw) ? raw : [];
+            if (!Array.isArray(raw)) {
+              logger.warn('[removeTag] Unexpected schema in localStorage key "conversations"; clearing key.');
+              localStorage.removeItem("conversations");
+            }
+          } catch {
+            logger.warn('[removeTag] Malformed JSON in localStorage key "conversations"; clearing key.');
+            localStorage.removeItem("conversations");
+          }
           const index = conversations.findIndex(
             (c: Conversation) => c.id === conversationId,
           );
@@ -739,9 +799,18 @@ state.messages[index] = {
         const savedQueue = localStorage.getItem("messageQueue");
         if (savedQueue) {
           try {
-            state.messageQueue = JSON.parse(savedQueue);
-          } catch (error) {
-            console.error("Failed to parse message queue:", error);
+            const parsed = JSON.parse(savedQueue);
+            if (Array.isArray(parsed)) {
+              state.messageQueue = parsed;
+            } else {
+              // Unexpected schema (e.g. object from a schema change) — clear only this key.
+              logger.warn('[loadMessageQueue] Unexpected schema in localStorage key "messageQueue"; clearing key and recovering to empty queue.');
+              localStorage.removeItem("messageQueue");
+              state.messageQueue = [];
+            }
+          } catch {
+            logger.warn('[loadMessageQueue] Malformed JSON in localStorage key "messageQueue"; clearing key and recovering to empty queue.');
+            localStorage.removeItem("messageQueue");
             state.messageQueue = [];
           }
         }

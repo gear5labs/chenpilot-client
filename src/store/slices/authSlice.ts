@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { User, LoginRequest, RegisterRequest } from "@/types";
 import apiService from "@/services/api";
+import { logger } from "@/utils/logger";
 
 interface AuthState {
   user: User | null;
@@ -224,7 +225,8 @@ const authSlice = createSlice({
           state.user            = JSON.parse(storedUser) as User;
           state.isAuthenticated = true;
         } catch {
-          // Corrupt data — fall through to the unauthenticated default.
+          // Corrupt data — clear only the affected keys and log a redacted diagnostic.
+          logger.warn('[initializeAuth] Malformed payload in localStorage key "user_data"; clearing auth keys and recovering to unauthenticated state.');
           localStorage.removeItem('auth_token');
           localStorage.removeItem('user_data');
         }

@@ -175,3 +175,57 @@ Next.js applies the security headers defined in [`src/security/securityHeaders.t
 Browsers can submit CSP violation reports to `POST /api/csp-report`. The endpoint accepts legacy `csp-report` and Reporting API `body` JSON, caps input at 16 KiB, and logs only the document URL, blocked URL, and violated directive. It does not require authentication because browsers send reports automatically. Production responses include HSTS; development responses omit HSTS and allow `unsafe-eval` for the development bundler. Review CSP reports when adding a browser integration, then add only its required origin to the policy.
 
 - `POST /auth/refresh` | `{}`; cookies are included. | `{"token":"<new-jwt>"}` | Auth refresh thunk and automatic 401 refresh interceptor. Socket connections safely update authentication and reconnect once without leaking listeners or opening duplicate connections.
+
+## SSR Safety And Browser-Global Guard Rules
+
+This project targets Next.js App Router with server-side rendering. The following rules apply to any code in `src/config/`, `src/services/`, or `src/components/providers/` that may be imported by a server component or executed during prerendering.
+
+**`window`, `localStorage`, `sessionStorage`, `navigator`, `document`** are browser-only globals. Accessing them at module initialisation time (outside a function body) will throw `ReferenceError` during SSR.
+
+### Required patterns
+
+| Situation | Correct pattern |
+| --- | --- |
+| Reading `localStorage` or `sessionStorage` in a service or slice | Wrap in `if (typeof window !== 'undefined')` |
+| Reading `window.location` | Call `getHorizonProxyUrl()` or wrap inline access in a function; never read at module scope |
+| Setting initial Redux state that depends on a browser global | Default to a static value (`false`, `null`, `''`); update via an action dispatched in `useEffect` after mount |
+| Using browser APIs in a provider component | Place all access inside `useEffect`; keep the component's module-level code free of browser globals |
+| Redirecting on 401 | `if (typeof window !== 'undefined') { window.location.href = '/auth/login'; }` |
+
+### Specific decisions
+
+- **`src/config/env.ts`** — `HORIZON_PROXY_URL` was removed from the frozen `env` object. Use `getHorizonProxyUrl()` (exported from the same file) whenever the full URL including origin is needed. The function is safe to call on both the server and the client.
+- **`src/store/slices/chatSlice.ts`** — `isOnline` initial state is `false`. The real value is set after mount by `setOnlineStatus` (dispatched by `OfflineIndicator` listening to browser `online`/`offline` events). Do not read `navigator.onLine` in slice initialState.
+- **`src/services/api.ts`** — all `localStorage`, `sessionStorage`, and `window.location` accesses are already wrapped in `typeof window !== 'undefined'` guards. The module-level singleton constructor is safe to execute on the server.
+- **`src/components/providers/`** — all provider files carry `"use client"` and place every browser-API call inside `useEffect`. Do not remove these directives or hoist side effects out of `useEffect`.
+
+## Malformed localStorage Payload Recovery
+
+Persisted Redux state (chat history, offline queue, conversation list, auth credentials) can be stale, from an older schema version, or physically corrupt (truncated write, storage quota exceeded mid-write, manual editing). The client must never crash on hydration because of a bad payload.
+
+### Recovery contract
+
+For every `localStorage` key the client reads and parses:
+
+1. **Parse failure** — catch the `SyntaxError`, call `logger.warn` with the key name only (never the raw value), call `localStorage.removeItem(<key>)`, and fall back to the declared empty default (`{}` for objects, `[]` for arrays).
+2. **Schema mismatch** — if `JSON.parse` succeeds but the result is the wrong JS type (e.g. an array where a plain object is expected, or vice versa), treat it identically to a parse failure: log, remove only the bad key, fall back to the empty default.
+3. **Scope** — only the key that failed is cleared. All other keys in `localStorage` are untouched.
+4. **Diagnostics** — `logger.warn` is used (not `console.error`). The logger redacts values automatically; the message contains the key name and a description of the failure but never the stored payload or any credential.
+
+### Keys and their expected schemas
+
+| `localStorage` key | Expected schema | Declared empty default | Where parsed |
+| --- | --- | --- | --- |
+| `chat_history` | Plain object `{ [conversationId]: ChatMessage[] }` | `{}` | `initializeChatHistory` (chatSlice) |
+| `conversations` | Array of `Conversation` objects | `[]` | `loadConversationsLocally`, `saveConversationLocally`, `deleteConversationLocally`, `addTag`, `removeTag` (chatSlice) |
+| `messageQueue` | Array of `{ id, query, timestamp }` | `[]` | `loadMessageQueue` (chatSlice) |
+| `user_data` | `User` object | unauthenticated state | `initializeAuth` (authSlice) |
+| `auth_token` | Raw string (no JSON parse) | `null` in-memory token | `loadTokenFromStorage` (ApiService) — already safe, no parse step |
+
+### `auth_token` and `user_data` interaction
+
+`initializeAuth` reads both keys together. If `auth_token` is present but `user_data` is missing or malformed, both keys are cleared and the app recovers to the unauthenticated default state, routing the user to `/auth/login`. No partial auth state is left in Redux.
+
+### Backend integration note
+
+These recovery paths are entirely client-side and require no backend changes. The backend is not notified when a key is cleared. On the next successful login or registration the keys are rewritten with fresh values.
