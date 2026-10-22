@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
-import { RootState, AppDispatch } from "@/store";
+import type { RootState, AppDispatch } from "@/store";
 import {
   getOlderTransactionHistory,
   getTransactionHistory,
@@ -19,21 +19,24 @@ import {
   formatTransactionDate,
   formatTransactionFee,
 } from "@/utils/format";
-import { Language } from "@/lib/i18n/i18n";
+import {
+  filterTransactionsByStatus,
+  type TransactionStatusFilter,
+} from "@/utils/transactionFilters";
+import type { Language } from "@/lib/i18n/i18n";
 import { RefreshCw, ReceiptText } from "lucide-react";
 
-/**
- * Format a timestamp for display, tolerating missing/invalid values so a bad
- * value never renders "Invalid Date" to the user.
- */
 function formatLastUpdated(value: string | null): string | null {
   if (!value) {
     return null;
   }
+
   const parsed = new Date(value);
+
   if (Number.isNaN(parsed.getTime())) {
     return null;
   }
+
   return formatRelativeTime(parsed);
 }
 
@@ -43,17 +46,41 @@ export default function TransactionsPage() {
   const { status, transactions } = useSelector(
     (state: RootState) => state.account,
   );
-  const language = useSelector((state: RootState) => state.ui?.language) as Language | undefined;
+  const language = useSelector(
+    (state: RootState) => state.ui?.language,
+  ) as Language | undefined;
+
+  const [statusFilter, setStatusFilter] =
+    useState<TransactionStatusFilter>("all");
 
   const publicKey = status?.publicKey ?? null;
-  const hasHistory = transactions.transactions.length > 0;
-  const lastUpdatedLabel = useMemo(
-    () => formatLastUpdated(transactions.lastUpdatedAt),
-    [transactions.lastUpdatedAt],
+  const transactionList = transactions?.transactions ?? [];
+  const pendingList = transactions?.pending ?? [];
+  const hasHistory = transactionList.length > 0;
+
+  const filteredTransactions = useMemo(
+    () =>
+      filterTransactionsByStatus(
+        transactionList,
+        statusFilter,
+      ),
+    [transactionList, statusFilter],
   );
+
+  const lastUpdatedLabel = useMemo(
+    () => formatLastUpdated(transactions?.lastUpdatedAt ?? null),
+    [transactions?.lastUpdatedAt],
+  );
+
+  const showPendingConfirmations =
+    statusFilter === "all" || statusFilter === "pending";
+
   const pendingConfirmations = useMemo(
-    () => transactions.pending.filter((entry) => entry.status === "pending"),
-    [transactions.pending],
+    () =>
+      showPendingConfirmations
+        ? pendingList.filter((entry) => entry.status === "pending")
+        : [],
+    [showPendingConfirmations, pendingList],
   );
 
   useEffect(() => {
@@ -62,22 +89,17 @@ export default function TransactionsPage() {
     }
   }, [dispatch, publicKey]);
 
-  /**
-   * Reload only the newest history page. The refresh is de-duplicated through
-   * a single-flight guard so a double click (or any overlapping trigger) joins
-   * the in-flight request instead of issuing a second one.
-   */
   const handleRefresh = useCallback(() => {
     if (!publicKey) {
       return;
     }
+
     void singleFlight
       .run(`transaction-history:${publicKey}`, () =>
         dispatch(refreshTransactionHistory(publicKey)).unwrap(),
       )
       .catch(() => {
-        // The failure is surfaced through `transactions.refreshError`; it must
-        // not clear the history already on screen.
+        // The failure is surfaced through transactions.refreshError.
       });
   }, [dispatch, publicKey]);
 
@@ -85,6 +107,7 @@ export default function TransactionsPage() {
     if (!publicKey || !transactions.nextCursor) {
       return;
     }
+
     void dispatch(
       getOlderTransactionHistory({
         publicKey,
@@ -93,8 +116,13 @@ export default function TransactionsPage() {
     );
   }, [dispatch, publicKey, transactions.nextCursor]);
 
-  const getStatusColor = (successful: boolean) => {
-    return successful ? "text-green-600" : "text-red-600";
+  const getStatusColor = (successful: boolean, status?: string) => {
+    if (status === "pending") {
+      return "text-yellow-600 dark:text-yellow-400";
+    }
+    return successful || status === "confirmed"
+      ? "text-green-600 dark:text-green-400"
+      : "text-red-600 dark:text-red-400";
   };
 
   const getOperationType = (type: string) => {
@@ -110,11 +138,10 @@ export default function TransactionsPage() {
     }
   };
 
-  // Initial load only. A background refresh keeps the existing history visible.
   if (transactions.isLoading && !hasHistory) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-6">Transaction History</h1>
+        <h1 className="mb-6 text-2xl font-bold">Transaction History</h1>
         <div className="text-center" role="status">
           Loading transactions...
         </div>
@@ -125,10 +152,12 @@ export default function TransactionsPage() {
   if (transactions.error && !hasHistory) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-6">Transaction History</h1>
+        <h1 className="mb-6 text-2xl font-bold">Transaction History</h1>
         <Card className="border-red-200 dark:border-red-900">
           <div role="alert" className="space-y-4">
-            <p className="text-red-700 dark:text-red-300">Error: {transactions.error}</p>
+            <p className="text-red-700 dark:text-red-300">
+              Error: {transactions.error}
+            </p>
             {publicKey && (
               <Button
                 type="button"
@@ -158,6 +187,7 @@ export default function TransactionsPage() {
                 : "Not yet updated"}
           </p>
         </div>
+
         <Button
           type="button"
           variant="secondary"
@@ -176,7 +206,10 @@ export default function TransactionsPage() {
 
       {transactions.refreshError && (
         <Card className="mb-4 border-red-200 dark:border-red-900">
-          <div role="alert" className="flex flex-wrap items-center justify-between gap-4">
+          <div
+            role="alert"
+            className="flex flex-wrap items-center justify-between gap-4"
+          >
             <p className="text-red-700 dark:text-red-300">
               Could not refresh transactions: {transactions.refreshError}
             </p>
@@ -219,58 +252,98 @@ export default function TransactionsPage() {
           icon={<ReceiptText aria-hidden="true" className="h-8 w-8" />}
           title="No transactions yet"
           description="Your completed transactions will appear here. Start with a wallet transfer or payment."
-          action={{ label: "Go to dashboard", onClick: () => router.push("/dashboard") }}
+          action={{
+            label: "Go to dashboard",
+            onClick: () => router.push("/dashboard"),
+          }}
         />
       ) : (
         <div className="space-y-4">
-          {transactions.transactions.map((tx) => (
-            <Card key={tx.id} className="p-4">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <h3 className="font-semibold">
-                    Transaction {tx.hash.slice(0, 8)}...
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {formatTransactionDate(tx.created_at, { language })}
-                  </p>
-                </div>
-                <div
-                  className={`font-semibold ${getStatusColor(tx.successful)}`}
-                >
-                  {tx.successful ? "Confirmed" : "Failed"}
-                </div>
-              </div>
+          <label className="flex items-center gap-2 text-sm">
+            <span>Status</span>
+            <select
+              aria-label="Filter transactions by status"
+              value={statusFilter}
+              onChange={(event) =>
+                setStatusFilter(event.target.value as TransactionStatusFilter)
+              }
+              className="rounded border border-gray-300 bg-white px-2 py-1 text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+            >
+              <option value="all">All statuses</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="successful">Successful</option>
+              <option value="failed">Failed</option>
+              <option value="pending">Pending</option>
+            </select>
+          </label>
 
-              <div className="space-y-2">
-                {tx.operations.map((op) => (
-                  <div
-                    key={op.id}
-                    className="flex justify-between items-center bg-gray-50 p-2 rounded"
-                  >
-                    <div>
-                      <span className="font-medium">
-                        {getOperationType(op.type)}
-                      </span>
-                      {op.amount && (
-                        <span className="ml-2 text-sm">
-                          {formatTransactionAmount(op.amount, { language, asset: op.asset || "XLM" })}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      {op.to && `To: ${op.to.slice(0, 8)}...`}
-                      {op.from && `From: ${op.from.slice(0, 8)}...`}
-                    </div>
+          {filteredTransactions.length === 0 &&
+          !(statusFilter === "pending" && pendingConfirmations.length > 0) ? (
+            <p role="status">No transactions match this status.</p>
+          ) : (
+            filteredTransactions.map((tx) => (
+              <Card key={tx.id} className="p-4">
+                <div className="mb-2 flex items-start justify-between">
+                  <div>
+                    <h3 className="font-semibold">
+                      Transaction {tx.hash.slice(0, 8)}...
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      {formatTransactionDate(tx.created_at, { language })}
+                    </p>
                   </div>
-                ))}
-              </div>
+                  <div
+                    className={`font-semibold ${getStatusColor(
+                      tx.successful,
+                      tx.status,
+                    )}`}
+                  >
+                    {tx.status === "pending"
+                      ? "Pending"
+                      : tx.successful || tx.status === "confirmed"
+                        ? "Confirmed"
+                        : "Failed"}
+                  </div>
+                </div>
 
-              <div className="mt-2 text-xs text-gray-500">
-                Fee: {formatTransactionFee(tx.fee_charged, { language, asset: "XLM" })} | Ledger:{" "}
-                {tx.ledger}
-              </div>
-            </Card>
-          ))}
+                <div className="space-y-2">
+                  {tx.operations.map((op) => (
+                    <div
+                      key={op.id}
+                      className="flex items-center justify-between rounded bg-gray-50 p-2"
+                    >
+                      <div>
+                        <span className="font-medium">
+                          {getOperationType(op.type)}
+                        </span>
+                        {op.amount && (
+                          <span className="ml-2 text-sm">
+                            {formatTransactionAmount(op.amount, {
+                              language,
+                              asset: op.asset || "XLM",
+                            })}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {op.to && `To: ${op.to.slice(0, 8)}...`}
+                        {op.from && `From: ${op.from.slice(0, 8)}...`}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-2 text-xs text-gray-500">
+                  Fee:{" "}
+                  {formatTransactionFee(tx.fee_charged, {
+                    language,
+                    asset: "XLM",
+                  })}{" "}
+                  | Ledger: {tx.ledger}
+                </div>
+              </Card>
+            ))
+          )}
 
           {transactions.loadMoreError && (
             <div role="alert" className="text-sm text-red-700 dark:text-red-300">
@@ -287,7 +360,9 @@ export default function TransactionsPage() {
                 loading={transactions.isLoadingMore}
                 disabled={transactions.isLoadingMore}
               >
-                {transactions.isLoadingMore ? "Loading..." : "Load older transactions"}
+                {transactions.isLoadingMore
+                  ? "Loading..."
+                  : "Load older transactions"}
               </Button>
             </div>
           )}

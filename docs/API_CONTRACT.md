@@ -1,3 +1,4 @@
+
 # Backend API Contract
 
 This document records the HTTP requests made by [`src/services/api.ts`](../src/services/api.ts) and [`src/services/agentService.ts`](../src/services/agentService.ts). Types and examples below describe the frontend's declared/consumed shapes; they are not evidence that every experimental backend route currently implements them. Confirm the backend before treating an example as a server guarantee. Fields shown with `...` are explanatory omissions, not literal JSON.
@@ -115,15 +116,26 @@ The service includes methods for Stellar/Starknet account and funding paths. `ge
 | `POST /auth/funding/batch-fund` | `{"amounts":["1","2.5"]}` | `{"success":true,"data":{"transactionHashes":["0xabc","0xdef"],"totalAmount":"3.5"}}` | Service method only; no direct screen caller found. |
 | `GET /account/{userId}/transactions?page={page}&limit={limit}` | `GET /account/u1/transactions?page=1&limit=10` | `{"success":true,"data":{"transactions":[],"total":0,"page":1,"limit":10}}` | Account transaction thunk/dashboard; errors are stored in account state. |
 
+### Transaction Status Filtering
+
+Transaction history filters agree with the backend data model and the transaction lifecycle contract (`pending | confirmed | failed`). The history status filters support **All statuses** (`all`), **Confirmed** (`confirmed`, synonymous with `successful`), **Failed** (`failed`), and **Pending** (`pending`).
+
+- **Confirmed / Successful**: Matches transactions with `status === 'confirmed'` or authoritative ledger transactions where `successful === true`.
+- **Failed**: Matches transactions with `status === 'failed'` or `successful === false`, keeping `pending` strictly distinct so pending transactions are never inferred or grouped as failed.
+- **Pending**: Matches submitted transactions in the lifecycle contract awaiting authoritative ledger confirmation (`status === 'pending'`). In the transaction history view, pending confirmations are kept distinct and filtered accordingly.
+
+Filtering is executed client-side over loaded transaction records and pending confirmations, preserving pagination and Horizon cursor state (`nextCursor`) so users can load older pages while keeping the active filter applied. The account endpoint currently supports `page` and `limit`, but not server-side status filtering; the dashboard table and transactions page filter loaded data without resetting or dropping cursor state.
+
 ### Transaction Schema & Direction Contract
 
 `StellarTransaction` records returned by `GET /account/{userId}/transactions` contain `id`, `hash`, `ledger`, `created_at`, `source_account`, `fee_charged`, `operation_count`, `successful`, `operations: StellarOperation[]`, and optional `direction`. Each `StellarOperation` contains `id`, `type`, `source_account`, optional `amount`, optional `asset` (or `asset_code`, `asset_issuer`, `asset_type`), optional `from`, optional `to`, and optional `direction`.
 
 Direction classification (`incoming | outgoing | self | unknown`) is resolved dynamically for transaction rows against the signed-in user's active account address:
-- **`incoming`**: Destination account (`to`) matches active account address, and source account does not. Formatted with a `+` prefix and emerald styling.
-- **`outgoing`**: Source account (`from`, `source_account`, or transaction `source_account`) matches active account address, and destination account is specified and does not match active account. Formatted with a `-` prefix and rose styling.
-- **`self`**: Both source and destination accounts match active account address (self-transfers). Formatted neutrally without directional signs.
-- **`unknown`**: Missing active address, missing operation accounts (neither source nor destination present), non-transfer operations, or third-party operations. Formatted neutrally with `-` for missing amounts.
+
+- **`incoming`**: Destination account (`to`) matches the active account address, and source account does not. Formatted with a `+` prefix and emerald styling.
+- **`outgoing`**: Source account (`from`, `source_account`, or transaction `source_account`) matches the active account address, and destination account is specified and does not match the active account. Formatted with a `-` prefix and rose styling.
+- **`self`**: Both source and destination accounts match the active account address (self-transfers). Formatted neutrally without directional signs.
+- **`unknown`**: Missing active address, missing operation accounts, non-transfer operations, or third-party operations. Formatted neutrally with `-` for missing amounts.
 
 ### Asset Canonical Identification & Issuer Handling
 
@@ -142,7 +154,6 @@ The send-payment UI now requires explicit confirmation before calling the paymen
 | `GET /payments/status?idempotencyKey=<uuid>` | Same idempotency key from the original submit | `{"success":true,"data":{"status":"pending|submitted|confirmed|failed","transactionHash":"<hash>"}}` | A transport failure, timeout, or 5xx leaves the UI in an outcome-unknown state with a status-check action; it must not resubmit automatically. A definitive 4xx is shown as a failed submission. |
 
 The backend should return an explicit `confirmed` result only after it has authoritative confirmation. A `not_found` or unavailable status is not permission to resubmit: the client retains the original key and asks the user to check again. Ensure `/payments/status` is scoped to the authenticated user and does not disclose another user's payment status.
-
 ## Contacts Endpoints
 
 `Contact` is `{ id, name, address, tokenType, createdAt, updatedAt, avatar?, isFavorite?, lastUsed? }`. Create requires `name`, `address`, and a `tokenType` from `XLM | USDC | USDT | BTC | ETH`; update accepts those fields optionally.

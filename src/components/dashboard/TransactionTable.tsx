@@ -1,13 +1,14 @@
-'use client';
+"use client";
 
-import React, { useContext } from 'react';
-import { ReactReduxContext } from 'react-redux';
-import {
+import React, { useContext, useState } from "react";
+import { ReactReduxContext } from "react-redux";
+import type {
   StellarTransaction,
   StellarOperation,
   TransactionDirection,
+  TransactionLifecycleStatus,
   AssetIdentifier,
-} from '@/types';
+} from "@/types";
 import {
   formatAddress,
   formatTokenAmount,
@@ -15,12 +16,16 @@ import {
   formatTransactionDate,
   formatTransactionFee,
   ASSET_PRECISION,
-  FormatAmountOptions,
-} from '@/utils/format';
-import { useAppSelector } from '@/store';
-import { Language } from '@/lib/i18n/i18n';
-import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+} from "@/utils/format";
+import type { FormatAmountOptions } from "@/utils/format";
+import { useAppSelector } from "@/store";
+import type { Language } from "@/lib/i18n/i18n";
+import {
+  filterTransactionsByStatus,
+  type TransactionStatusFilter,
+} from "@/utils/transactionFilters";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import {
   ChevronLeft,
   ChevronRight,
@@ -31,8 +36,8 @@ import {
   Check,
   AlertCircle,
   Loader2,
-} from 'lucide-react';
-import toast from 'react-hot-toast';
+} from "lucide-react";
+import toast from "react-hot-toast";
 
 export interface TransactionTableProps {
   transactions: StellarTransaction[];
@@ -47,28 +52,27 @@ export interface TransactionTableProps {
   locale?: string;
   activeAccountAddress?: string;
   accountAddress?: string;
+  statusFilter?: TransactionStatusFilter;
+  onStatusFilterChange?: (status: TransactionStatusFilter) => void;
 }
 
 const OPERATION_TYPE_LABELS: { [key: string]: string } = {
-  payment: 'Payment',
-  create_account: 'Create Account',
-  account_merge: 'Account Merge',
-  manage_offer: 'Manage Offer',
-  create_passive_offer: 'Create Passive Offer',
-  set_options: 'Set Options',
-  change_trust: 'Change Trust',
-  allow_trust: 'Allow Trust',
-  account_created: 'Account Created',
-  invoke_host_function: 'Invoke Host Function',
-  bump_sequence: 'Bump Sequence',
-  ext_soroban_op: 'Soroban Operation',
+  payment: "Payment",
+  create_account: "Create Account",
+  account_merge: "Account Merge",
+  manage_offer: "Manage Offer",
+  create_passive_offer: "Create Passive Offer",
+  set_options: "Set Options",
+  change_trust: "Change Trust",
+  allow_trust: "Allow Trust",
+  account_created: "Account Created",
+  invoke_host_function: "Invoke Host Function",
+  bump_sequence: "Bump Sequence",
+  ext_soroban_op: "Soroban Operation",
 };
 
-/**
- * Normalizes an address string for safe comparison.
- */
 function normalizeAddress(address?: string | null): string {
-  return address ? address.trim().toLowerCase() : '';
+  return address ? address.trim().toLowerCase() : "";
 }
 
 /**
@@ -83,23 +87,23 @@ function normalizeAddress(address?: string | null): string {
 export function resolveAssetIdentifier(
   asset?: string | null,
   issuer?: string | null,
-  assetType?: string | null
+  assetType?: string | null,
 ): AssetIdentifier {
-  if (assetType === 'native' || asset === 'native') {
+  if (assetType === "native" || asset === "native") {
     return {
-      code: 'XLM',
+      code: "XLM",
       issuer: undefined,
       isNative: true,
-      canonical: 'XLM',
+      canonical: "XLM",
       hasIncompleteMetadata: false,
     };
   }
 
   // Handle canonical string format "CODE:ISSUER"
-  if (asset && asset.includes(':')) {
-    const [rawCode, ...rest] = asset.split(':');
-    const parsedIssuer = rest.join(':').trim();
-    const cleanCode = rawCode.trim().toUpperCase() || 'UNKNOWN';
+  if (asset && asset.includes(":")) {
+    const [rawCode, ...rest] = asset.split(":");
+    const parsedIssuer = rest.join(":").trim();
+    const cleanCode = rawCode.trim().toUpperCase() || "UNKNOWN";
 
     if (parsedIssuer) {
       return {
@@ -114,25 +118,37 @@ export function resolveAssetIdentifier(
     return {
       code: cleanCode,
       issuer: undefined,
-      isNative: cleanCode === 'XLM',
+      isNative: false,
       canonical: cleanCode,
-      hasIncompleteMetadata: cleanCode !== 'XLM',
+      hasIncompleteMetadata: true,
     };
   }
 
-  const cleanCode = asset ? asset.trim().toUpperCase() : 'XLM';
+  const cleanCode = asset ? asset.trim().toUpperCase() : "";
   const cleanIssuer = issuer ? issuer.trim() : undefined;
 
-  if (cleanCode === 'XLM' && !cleanIssuer) {
+  // Missing or unknown asset code defaults safely to native XLM
+  if (!cleanCode) {
     return {
-      code: 'XLM',
+      code: "XLM",
       issuer: undefined,
       isNative: true,
-      canonical: 'XLM',
+      canonical: "XLM",
       hasIncompleteMetadata: false,
     };
   }
 
+  if (cleanCode === "XLM") {
+    return {
+      code: "XLM",
+      issuer: undefined,
+      isNative: true,
+      canonical: "XLM",
+      hasIncompleteMetadata: false,
+    };
+  }
+
+  // Non-native asset with explicit issuer
   if (cleanIssuer) {
     return {
       code: cleanCode,
@@ -143,7 +159,7 @@ export function resolveAssetIdentifier(
     };
   }
 
-  // Issued code is present, but issuer metadata is incomplete
+  // Non-native asset without issuer metadata
   return {
     code: cleanCode,
     issuer: undefined,
@@ -154,12 +170,12 @@ export function resolveAssetIdentifier(
 }
 
 /**
- * Formats an asset identifier for display, distinguishing same-code distinct issuers.
+ * Returns a display string for an asset, with optional compact issuer notation.
  */
-export function formatAssetDisplay(
+export function formatAssetIdentifier(
   asset?: string | null,
   issuer?: string | null,
-  options?: { compact?: boolean }
+  options?: { compact?: boolean },
 ): string {
   const info = resolveAssetIdentifier(asset, issuer);
   if (info.isNative) {
@@ -186,80 +202,72 @@ export function formatAssetDisplay(
 export function getOperationDirection(
   operation?: Partial<StellarOperation> | null,
   activeAccountAddress?: string | null,
-  txSourceAccount?: string | null
+  txSourceAccount?: string | null,
 ): TransactionDirection {
   const normActive = normalizeAddress(activeAccountAddress);
-  if (!normActive) {
-    return 'unknown';
+
+  if (!normActive || !operation) {
+    return "unknown";
   }
 
-  if (!operation) {
-    return 'unknown';
-  }
+  const extra = operation as unknown as Record<string, unknown>;
 
-  // Derive source account: explicit `from`, then operation `source_account`, then fallback to txSourceAccount
   const rawSource =
     operation.from ||
     operation.source_account ||
-    ((operation as Record<string, unknown>).funder as string | undefined) ||
+    (extra.funder as string | undefined) ||
     txSourceAccount;
 
-  // Derive destination account: explicit `to`, or Horizon alternatives `account`, `into`
   const rawDest =
     operation.to ||
-    ((operation as Record<string, unknown>).account as string | undefined) ||
-    ((operation as Record<string, unknown>).into as string | undefined);
+    operation.into ||
+    (extra.account as string | undefined);
 
   const normSource = normalizeAddress(rawSource);
   const normDest = normalizeAddress(rawDest);
 
-  // Missing operation accounts: neither source nor destination present
   if (!normSource && !normDest) {
-    return 'unknown';
+    return "unknown";
   }
 
-  // Self-transfer: Both source and destination match the active account
-  if (normSource === normActive && normDest === normActive) {
-    return 'self';
+  if (normSource && normDest && normSource === normActive && normDest === normActive) {
+    return "self";
   }
 
-  // Incoming: Funds received at active account
-  if (normDest === normActive && normSource !== normActive) {
-    return 'incoming';
+  if (normDest && normDest === normActive && normSource !== normActive) {
+    return "incoming";
   }
 
-  // Outgoing: Funds sent from active account to a different destination
-  if (normSource === normActive && normDest && normDest !== normActive) {
-    return 'outgoing';
+  if (normSource && normSource === normActive && normDest && normDest !== normActive) {
+    return "outgoing";
   }
 
-  // Missing destination (e.g. non-transfer operation, change_trust, or incomplete record)
-  // or neither matches the active account
-  return 'unknown';
+  if (normSource && normSource === normActive && !normDest) {
+    return "outgoing";
+  }
+
+  return "unknown";
 }
 
 /**
- * Classifies a transaction's direction relative to the active account address.
- * Inspects transaction operations and resolves direction.
+ * Derives overall transaction direction based on its primary operation, falling back to transaction-level fields.
  */
 export function getTransactionDirection(
   tx: StellarTransaction,
-  activeAccountAddress?: string | null
+  activeAccountAddress?: string | null,
 ): TransactionDirection {
-  const normActive = normalizeAddress(activeAccountAddress);
-  if (!normActive) {
-    return tx.direction || 'unknown';
+  if (tx.direction) {
+    return tx.direction;
   }
 
-  if (!tx.operations || tx.operations.length === 0) {
-    return 'unknown';
-  }
-
-  // Locate primary operation with transfer details (amount, to, or from)
   const primaryOp =
-    tx.operations.find((op) => op.amount || op.to || op.from) || tx.operations[0];
+    tx.operations && tx.operations.length > 0 ? tx.operations[0] : null;
 
-  return getOperationDirection(primaryOp, activeAccountAddress, tx.source_account);
+  return getOperationDirection(
+    primaryOp,
+    activeAccountAddress,
+    tx.source_account,
+  );
 }
 
 /**
@@ -271,17 +279,17 @@ export function getTransactionDirection(
  */
 export function formatTransactionAmount(
   amount?: string | number | null,
-  direction: TransactionDirection = 'unknown',
-  asset: string = 'XLM',
+  direction: TransactionDirection = "unknown",
+  asset = "XLM",
   decimals?: number,
   options?: FormatAmountOptions & {
     issuer?: string | null;
     showCanonical?: boolean;
     compactIssuer?: boolean;
-  }
+  },
 ): string {
-  if (amount === undefined || amount === null || amount === '') {
-    return '-';
+  if (amount === undefined || amount === null || amount === "") {
+    return "-";
   }
 
   const assetInfo = resolveAssetIdentifier(asset, options?.issuer);
@@ -301,28 +309,36 @@ export function formatTransactionAmount(
         decimals !== undefined
           ? decimals
           : assetInfo.code
-          ? ASSET_PRECISION[assetInfo.code.toUpperCase()]
-          : undefined,
+            ? ASSET_PRECISION[assetInfo.code.toUpperCase()]
+            : undefined,
     });
-    if (rawFormatted === '-') return '-';
 
-    if (direction === 'incoming' && !rawFormatted.startsWith('+')) {
+    if (rawFormatted === "-") {
+      return "-";
+    }
+
+    if (direction === "incoming" && !rawFormatted.startsWith("+")) {
       return `+${rawFormatted}`;
     }
-    if (direction === 'outgoing' && !rawFormatted.startsWith('-')) {
+
+    if (direction === "outgoing" && !rawFormatted.startsWith("-")) {
       return `-${rawFormatted}`;
     }
+
     return rawFormatted;
   }
 
-  const tokenFormatted = formatTokenAmount(amount, decimals !== undefined ? decimals : 2);
-  const assetSuffix = assetLabel ? ` ${assetLabel}` : '';
+  const tokenFormatted = formatTokenAmount(
+    amount,
+    decimals !== undefined ? decimals : 2,
+  );
+  const assetSuffix = assetLabel ? ` ${assetLabel}` : "";
 
-  if (direction === 'incoming') {
+  if (direction === "incoming") {
     return `+${tokenFormatted}${assetSuffix}`;
   }
 
-  if (direction === 'outgoing') {
+  if (direction === "outgoing") {
     return `-${tokenFormatted}${assetSuffix}`;
   }
 
@@ -342,10 +358,10 @@ export function formatAssetAmount(
     compactIssuer?: boolean;
     language?: Language;
     locale?: string;
-  }
+  },
 ): string {
-  if (amount === undefined || amount === null || amount === '') {
-    return '-';
+  if (amount === undefined || amount === null || amount === "") {
+    return "-";
   }
 
   const assetInfo = resolveAssetIdentifier(asset, issuer);
@@ -354,7 +370,9 @@ export function formatAssetAmount(
     const formatted = formatLocaleAmount(amount, {
       language: options.language,
       locale: options.locale,
-      decimals: assetInfo.code ? ASSET_PRECISION[assetInfo.code.toUpperCase()] : decimals,
+      decimals: assetInfo.code
+        ? ASSET_PRECISION[assetInfo.code.toUpperCase()]
+        : decimals,
     });
     if (options?.showCanonical) {
       return `${formatted} ${assetInfo.canonical}`;
@@ -390,11 +408,34 @@ export default function TransactionTable({
   locale,
   activeAccountAddress,
   accountAddress,
+  statusFilter: statusFilterProp,
+  onStatusFilterChange,
 }: TransactionTableProps) {
-  const reduxLanguage = useAppSelector((state) => state.ui?.language) as Language | undefined;
-  const currentLanguage = language || reduxLanguage || 'en';
+  const [internalStatusFilter, setInternalStatusFilter] =
+    useState<TransactionStatusFilter>("all");
+
+  const effectiveStatusFilter = statusFilterProp ?? internalStatusFilter;
+
+  const handleStatusFilterChange = (nextStatus: TransactionStatusFilter) => {
+    if (statusFilterProp === undefined) {
+      setInternalStatusFilter(nextStatus);
+    }
+    onStatusFilterChange?.(nextStatus);
+  };
+
+  const filteredTransactions = filterTransactionsByStatus(
+    transactions,
+    effectiveStatusFilter,
+  );
+
+  const reduxLanguage = useAppSelector(
+    (state) => state.ui?.language,
+  ) as Language | undefined;
+
+  const currentLanguage = language || reduxLanguage || "en";
 
   const reduxContext = useContext(ReactReduxContext);
+
   const storeState = reduxContext?.store?.getState?.() as
     | {
         auth?: { user?: { address?: string; publicKey?: string } };
@@ -411,57 +452,80 @@ export default function TransactionTable({
     storeState?.account?.status?.publicKey;
 
   const totalPages = Math.ceil(totalCount / pageSize);
-  const startIndex = (currentPage - 1) * pageSize + 1;
+  const startIndex = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const endIndex = Math.min(currentPage * pageSize, totalCount);
 
   const handleCopyHash = (hash: string) => {
-    navigator.clipboard.writeText(hash);
-    toast.success('Transaction hash copied');
+    void navigator.clipboard
+      .writeText(hash)
+      .then(() => toast.success("Transaction hash copied"))
+      .catch(() => toast.error("Could not copy transaction hash"));
   };
 
-  const getOperationType = (operations?: StellarOperation[]): string => {
-    if (!operations || operations.length === 0) return 'Unknown';
+  const getOperationType = (
+    operations?: StellarOperation[],
+  ): string => {
+    if (!operations || operations.length === 0) {
+      return "Unknown";
+    }
+
     const mainOp = operations[0];
     return OPERATION_TYPE_LABELS[mainOp.type] || mainOp.type;
   };
 
-  const getDirectionIcon = (direction: TransactionDirection, successful: boolean) => {
-    if (!successful) {
+  const getDirectionIcon = (
+    direction: TransactionDirection,
+    successful: boolean,
+    status?: TransactionLifecycleStatus,
+  ) => {
+    if (status === "pending") {
+      return <Loader2 className="h-4 w-4 animate-spin text-yellow-400" />;
+    }
+
+    if (!successful && status !== "confirmed") {
       return <AlertCircle className="h-4 w-4 text-red-400" />;
     }
+
     switch (direction) {
-      case 'incoming':
+      case "incoming":
         return <ArrowDownLeft className="h-4 w-4 text-emerald-400" />;
-      case 'outgoing':
+      case "outgoing":
         return <ArrowUpRight className="h-4 w-4 text-blue-400" />;
-      case 'self':
+      case "self":
         return <ArrowLeftRight className="h-4 w-4 text-purple-400" />;
-      case 'unknown':
       default:
         return <ArrowUpRight className="h-4 w-4 text-gray-400" />;
     }
   };
 
-  const getDirectionContainerClass = (direction: TransactionDirection, successful: boolean) => {
-    if (!successful) {
-      return 'bg-red-500/20';
+  const getDirectionContainerClass = (
+    direction: TransactionDirection,
+    successful: boolean,
+    status?: TransactionLifecycleStatus,
+  ) => {
+    if (status === "pending") {
+      return "bg-yellow-500/20";
     }
+
+    if (!successful && status !== "confirmed") {
+      return "bg-red-500/20";
+    }
+
     switch (direction) {
-      case 'incoming':
-        return 'bg-emerald-500/20';
-      case 'outgoing':
-        return 'bg-blue-500/20';
-      case 'self':
-        return 'bg-purple-500/20';
-      case 'unknown':
+      case "incoming":
+        return "bg-emerald-500/20";
+      case "outgoing":
+        return "bg-blue-500/20";
+      case "self":
+        return "bg-purple-500/20";
       default:
-        return 'bg-gray-800';
+        return "bg-gray-800";
     }
   };
 
   if (error) {
     return (
-      <Card className="p-6 bg-red-950/20 border-red-900/50">
+      <Card className="border-red-900/50 bg-red-950/20 p-6">
         <div className="flex items-center space-x-3">
           <AlertCircle className="h-5 w-5 text-red-400" />
           <span className="text-red-400">{error}</span>
@@ -485,7 +549,7 @@ export default function TransactionTable({
     return (
       <Card className="p-12">
         <div className="text-center">
-          <p className="text-gray-400 mb-2">No transactions found</p>
+          <p className="mb-2 text-gray-400">No transactions found</p>
           <p className="text-xs text-gray-500">
             Your on-chain transaction history will appear here
           </p>
@@ -497,212 +561,293 @@ export default function TransactionTable({
   return (
     <Card className="overflow-hidden">
       <div className="p-6">
-        <h2 className="text-lg font-semibold text-white mb-4">
+        <h2 className="mb-4 text-lg font-semibold text-white">
           Transaction History
         </h2>
+
+        <div className="mb-4">
+          <label className="flex items-center gap-2 text-sm text-gray-300">
+            <span>Status</span>
+            <select
+              aria-label="Filter transactions by status"
+              value={effectiveStatusFilter}
+              onChange={(event) =>
+                handleStatusFilterChange(
+                  event.target.value as TransactionStatusFilter,
+                )
+              }
+              className="rounded border border-gray-700 bg-gray-900 px-2 py-1 text-white"
+            >
+              <option value="all">All statuses</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="successful">Successful</option>
+              <option value="failed">Failed</option>
+              <option value="pending">Pending</option>
+            </select>
+          </label>
+        </div>
 
         {/* Transactions Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-800">
-                <th className="text-left py-3 px-4 font-semibold text-gray-300">
+                <th className="px-4 py-3 text-left font-semibold text-gray-300">
                   Type
                 </th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-300">
+                <th className="px-4 py-3 text-left font-semibold text-gray-300">
                   Direction
                 </th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-300">
+                <th className="px-4 py-3 text-left font-semibold text-gray-300">
                   Hash
                 </th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-300">
+                <th className="px-4 py-3 text-left font-semibold text-gray-300">
                   Amount
                 </th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-300">
+                <th className="px-4 py-3 text-left font-semibold text-gray-300">
                   Ledger
                 </th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-300">
+                <th className="px-4 py-3 text-left font-semibold text-gray-300">
                   Date
                 </th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-300">
+                <th className="px-4 py-3 text-left font-semibold text-gray-300">
                   Status
                 </th>
-                <th className="text-right py-3 px-4 font-semibold text-gray-300">
+                <th className="px-4 py-3 text-right font-semibold text-gray-300">
                   Action
                 </th>
               </tr>
             </thead>
+
             <tbody>
-              {transactions.map((tx) => {
-                const direction = getTransactionDirection(tx, resolvedActiveAddress);
-                const mainOp =
-                  tx.operations && tx.operations.length > 0
-                    ? tx.operations.find((o) => o.amount || o.to || o.from) || tx.operations[0]
-                    : null;
-
-                const assetInfo = resolveAssetIdentifier(
-                  mainOp?.asset || mainOp?.asset_code,
-                  mainOp?.asset_issuer,
-                  mainOp?.asset_type
-                );
-
-                const formattedAmount = mainOp?.amount
-                  ? formatTransactionAmount(
-                      mainOp.amount,
-                      direction,
-                      assetInfo.code,
-                      undefined,
-                      { language: currentLanguage, locale }
-                    )
-                  : '-';
-
-                return (
-                  <tr
-                    key={tx.id}
-                    className="border-b border-gray-800/50 hover:bg-gray-900/50 transition-colors"
+              {filteredTransactions.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="px-4 py-8 text-center text-gray-400"
                   >
-                    <td className="py-3 px-4">
-                      <div className="flex items-center space-x-2">
-                        <div
-                          className={`p-2 rounded-full ${getDirectionContainerClass(
-                            direction,
-                            tx.successful
-                          )}`}
-                        >
-                          {getDirectionIcon(direction, tx.successful)}
-                        </div>
-                        <div>
-                          <p className="font-medium text-white">
-                            {getOperationType(tx.operations)}
-                          </p>
-                          <p className="text-xs text-gray-400">
-                            {tx.operation_count}
-                            {tx.operation_count === 1 ? ' op' : ' ops'}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span
-                        data-testid={`tx-direction-${tx.id}`}
-                        className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${
-                          direction === 'incoming'
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                            : direction === 'outgoing'
-                            ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                            : direction === 'self'
-                            ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
-                            : 'bg-gray-800 text-gray-400 border border-gray-700'
-                        }`}
-                      >
-                        {direction === 'self' ? 'Self-Transfer' : direction}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <button
-                        onClick={() => handleCopyHash(tx.hash)}
-                        className="font-mono text-xs text-blue-400 hover:text-blue-300 truncate max-w-xs"
-                        title={tx.hash}
-                      >
-                        {formatAddress(tx.hash)}
-                      </button>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex flex-col items-start space-y-0.5">
-                        <span
-                          data-testid={`tx-amount-${tx.id}`}
-                          className={`font-mono text-sm block ${
-                            direction === 'incoming'
-                              ? 'text-emerald-400 font-medium'
-                              : direction === 'outgoing'
-                              ? 'text-rose-400 font-medium'
-                              : direction === 'self'
-                              ? 'text-purple-300 font-medium'
-                              : 'text-gray-300'
-                          }`}
-                        >
-                          {formattedAmount}
-                        </span>
-                        {assetInfo.issuer ? (
-                          <span
-                            data-testid={`tx-asset-issuer-${tx.id}`}
-                            className="font-mono text-[11px] text-gray-400 hover:text-gray-300 cursor-pointer inline-flex items-center gap-1"
-                            title={`Canonical Asset: ${assetInfo.canonical}`}
-                          >
-                            <span className="text-gray-500">issuer:</span>
-                            <span>{formatAddress(assetInfo.issuer, 4, 4)}</span>
-                          </span>
-                        ) : assetInfo.hasIncompleteMetadata ? (
-                          <span
-                            data-testid={`tx-asset-fallback-${tx.id}`}
-                            className="text-[11px] text-amber-400/90 inline-flex items-center gap-1"
-                            title="Asset issuer metadata is missing or unverified"
-                          >
-                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                            <span>unverified issuer</span>
-                          </span>
-                        ) : null}
-                        {tx.fee_charged && (
-                          <span className="text-xs text-gray-500 block">
-                            Fee: {formatTransactionFee(tx.fee_charged, { language: currentLanguage, locale, asset: 'XLM' })}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="text-gray-300">#{tx.ledger}</span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="text-gray-300">
-                        {formatTransactionDate(tx.created_at, {
+                    No transactions match this status on this page.
+                  </td>
+                </tr>
+              ) : (
+                filteredTransactions.map((tx) => {
+                  const direction = getTransactionDirection(
+                    tx,
+                    resolvedActiveAddress,
+                  );
+                  const mainOp =
+                    tx.operations && tx.operations.length > 0
+                      ? tx.operations.find((o) => o.amount || o.to || o.from) ||
+                        tx.operations[0]
+                      : null;
+
+                  const assetInfo = resolveAssetIdentifier(
+                    mainOp?.asset || mainOp?.asset_code,
+                    mainOp?.asset_issuer,
+                    mainOp?.asset_type,
+                  );
+
+                  const formattedAmount = mainOp?.amount
+                    ? formatTransactionAmount(
+                        mainOp.amount,
+                        direction,
+                        assetInfo.code,
+                        undefined,
+                        {
                           language: currentLanguage,
                           locale,
-                        })}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      {tx.successful ? (
-                        <div className="flex items-center space-x-1">
-                          <Check className="h-4 w-4 text-green-400" />
-                          <span className="text-green-400 font-medium">Success</span>
+                          issuer: assetInfo.issuer,
+                        },
+                      )
+                    : "-";
+
+                  return (
+                    <tr
+                      key={tx.id}
+                      className="border-b border-gray-800/50 transition-colors hover:bg-gray-900/50"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center space-x-3">
+                          <div
+                            className={`rounded-full p-2 ${getDirectionContainerClass(
+                              direction,
+                              tx.successful,
+                              tx.status,
+                            )}`}
+                          >
+                            {getDirectionIcon(
+                              direction,
+                              tx.successful,
+                              tx.status,
+                            )}
+                          </div>
+                          <div>
+                            <p className="font-medium text-white">
+                              {getOperationType(tx.operations)}
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              {tx.operation_count}
+                              {tx.operation_count === 1 ? " op" : " ops"}
+                            </p>
+                          </div>
                         </div>
-                      ) : (
-                        <div className="flex items-center space-x-1">
-                          <AlertCircle className="h-4 w-4 text-red-400" />
-                          <span className="text-red-400 font-medium">Failed</span>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <span
+                          data-testid={`tx-direction-${tx.id}`}
+                          className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium capitalize ${
+                            direction === "incoming"
+                              ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                              : direction === "outgoing"
+                                ? "border-blue-500/20 bg-blue-500/10 text-blue-400"
+                                : direction === "self"
+                                  ? "border-purple-500/20 bg-purple-500/10 text-purple-400"
+                                  : "border-gray-700 bg-gray-800 text-gray-400"
+                          }`}
+                        >
+                          {direction === "self" ? "Self-Transfer" : direction}
+                        </span>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => handleCopyHash(tx.hash)}
+                          className="max-w-xs truncate font-mono text-xs text-blue-400 hover:text-blue-300"
+                          title={tx.hash}
+                        >
+                          {formatAddress(tx.hash)}
+                        </button>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col items-start space-y-0.5">
+                          <span
+                            data-testid={`tx-amount-${tx.id}`}
+                            className={`block font-mono text-sm ${
+                              direction === "incoming"
+                                ? "font-medium text-emerald-400"
+                                : direction === "outgoing"
+                                  ? "font-medium text-rose-400"
+                                  : direction === "self"
+                                    ? "font-medium text-purple-300"
+                                    : "text-gray-300"
+                            }`}
+                          >
+                            {formattedAmount}
+                          </span>
+                          {assetInfo.issuer ? (
+                            <span
+                              data-testid={`tx-asset-issuer-${tx.id}`}
+                              className="inline-flex cursor-pointer items-center gap-1 font-mono text-[11px] text-gray-400 hover:text-gray-300"
+                              title={`Canonical Asset: ${assetInfo.canonical}`}
+                            >
+                              <span className="text-gray-500">issuer:</span>
+                              <span>{formatAddress(assetInfo.issuer, 4, 4)}</span>
+                            </span>
+                          ) : assetInfo.hasIncompleteMetadata ? (
+                            <span
+                              data-testid={`tx-asset-fallback-${tx.id}`}
+                              className="inline-flex items-center gap-1 text-[11px] text-amber-400/90"
+                              title="Asset issuer metadata is missing or unverified"
+                            >
+                              <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400"></span>
+                              <span>unverified issuer</span>
+                            </span>
+                          ) : null}
+                          {tx.fee_charged && (
+                            <span className="block text-xs text-gray-500">
+                              Fee:{" "}
+                              {formatTransactionFee(tx.fee_charged, {
+                                language: currentLanguage,
+                                locale,
+                                asset: "XLM",
+                              })}
+                            </span>
+                          )}
                         </div>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <a
-                        href={`https://stellar.expert/explorer/public/tx/${tx.hash}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center space-x-1 px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 transition-colors text-xs text-blue-400 hover:text-blue-300"
-                      >
-                        <span>View</span>
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </td>
-                  </tr>
-                );
-              })}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <span className="text-gray-300">#{tx.ledger}</span>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <span className="text-gray-300">
+                          {formatTransactionDate(tx.created_at, {
+                            language: currentLanguage,
+                            locale,
+                          })}
+                        </span>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        {tx.status === "pending" ? (
+                          <div className="flex items-center space-x-1">
+                            <Loader2 className="h-4 w-4 animate-spin text-yellow-400" />
+                            <span className="font-medium text-yellow-400">
+                              Pending
+                            </span>
+                          </div>
+                        ) : tx.successful || tx.status === "confirmed" ? (
+                          <div className="flex items-center space-x-1">
+                            <Check className="h-4 w-4 text-green-400" />
+                            <span className="font-medium text-green-400">
+                              Success
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-1">
+                            <AlertCircle className="h-4 w-4 text-red-400" />
+                            <span className="font-medium text-red-400">
+                              Failed
+                            </span>
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3 text-right">
+                        <a
+                          href={`https://stellar.expert/explorer/public/tx/${tx.hash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center space-x-1 rounded bg-gray-800 px-2 py-1 text-xs text-blue-400 transition-colors hover:bg-gray-700 hover:text-blue-300"
+                        >
+                          <span>View</span>
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
 
-        {/* Pagination Controls */}
-        <div className="flex items-center justify-between pt-4 border-t border-gray-800">
-          <div className="flex items-center space-x-4">
+        <div className="flex items-center justify-between border-t border-gray-800 pt-4">
+          <div className="flex flex-wrap items-center gap-4">
             <span className="text-sm text-gray-400">
-              Showing {startIndex} to {endIndex} of {totalCount} transactions
+              {effectiveStatusFilter === "all"
+                ? `Showing ${startIndex} to ${endIndex} of ${totalCount} transactions`
+                : `Showing ${filteredTransactions.length} matching transactions on this page (${totalCount} total)`}
             </span>
+
             <div className="flex items-center space-x-2">
-              <label className="text-sm text-gray-300">Per page:</label>
+              <label
+                htmlFor="transaction-page-size"
+                className="text-sm text-gray-300"
+              >
+                Per page:
+              </label>
               <select
+                id="transaction-page-size"
                 value={pageSize}
-                onChange={(e) => onPageSizeChange(parseInt(e.target.value))}
-                className="px-2 py-1 bg-gray-900 border border-gray-700 rounded text-sm text-white hover:border-gray-500 transition-colors"
+                onChange={(event) =>
+                  onPageSizeChange(Number.parseInt(event.target.value, 10))
+                }
+                className="rounded border border-gray-700 bg-gray-900 px-2 py-1 text-sm text-white transition-colors hover:border-gray-500"
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>
@@ -718,7 +863,11 @@ export default function TransactionTable({
               size="sm"
               onClick={() => onPageChange(currentPage - 1)}
               disabled={currentPage === 1 || isLoading}
-              className={`!p-2 ${currentPage === 1 || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`!p-2 ${
+                currentPage === 1 || isLoading
+                  ? "cursor-not-allowed opacity-50"
+                  : ""
+              }`}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -726,6 +875,7 @@ export default function TransactionTable({
             <div className="flex items-center space-x-1">
               {Array.from({ length: Math.min(5, totalPages) }).map((_, i) => {
                 let pageNum: number;
+
                 if (totalPages <= 5) {
                   pageNum = i + 1;
                 } else if (currentPage <= 3) {
@@ -739,13 +889,15 @@ export default function TransactionTable({
                 return (
                   <button
                     key={pageNum}
+                    type="button"
                     onClick={() => onPageChange(pageNum)}
                     disabled={isLoading}
-                    className={`px-2 py-1 rounded text-sm transition-colors ${
+                    aria-current={currentPage === pageNum ? "page" : undefined}
+                    className={`rounded px-2 py-1 text-sm transition-colors ${
                       currentPage === pageNum
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-900 text-gray-300 hover:bg-gray-800'
-                    } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-900 text-gray-300 hover:bg-gray-800"
+                    } ${isLoading ? "cursor-not-allowed opacity-50" : ""}`}
                   >
                     {pageNum}
                   </button>
@@ -758,7 +910,11 @@ export default function TransactionTable({
               size="sm"
               onClick={() => onPageChange(currentPage + 1)}
               disabled={currentPage >= totalPages || isLoading}
-              className={`!p-2 ${currentPage >= totalPages || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`!p-2 ${
+                currentPage >= totalPages || isLoading
+                  ? "cursor-not-allowed opacity-50"
+                  : ""
+              }`}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>

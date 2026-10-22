@@ -210,6 +210,7 @@ export interface StellarTransaction {
   successful: boolean;
   operations: StellarOperation[];
   direction?: TransactionDirection;
+  status?: TransactionLifecycleStatus;
 }
 
 /**
