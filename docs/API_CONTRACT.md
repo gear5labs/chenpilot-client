@@ -1,6 +1,6 @@
 # Backend API Contract
 
-This document records the HTTP requests made by [`src/services/api.ts`](../src/services/api.ts) and [`src/services/agentService.ts`](../src/services/agentService.ts). Types and examples below describe the frontend's declared/consumed shapes; they are not evidence that every experimental backend route currently implements them. Confirm the backend before treating an example as a server guarantee. Fields shown with `...` are explanatory omissions, not literal JSON.
+This document records the HTTP requests made by `src/services/api.ts` and `src/services/agentService.ts`. Types and examples below describe the frontend's declared/consumed shapes; they are not evidence that every experimental backend route currently implements them. Confirm the backend before treating an example as a server guarantee. Fields shown with `...` are explanatory omissions, not literal JSON.
 
 ## Base URLs And Authentication
 
@@ -11,13 +11,13 @@ This document records the HTTP requests made by [`src/services/api.ts`](../src/s
 - `NEXT_PUBLIC_STELLAR_NETWORK` must be explicitly set to `mainnet` or `testnet` for the UI to identify the active network. Missing or unsupported values display `Network unknown`; do not infer it from `NODE_ENV`. The backend Horizon proxy and payment execution service must be configured for the same network. This frontend configuration does not itself switch backend networks.
 - `ApiResponse<T>` is the declared envelope for many methods:
 
-	```ts
-	type ApiSuccess<T> = { success: true; data: T; message?: string };
-	type ApiError = { success: false; status: number; message: string };
-	type ApiResponse<T> = ApiSuccess<T> | ApiError;
-	```
+```ts
+  type ApiSuccess<T> = { success: true; data: T; message?: string };
+  type ApiError = { success: false; status: number; message: string };
+  type ApiResponse<T> = ApiSuccess<T> | ApiError;
+```
 
-	Not all methods use this envelope: login/register have dedicated response types, balance has its own shape, and agent responses use `result`.
+  Not all methods use this envelope: login/register have dedicated response types, balance has its own shape, and agent responses use `result`.
 
 ## Error Handling And User Messages
 
@@ -58,7 +58,7 @@ These routes use `NEXT_PUBLIC_AGENT_API_URL` through `AgentService`, except `api
 | `POST /auth/forgot-password` | `{"email":"ada@example.test"}` | `{"success":true,"data":{"message":"Reset email sent"}}` | Service method only; no direct screen caller found. |
 | `POST /auth/reset-password/{token}` | `POST /auth/reset-password/<reset-token>` with `{"password":"NewExample123!"}` | `{"success":true,"data":{"message":"Password reset"}}` | Service method only; no direct screen caller found. |
 | `POST /auth/logout` | `{}`; cookies are included. | `204 No Content`; body is ignored. | Logout action from the chat layout/auth service; local credentials are cleared even if the request fails. |
-| `POST /auth/refresh` | `{}`; cookies are included. | `{"token":"<new-jwt>"}` | Auth refresh thunk and automatic 401 refresh interceptor. |
+| `POST /auth/refresh` | `{}`; cookies are included. | `{"token":"<new-jwt>"}` | Auth refresh thunk and automatic 401 refresh interceptor. Socket connections safely update authentication and reconnect once without leaking listeners or opening duplicate connections. |
 | `GET /auth/me` | No body; bearer token when available. | `{"success":true,"data":{"id":"u1","email":"ada@example.test","name":"Ada","address":"G...","publicKey":"G...","isDeployed":true,"isFunded":true,"tokenType":"XLM","authProvider":"email","isEmailVerified":true,"createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}}` | `fetchProfile` auth thunk; the thunk consumes the `User` on success. |
 | `GET /auth/profile` | No body; bearer token when available. | `{"success":true,"data":{"id":"u1","email":"ada@example.test","name":"Ada","address":"G...","publicKey":"G...","isDeployed":true,"isFunded":true,"tokenType":"XLM","authProvider":"email","isEmailVerified":true,"createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}}` | Service method only; no direct screen caller found. |
 | `PUT /auth/profile` | `{"name":"Ada Lovelace"}` (any `Partial<User>` fields). | `{"success":true,"data":{"id":"u1","email":"ada@example.test","name":"Ada Lovelace","address":"G...","publicKey":"G...","isDeployed":true,"isFunded":true,"tokenType":"XLM","authProvider":"email","isEmailVerified":true,"createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-02T00:00:00Z"}}` | Service method only; current profile update thunk is mocked. |
@@ -115,14 +115,17 @@ The service includes methods for Stellar/Starknet account and funding paths, but
 | `POST /auth/funding/batch-fund` | `{"amounts":["1","2.5"]}` | `{"success":true,"data":{"transactionHashes":["0xabc","0xdef"],"totalAmount":"3.5"}}` | Service method only; no direct screen caller found. |
 | `GET /account/{userId}/transactions?page={page}&limit={limit}` | `GET /account/u1/transactions?page=1&limit=10` | `{"success":true,"data":{"transactions":[],"total":0,"page":1,"limit":10}}` | Account transaction thunk/dashboard; errors are stored in account state. |
 
+`StellarTransaction.operations` items support diverse operation variants (`payment`, `create_account`, `change_trust`, `allow_trust`, `account_merge`, Soroban host functions, and arbitrary or forward-compatible unknown variants). Client components like `TransactionTable` format known variants and render unknown variants safely without failure. Reusable deterministic fixtures for all operation variants are available in `src/test/fixtures/transactionFixtures.ts`.
+
 ### Transaction Schema & Direction Contract
 
 `StellarTransaction` records returned by `GET /account/{userId}/transactions` contain `id`, `hash`, `ledger`, `created_at`, `source_account`, `fee_charged`, `operation_count`, `successful`, `operations: StellarOperation[]`, and optional `direction`. Each `StellarOperation` contains `id`, `type`, `source_account`, optional `amount`, optional `asset`, optional `from`, optional `to`, and optional `direction`.
 
 Direction classification (`incoming | outgoing | self | unknown`) is resolved dynamically for transaction rows against the signed-in user's active account address:
-- **`incoming`**: Destination account (`to`) matches active account address, and source account does not. Formatted with a `+` prefix and emerald styling.
-- **`outgoing`**: Source account (`from`, `source_account`, or transaction `source_account`) matches active account address, and destination account is specified and does not match active account. Formatted with a `-` prefix and rose styling.
-- **`self`**: Both source and destination accounts match active account address (self-transfers). Formatted neutrally without directional signs.
+
+- **`incoming`**: Destination account (`to`) matches the active account address, and source account does not. Formatted with a `+` prefix and emerald styling.
+- **`outgoing`**: Source account (`from`, `source_account`, or transaction `source_account`) matches the active account address, and destination account is specified and does not match the active account. Formatted with a `-` prefix and rose styling.
+- **`self`**: Both source and destination accounts match the active account address (self-transfers). Formatted neutrally without directional signs.
 - **`unknown`**: Missing active address, missing operation accounts (neither source nor destination present), non-transfer operations, or third-party operations. Formatted neutrally with `-` for missing amounts.
 
 ## Payment Submission And Status (Backend Support Required)
@@ -132,9 +135,9 @@ The send-payment UI now requires explicit confirmation before calling the paymen
 | Endpoint | Request example | Expected success response | Client behavior |
 | --- | --- | --- | --- |
 | `POST /payments` | `{"recipientAddress":"G...","amount":"1.25","tokenType":"XLM","memoType":"none"}` with `Idempotency-Key: <uuid>` | `{"success":true,"data":{"status":"submitted","transactionHash":"<hash>"}}` (transaction reference optional while pending) | Payment operations are excluded from automatic retries. The backend must atomically deduplicate a key and return the original result for repeated submissions with that key. |
-| `GET /payments/status?idempotencyKey=<uuid>` | Same idempotency key from the original submit | `{"success":true,"data":{"status":"pending|submitted|confirmed|failed","transactionHash":"<hash>"}}` | A transport failure, timeout, or 5xx leaves the UI in an outcome-unknown state with a status-check action; it must not resubmit automatically. A definitive 4xx is shown as a failed submission. |
+| `GET /payments/status?idempotencyKey=<uuid>` | Same idempotency key from the original submit | `{"success":true,"data":{"status":"pending\|submitted\|confirmed\|failed\|not_found\|unavailable", ...}}` | Used to check a previous submission without resubmitting. |
 
-The backend should return an explicit `confirmed` result only after it has authoritative confirmation. A `not_found` or unavailable status is not permission to resubmit: the client retains the original key and asks the user to check again. Ensure `/payments/status` is scoped to the authenticated user and does not disclose another user's payment status.
+The backend should return an explicit `confirmed` result only after it has authoritative confirmation. A `not_found` or `unavailable` status is not permission to resubmit: the client retains the original key and asks the user to check again. Ensure `/payments/status` is scoped to the authenticated user and does not disclose another user's payment status.
 
 ## Contacts Endpoints
 
@@ -147,7 +150,7 @@ The backend should return an explicit `confirmed` result only after it has autho
 | `PUT /contacts/{id}` | `PUT /contacts/c1` with `{"name":"Ada Lovelace"}` | `{"success":true,"data":{"id":"c1","name":"Ada Lovelace","address":"G...","tokenType":"XLM","createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-02T00:00:00Z"}}` | Same wrapper-only caveat; 404 becomes an explanatory failure envelope. |
 | `DELETE /contacts/{id}` | `DELETE /contacts/c1` | `{"success":true,"data":{"message":"Contact deleted"}}` | Same wrapper-only caveat; 404 becomes an explanatory failure envelope. |
 
-The contacts screen searches the complete loaded contact list and renders 24 matches per page. This is client-side pagination; the current contacts contract does not define page/limit parameters, so no paginated backend response is assumed.
+The contacts screen searches the complete loaded contact list and renders 24 matches per page. This is client-side pagination; the current contacts contract does not define `page`/`limit` parameters, so no paginated backend response is assumed.
 
 The payment screen may use `data.nativeBalance` as the total native balance and `data.required` as the minimum required reserve. It displays spendable XLM as `max(0, nativeBalance - required)` only when both values are finite numbers; this is a display estimate, not a payment authorization guarantee. Reserve-related payment failures are translated when the backend message mentions a reserve or minimum/insufficient native balance. No stable backend error code is currently declared.
 
@@ -163,8 +166,6 @@ The payment screen may use `data.nativeBalance` as the total native balance and 
 
 ## Browser Security And CSP Reports
 
-Next.js applies the security headers defined in [`src/security/securityHeaders.ts`](../src/security/securityHeaders.ts) to every route. The content security policy allows Google OAuth and font endpoints, Stellar Horizon, and API/socket origins configured by `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_SOCKET_URL`.
+Next.js applies the security headers defined in `src/security/securityHeaders.ts` to every route. The content security policy allows Google OAuth and font endpoints, Stellar Horizon, and API/socket origins configured by `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_SOCKET_URL`.
 
 Browsers can submit CSP violation reports to `POST /api/csp-report`. The endpoint accepts legacy `csp-report` and Reporting API `body` JSON, caps input at 16 KiB, and logs only the document URL, blocked URL, and violated directive. It does not require authentication because browsers send reports automatically. Production responses include HSTS; development responses omit HSTS and allow `unsafe-eval` for the development bundler. Review CSP reports when adding a browser integration, then add only its required origin to the policy.
-
-- `POST /auth/refresh` | `{}`; cookies are included. | `{"token":"<new-jwt>"}` | Auth refresh thunk and automatic 401 refresh interceptor. Socket connections safely update authentication and reconnect once without leaking listeners or opening duplicate connections.
