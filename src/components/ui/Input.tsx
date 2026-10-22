@@ -6,10 +6,12 @@ import { InputProps } from '@/types';
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, helperText, required, disabled, className, ...props }, ref) => {
+    const ariaLabel = props['aria-label'] ?? label ?? undefined;
+
     return (
       <div className="w-full">
         {label && (
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          <label htmlFor={props.id} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             {label}
             {required && <span className="text-red-500 ml-1">*</span>}
           </label>
@@ -22,6 +24,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             className
           )}
           disabled={disabled}
+          aria-label={ariaLabel}
           {...props}
         />
         {error && (

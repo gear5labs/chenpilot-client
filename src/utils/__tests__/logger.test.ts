@@ -24,7 +24,7 @@ describe("logger & high-cardinality log protection (#924)", () => {
   });
 
   it("is silent in production for info/debug", async () => {
-    process.env.NODE_ENV = "production";
+    vi.stubEnv("NODE_ENV", "production");
     vi.resetModules();
     const { logger: prodLogger } = await import("../logger");
     prodLogger.info("hello");
@@ -33,7 +33,7 @@ describe("logger & high-cardinality log protection (#924)", () => {
   });
 
   it("routes error calls through console.error", async () => {
-    process.env.NODE_ENV = "development";
+    vi.stubEnv("NODE_ENV", "development");
     vi.resetModules();
     const { logger: devLogger } = await import("../logger");
     devLogger.error("boom");
@@ -46,7 +46,8 @@ describe("logger & high-cardinality log protection (#924)", () => {
       password: "SuperSecretPassword123!",
       secretKey: "SD1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF123456",
       token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-      promptText: "This is a private prompt payload that should not be logged raw.",
+      promptText:
+        "This is a private prompt payload that should not be logged raw.",
     };
 
     const sanitized = sanitizeLogValue(rawPayload) as Record<string, string>;

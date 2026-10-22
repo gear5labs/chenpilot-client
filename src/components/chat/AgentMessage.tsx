@@ -5,9 +5,13 @@ import { logger } from "../../utils/logger";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChatMessage } from "@/types";
-import { Copy, Check, RefreshCw } from "lucide-react";
+import { Copy, Check, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-react";
 import { CodeBlock } from "./CodeBlock";
 import ExecutionTrace from "./ExecutionTrace";
+import { useAppDispatch } from "@/store";
+import { setMessageFeedback } from "@/store/slices/chatSlice";
+import { submitFeedback } from "@/services/feedbackService";
+import type { MessageFeedback } from "@/types";
 
 interface AgentMessageProps {
   message: ChatMessage;
@@ -25,6 +29,43 @@ export default function AgentMessage({
   canRegenerate = false,
 }: AgentMessageProps) {
   const [copied, setCopied] = useState(false);
+  const [showFeedbackComment, setShowFeedbackComment] = useState(false);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const dispatch = useAppDispatch();
+
+  const updateFeedback = (feedback: MessageFeedback | null) => {
+    dispatch(setMessageFeedback({ messageId: message.id, feedback }));
+    void submitFeedback(message.id, feedback);
+  };
+
+  const handlePositiveFeedback = () => {
+    const selected = message.metadata?.feedback?.rating === "up";
+    updateFeedback(
+      selected
+        ? null
+        : { rating: "up", submittedAt: new Date().toISOString() },
+    );
+  };
+
+  const handleNegativeFeedback = () => {
+    if (message.metadata?.feedback?.rating === "down") {
+      updateFeedback(null);
+      setShowFeedbackComment(false);
+      setFeedbackComment("");
+      return;
+    }
+    setFeedbackComment("");
+    setShowFeedbackComment(true);
+  };
+
+  const submitNegativeFeedback = () => {
+    updateFeedback({
+      rating: "down",
+      comment: feedbackComment.trim() || undefined,
+      submittedAt: new Date().toISOString(),
+    });
+    setShowFeedbackComment(false);
+  };
 
   // Handle both string and object content
   const renderContent = () => {
@@ -354,6 +395,30 @@ export default function AgentMessage({
         </button>
         <button
           type="button"
+          aria-label="Helpful"
+          aria-pressed={message.metadata?.feedback?.rating === "up"}
+          onClick={handlePositiveFeedback}
+          className={`flex items-center space-x-1 text-xs hover:text-white ${
+            message.metadata?.feedback?.rating === "up" ? "text-green-400" : "text-gray-400"
+          }`}
+        >
+          <ThumbsUp className="h-3.5 w-3.5" />
+          <span>Helpful</span>
+        </button>
+        <button
+          type="button"
+          aria-label="Not helpful"
+          aria-pressed={message.metadata?.feedback?.rating === "down"}
+          onClick={handleNegativeFeedback}
+          className={`flex items-center space-x-1 text-xs hover:text-white ${
+            message.metadata?.feedback?.rating === "down" ? "text-red-400" : "text-gray-400"
+          }`}
+        >
+          <ThumbsDown className="h-3.5 w-3.5" />
+          <span>Not helpful</span>
+        </button>
+        <button
+          type="button"
           onClick={onRegenerate}
           disabled={!canRegenerate}
           className="flex items-center space-x-1 text-xs text-gray-400 hover:text-white disabled:opacity-40 disabled:hover:text-gray-400"
@@ -373,6 +438,38 @@ export default function AgentMessage({
           </button>
         ) : null}
       </div>
+      {showFeedbackComment && (
+        <form
+          className="mt-3 max-w-sm space-y-2 rounded-lg border border-gray-700 p-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submitNegativeFeedback();
+          }}
+        >
+          <label className="block text-xs text-gray-300" htmlFor={`feedback-${message.id}`}>
+            What could be improved? (optional)
+          </label>
+          <textarea
+            id={`feedback-${message.id}`}
+            maxLength={280}
+            value={feedbackComment}
+            onChange={(event) => setFeedbackComment(event.target.value)}
+            className="w-full rounded border border-gray-700 bg-gray-900 p-2 text-sm text-white"
+          />
+          <div className="flex gap-2">
+            <button type="submit" className="text-xs text-blue-300 hover:text-blue-200">
+              Submit feedback
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowFeedbackComment(false)}
+              className="text-xs text-gray-400 hover:text-white"
+            >
+              Dismiss
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }

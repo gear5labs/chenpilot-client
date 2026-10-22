@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   emailSchema,
   passwordSchema,
+  resetPasswordSchema,
   nameSchema,
   stellarAddressSchema,
   tokenAmountSchema,
@@ -55,6 +56,17 @@ describe("passwordSchema", () => {
   it("requires uppercase + lowercase + digit", () => {
     const r = passwordSchema.safeParse("alllowercase");
     expect(r.success).toBe(false);
+  });
+});
+
+describe("resetPasswordSchema", () => {
+  it("rejects a weak reset password", () => {
+    expect(
+      resetPasswordSchema.safeParse({
+        password: "weak",
+        confirmPassword: "weak",
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -138,7 +150,7 @@ describe("createContactSchema", () => {
 
 describe('sendPaymentSchema memo rules', () => {
   const payment = {
-    recipientAddress: 'GABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789AB',
+    recipientAddress: 'G' + 'A'.repeat(55),
     amount: '1',
     tokenType: 'XLM' as const,
   };
@@ -173,6 +185,9 @@ describe('getPaymentFailureMessage', () => {
   it('explains reserve-related rejection in plain language', () => {
     expect(getPaymentFailureMessage(new Error('Insufficient balance to maintain reserve')))
       .toContain("Stellar's minimum account reserve");
+  });
+});
+
 describe("payment precision validation", () => {
   const validAddress = "G" + "A".repeat(55);
 

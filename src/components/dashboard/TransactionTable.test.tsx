@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StellarTransaction, StellarOperation } from '@/types';
 
@@ -17,6 +17,7 @@ import TransactionTable, {
   getTransactionDirection,
   formatTransactionAmount,
 } from './TransactionTable';
+import { getTransactionExplorerUrl } from './TransactionDetailsDrawer';
 
 const transactions: StellarTransaction[] = [
   {
@@ -101,6 +102,41 @@ describe('Transaction Direction Classification & Amount Formatting', () => {
 
   beforeEach(() => {
     appState.language = 'en';
+  });
+
+  describe('Transaction details drawer', () => {
+    it('opens operation details when a transaction row is selected', () => {
+      render(<TransactionTable {...baseProps} />);
+
+      fireEvent.click(
+        screen.getByRole('button', { name: /View details for transaction/ }),
+      );
+
+      expect(screen.getByRole('dialog')).toHaveTextContent('Transaction details');
+      expect(screen.getByRole('dialog')).toHaveTextContent('Payment');
+      expect(screen.getByRole('dialog')).toHaveTextContent('1234567.89 XLM');
+    });
+
+    it('shows a safe empty state when a transaction has no operations', () => {
+      const emptyOperations = { ...transactions[0], operations: [], operation_count: 0 };
+      render(<TransactionTable {...baseProps} transactions={[emptyOperations]} />);
+      fireEvent.click(
+        screen.getByRole('button', { name: /View details for transaction/ }),
+      );
+
+      expect(screen.getByRole('dialog')).toHaveTextContent(
+        'No operation details are available.',
+      );
+    });
+
+    it('builds an explorer URL for the configured Stellar network', () => {
+      expect(getTransactionExplorerUrl('hash-1', 'mainnet')).toBe(
+        'https://stellar.expert/explorer/public/tx/hash-1',
+      );
+      expect(getTransactionExplorerUrl('hash-1', 'testnet')).toBe(
+        'https://stellar.expert/explorer/testnet/tx/hash-1',
+      );
+    });
   });
 
   describe('getOperationDirection', () => {

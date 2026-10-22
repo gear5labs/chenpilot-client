@@ -1,8 +1,9 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { logger } from "../../utils/logger";
-import { ChatMessage, AgentQueryRequest, Conversation } from "@/types";
+import { ChatMessage, AgentQueryRequest, Conversation, MessageFeedback } from "@/types";
 import { AgentQueryResponse } from "@/types/agent";
 import apiService from "@/services/api";
+import { VOICE_MESSAGE } from "@/constants";
 
 // ─── Voice message payload ────────────────────────────────────────────────────
 export interface SendVoiceMessagePayload {
@@ -492,6 +493,21 @@ state.messages[index] = {
         };
         state.messages = sortMessagesChronologically(state.messages);
       }
+    },
+    setMessageFeedback: (
+      state,
+      action: PayloadAction<{ messageId: string; feedback: MessageFeedback | null }>,
+    ) => {
+      const message = state.messages.find((item) => item.id === action.payload.messageId);
+      if (!message) return;
+
+      const metadata = { ...message.metadata };
+      if (action.payload.feedback) {
+        metadata.feedback = action.payload.feedback;
+      } else {
+        delete metadata.feedback;
+      }
+      message.metadata = metadata;
     },
     removeMessage: (state, action: PayloadAction<string>) => {
       state.messages = state.messages.filter(
@@ -1053,6 +1069,7 @@ export const {
   setCurrentConversation,
   setTyping,
   updateMessage,
+  setMessageFeedback,
   removeMessage,
   updateAgentStatus,
   setAgentConnected,

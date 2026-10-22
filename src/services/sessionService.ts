@@ -45,9 +45,9 @@ class SessionService {
     }, config.sessionTimeout);
 
     // Save session start time to localStorage for cross-tab sync
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       localStorage.setItem(
-        'session_expiration',
+        "session_expiration",
         this.expirationTime.toString(),
       );
     }
@@ -56,11 +56,11 @@ class SessionService {
   private triggerWarning() {
     this.warningTriggeredTime = Date.now();
     this.callbacks.onWarning.forEach((cb) => cb());
-    console.log('[SessionService] Session expiration warning triggered');
+    console.log("[SessionService] Session expiration warning triggered");
   }
 
   private triggerExpiration() {
-    console.log('[SessionService] Session expired');
+    console.log("[SessionService] Session expired");
     this.callbacks.onExpiration.forEach((cb) => cb());
     this.clearSession();
   }
@@ -69,15 +69,15 @@ class SessionService {
     // Restart the session
     this.startSession(config);
     this.callbacks.onExtend.forEach((cb) => cb());
-    console.log('[SessionService] Session extended');
+    console.log("[SessionService] Session extended");
   }
 
   clearSession() {
     this.clearTimers();
     this.expirationTime = null;
     this.warningTriggeredTime = null;
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('session_expiration');
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("session_expiration");
     }
   }
 
@@ -143,8 +143,8 @@ class SessionService {
 
   // For cross-tab session tracking
   getStoredExpirationTime(): number | null {
-    if (typeof window === 'undefined') return null;
-    const stored = localStorage.getItem('session_expiration');
+    if (typeof window === "undefined") return null;
+    const stored = localStorage.getItem("session_expiration");
     return stored ? parseInt(stored, 10) : null;
   }
 
@@ -156,11 +156,11 @@ class SessionService {
   }
 
   // Setup cross-tab synchronization
-  setupCrossTabSync() {
-    if (typeof window === 'undefined') return;
+  setupCrossTabSync(): () => void {
+    if (typeof window === "undefined") return () => undefined;
 
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'session_expiration') {
+      if (e.key === "session_expiration") {
         if (e.newValue === null) {
           // Session was cleared in another tab
           this.clearSession();
@@ -173,7 +173,8 @@ class SessionService {
             // Restart timers with new expiration time
             const now = Date.now();
             const timeUntilExpiration = newExpirationTime - now;
-            const warningTriggerTime = timeUntilExpiration - DEFAULT_SESSION_CONFIG.warningTime;
+            const warningTriggerTime =
+              timeUntilExpiration - DEFAULT_SESSION_CONFIG.warningTime;
 
             this.clearTimers();
 
@@ -196,11 +197,11 @@ class SessionService {
       }
     };
 
-    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener("storage", handleStorageChange);
 
     // Return cleanup function
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener("storage", handleStorageChange);
     };
   }
 }

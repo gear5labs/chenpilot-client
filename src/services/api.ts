@@ -467,6 +467,31 @@ class ApiService {
     return response.data;
   }
 
+  async revokeOtherSessions(): Promise<{ currentSessionRevoked: boolean }> {
+    const token = this.token;
+    const response = await axios.post<
+      ApiResponse<{ currentSessionRevoked?: boolean }> | { currentSessionRevoked?: boolean }
+    >(
+      `${this.api.defaults.baseURL}/auth/sessions/revoke-others`,
+      {},
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        withCredentials: true,
+      },
+    );
+    const payload = response.data;
+    const currentSessionRevoked =
+      'data' in payload && payload.data
+        ? payload.data.currentSessionRevoked
+        : 'currentSessionRevoked' in payload
+          ? payload.currentSessionRevoked
+          : false;
+    return { currentSessionRevoked: currentSessionRevoked === true };
+  }
+
   /**
    * Logout user by invalidating backend session and purging all local auth state.
    * Never throws errors; catches backend failures and ensures local token/storage cleanup.
@@ -567,18 +592,6 @@ class ApiService {
       currentPassword,
       newPassword,
     });
-    return response.data;
-  }
-
-  /**
-   * Delete user account permanently and clear stored authentication token.
-   *
-   * @returns Promise resolving to standard ApiResponse envelope.
-   * @throws {AxiosError} Throws if deletion request fails.
-   */
-  async deleteAccount(): Promise<ApiResponse<{ message: string }>> {
-    const response = await this.api.delete<ApiResponse<{ message: string }>>('/auth/account');
-    this.clearToken();
     return response.data;
   }
 

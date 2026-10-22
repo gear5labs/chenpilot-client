@@ -177,6 +177,7 @@ export interface StellarTransaction {
   successful: boolean;
   operations: StellarOperation[];
   direction?: TransactionDirection;
+  memo?: string;
 }
 
 /**
@@ -257,6 +258,13 @@ export interface ExecutionStep {
 
 /** Discriminates between plain text and voice messages */
 export type MessageType = "text" | "voice";
+export type FeedbackRating = "up" | "down";
+
+export interface MessageFeedback {
+  rating: FeedbackRating;
+  comment?: string;
+  submittedAt: string;
+}
 
 export interface ChatMessage {
   id: string;
@@ -297,6 +305,7 @@ export interface ChatMessage {
     asset?: string;
     requiresConfirmation?: boolean;
     executionTrace?: ExecutionTrace;
+    feedback?: MessageFeedback;
     rawData?: Record<string, unknown>;
     serverTimestamp?: number | string;
     clientTimestamp?: number | string;
@@ -508,7 +517,6 @@ export interface CardProps {
 // Utility Types
 export type TokenType = "XLM" | "USDC" | "USDT" | "BTC" | "ETH" | "AQUA";
 export type AuthProvider = "email" | "google";
-export type MessageType = "user" | "agent" | "system";
 export type NotificationType = "success" | "error" | "warning" | "info";
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";

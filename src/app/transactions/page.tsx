@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { RootState, AppDispatch } from "@/store";
@@ -21,6 +21,8 @@ import {
 } from "@/utils/format";
 import { Language } from "@/lib/i18n/i18n";
 import { RefreshCw, ReceiptText } from "lucide-react";
+import type { StellarTransaction } from "@/types";
+import TransactionDetailsDrawer from "@/components/dashboard/TransactionDetailsDrawer";
 
 /**
  * Format a timestamp for display, tolerating missing/invalid values so a bad
@@ -38,6 +40,8 @@ function formatLastUpdated(value: string | null): string | null {
 }
 
 export default function TransactionsPage() {
+  const [selectedTransaction, setSelectedTransaction] = useState<StellarTransaction | null>(null);
+  const selectedTriggerRef = useRef<HTMLElement | null>(null);
   const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();
   const { status, transactions } = useSelector(
@@ -224,7 +228,25 @@ export default function TransactionsPage() {
       ) : (
         <div className="space-y-4">
           {transactions.transactions.map((tx) => (
-            <Card key={tx.id} className="p-4">
+            <article
+              key={tx.id}
+              role="button"
+              tabIndex={0}
+              aria-label={`View details for transaction ${tx.hash.slice(0, 8)}`}
+              onClick={(event) => {
+                selectedTriggerRef.current = event.currentTarget;
+                setSelectedTransaction(tx);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  selectedTriggerRef.current = event.currentTarget;
+                  setSelectedTransaction(tx);
+                }
+              }}
+              className="cursor-pointer rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+            <Card className="p-4">
               <div className="flex justify-between items-start mb-2">
                 <div>
                   <h3 className="font-semibold">
@@ -242,7 +264,7 @@ export default function TransactionsPage() {
               </div>
 
               <div className="space-y-2">
-                {tx.operations.map((op) => (
+                {tx.operations.length ? tx.operations.map((op) => (
                   <div
                     key={op.id}
                     className="flex justify-between items-center bg-gray-50 p-2 rounded"
@@ -262,7 +284,7 @@ export default function TransactionsPage() {
                       {op.from && `From: ${op.from.slice(0, 8)}...`}
                     </div>
                   </div>
-                ))}
+                )) : <p className="text-sm text-gray-500">No operation details available.</p>}
               </div>
 
               <div className="mt-2 text-xs text-gray-500">
@@ -270,6 +292,7 @@ export default function TransactionsPage() {
                 {tx.ledger}
               </div>
             </Card>
+            </article>
           ))}
 
           {transactions.loadMoreError && (
@@ -290,6 +313,13 @@ export default function TransactionsPage() {
                 {transactions.isLoadingMore ? "Loading..." : "Load older transactions"}
               </Button>
             </div>
+          )}
+          {selectedTransaction && (
+            <TransactionDetailsDrawer
+              transaction={selectedTransaction}
+              onClose={() => setSelectedTransaction(null)}
+              returnFocusRef={selectedTriggerRef}
+            />
           )}
         </div>
       )}
