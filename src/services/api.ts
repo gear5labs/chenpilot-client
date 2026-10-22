@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { logger } from "../utils/logger";
+import { env } from '@/config/env';
 import {
   RegisterRequest,
   LoginRequest,
@@ -170,7 +171,7 @@ class ApiService {
     this.loadTokenFromStorage();
 
     this.api = axios.create({
-      baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:2333',
+      baseURL: env.API_BASE_URL,
       timeout: 30000,
       headers: {
         'Content-Type': 'application/json',
