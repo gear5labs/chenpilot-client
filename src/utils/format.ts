@@ -515,3 +515,25 @@ export function truncateText(text: string, maxLength: number, suffix: string = '
   }
   return text.slice(0, maxLength - suffix.length) + suffix;
 }
+
+/**
+ * Safely parse and recover malformed localStorage JSON payloads (#334).
+ */
+export function parseSafeLocalStorageJson<T>(
+  raw: string | null | undefined,
+  fallback: T,
+  validator?: (val: unknown) => val is T
+): { value: T; recovered: boolean } {
+  if (!raw || typeof raw !== 'string') {
+    return { value: fallback, recovered: false };
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (validator && !validator(parsed)) {
+      return { value: fallback, recovered: true };
+    }
+    return { value: (parsed as T) ?? fallback, recovered: false };
+  } catch {
+    return { value: fallback, recovered: true };
+  }
+}
