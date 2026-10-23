@@ -116,10 +116,25 @@ export default function TransactionsPage() {
   if (transactions.isLoading && !hasHistory) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-6">Transaction History</h1>
-        <div className="text-center" role="status">
-          Loading transactions...
-        </div>
+        <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Transaction History</h1>
+        {status?.publicKey && (
+          <Button
+            type="button"
+            disabled={transactions.isLoading}
+            onClick={() => {
+              if (!transactions.isLoading && status?.publicKey) {
+                dispatch(getTransactionHistory(status.publicKey));
+              }
+            }}
+            className="inline-flex items-center gap-2"
+          >
+            <RefreshCw aria-hidden="true" className="h-4 w-4" />
+            Refresh
+          </Button>
+        )}
+      </div>
+        <div className="text-center">Loading transactions...</div>
       </div>
     );
   }
