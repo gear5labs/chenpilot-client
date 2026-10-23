@@ -22,20 +22,13 @@ import {
 import { Language } from "@/lib/i18n/i18n";
 import { RefreshCw, ReceiptText } from "lucide-react";
 
-/**
- * Format a timestamp for display, tolerating missing/invalid values so a bad
- * value never renders "Invalid Date" to the user.
- */
-function formatLastUpdated(value: string | null): string | null {
-  if (!value) {
-    return null;
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-  return formatRelativeTime(parsed);
-}
+
+export const MIXED_OPERATION_FIXTURES = [
+  { id: "op_payment", type: "payment", amount: "25.5000000", asset: "USDC", from: "GAAA...", to: "GBBB...", source_account: "GAAA..." },
+  { id: "op_create", type: "create_account", amount: "2.0000000", asset: "XLM", from: "GAAA...", to: "GCCC...", source_account: "GAAA..." },
+  { id: "op_trust", type: "change_trust", asset: "USDT", source_account: "GAAA..." },
+  { id: "op_unknown", type: "manage_data", source_account: "GAAA..." },
+] as const;
 
 export default function TransactionsPage() {
   const router = useRouter();
