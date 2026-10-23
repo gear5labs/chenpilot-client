@@ -515,3 +515,7 @@ export function truncateText(text: string, maxLength: number, suffix: string = '
   }
   return text.slice(0, maxLength - suffix.length) + suffix;
 }
+
+export function computeProbeLatencyMs(startTimeMs: number, endTimeMs: number = Date.now()): number {
+  return Math.max(0, Math.round(endTimeMs - startTimeMs));
+}
