@@ -52,19 +52,6 @@ import {
   isPaymentOutcomeUnknown,
 } from "@/utils/paymentOutcome";
 
-/**
- * Local trustline types keep this service independent of whether the
- * application-wide @/types barrel exports these types.
- */
-export interface Trustline {
-  assetCode: string;
-  assetIssuer: string;
-  balance: string;
-  limit: string;
-  assetType?: string;
-  buyingLiabilities?: string;
-  sellingLiabilities?: string;
-}
 
 export interface AddTrustlineRequest {
   assetCode: string;
@@ -112,6 +99,36 @@ export class SingleFlight {
 }
 
 export const singleFlight = new SingleFlight();
+
+export interface NormalizedApiError {
+  status: number | null;
+  code: string;
+  message: string;
+  retryable: boolean;
+}
+
+export function normalizeApiError(error: unknown): NormalizedApiError {
+  const err = error as {
+    response?: { status?: number; data?: { message?: string; code?: string } };
+    code?: string;
+    message?: string;
+  };
+  const status = typeof err?.response?.status === 'number' ? err.response.status : null;
+  const code =
+    err?.response?.data?.code ||
+    err?.code ||
+    (status ? `HTTP_${status}` : 'NETWORK_ERROR');
+  const rawMessage =
+    err?.response?.data?.message || err?.message || 'An unexpected error occurred.';
+  const retryable = status === null || status === 408 || status === 429 || (status >= 500 && status <= 599);
+
+  return {
+    status,
+    code,
+    message: rawMessage,
+    retryable,
+  };
+}
 
 export interface FundingResult {
   success: boolean;
