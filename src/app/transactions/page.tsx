@@ -130,8 +130,8 @@ export default function TransactionsPage() {
         <h1 className="text-2xl font-bold mb-6">Transaction History</h1>
         <Card className="border-red-200 dark:border-red-900">
           <div role="alert" className="space-y-4">
-            <p className="text-red-700 dark:text-red-300">Error: {transactions.error}</p>
-            {publicKey && (
+            <p className="text-red-700 dark:text-red-300 font-medium">Unable to load transaction history: {transactions.error}</p><p className="text-xs text-gray-600 dark:text-gray-400">Your account is intact; this is a temporary network or Horizon read error. Click Retry below to reload without refreshing the page.</p>
+            {status?.publicKey && (
               <Button
                 type="button"
                 onClick={() => dispatch(getTransactionHistory(publicKey))}
