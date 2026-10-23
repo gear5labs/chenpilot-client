@@ -40,6 +40,20 @@ export const validateEnv = () => {
       `For help troubleshooting environment configuration, see docs/TROUBLESHOOTING.md.`
     );
   }
+  const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+  let parsed: URL;
+  try {
+    parsed = new URL(apiUrl);
+  } catch {
+    throw new Error(`[Env Config Error] Invalid URL in NEXT_PUBLIC_API_BASE_URL: "${apiUrl}". Must be a valid http(s) URL.`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`[Env Config Error] Unsupported protocol "${parsed.protocol}" in NEXT_PUBLIC_API_BASE_URL. Use http: or https:.`);
+  }
+  if (process.env.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
+    throw new Error(`[Env Config Error] Insecure NEXT_PUBLIC_API_BASE_URL in production ("${apiUrl}"). Production requires https://.`);
+  }
+
 };
 
 // Initialize environment validation
