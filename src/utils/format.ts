@@ -515,3 +515,16 @@ export function truncateText(text: string, maxLength: number, suffix: string = '
   }
   return text.slice(0, maxLength - suffix.length) + suffix;
 }
+
+export function describeAgentActionTimeoutState(elapsedMs: number, timeoutMs: number = 30000): {
+  state: 'running' | 'slow' | 'timed_out';
+  message: string;
+} {
+  if (elapsedMs >= timeoutMs) {
+    return { state: 'timed_out', message: 'The agent request timed out. You can safely retry the action.' };
+  }
+  if (elapsedMs >= Math.floor(timeoutMs * 0.5)) {
+    return { state: 'slow', message: 'Still working on your request...' };
+  }
+  return { state: 'running', message: 'Processing agent request...' };
+}
