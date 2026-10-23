@@ -403,6 +403,8 @@ The service includes methods for Stellar/Starknet account and funding paths. `ge
 
 `StellarTransaction` records returned by `GET /account/{userId}/transactions` contain `id`, `hash`, `ledger`, `created_at`, `source_account`, `fee_charged`, `operation_count`, `successful`, `operations: StellarOperation[]`, and optional `direction`. Each `StellarOperation` contains `id`, `type`, `source_account`, optional `amount`, optional `asset` (or `asset_code`, `asset_issuer`, `asset_type`), optional `from`, optional `to`, and optional `direction`.
 
+`type` is the raw Horizon operation type string. The client keeps a curated label for the variants it renders — `payment`, `create_account`, `account_merge`, `manage_offer`, `create_passive_offer`, `set_options`, `change_trust`, `allow_trust`, `account_created`, `invoke_host_function`, `bump_sequence`, and `ext_soroban_op`, declared as `StellarOperationType` in `src/types/index.ts`. Types outside that list render verbatim, and a transaction whose first operation has no `type` renders as `Unknown`, so an unrecognised variant never blanks out or drops a row. The backend is free to add Horizon types without a client change.
+
 Direction classification (`incoming | outgoing | self | unknown`) is resolved dynamically for transaction rows against the signed-in user's active account address:
 - **`incoming`**: Destination account (`to`) matches active account address, and source account does not. Formatted with a `+` prefix and emerald styling.
 - **`outgoing`**: Source account (`from`, `source_account`, or transaction `source_account`) matches active account address, and destination account is specified and does not match active account. Formatted with a `-` prefix and rose styling.

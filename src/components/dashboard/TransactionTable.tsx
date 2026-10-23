@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useContext } from 'react';
@@ -5,6 +6,7 @@ import { ReactReduxContext } from 'react-redux';
 import {
   StellarTransaction,
   StellarOperation,
+  StellarOperationType,
   TransactionDirection,
   AssetIdentifier,
 } from '@/types';
@@ -49,7 +51,7 @@ export interface TransactionTableProps {
   accountAddress?: string;
 }
 
-const OPERATION_TYPE_LABELS: { [key: string]: string } = {
+const OPERATION_TYPE_LABELS: Record<StellarOperationType, string> = {
   payment: 'Payment',
   create_account: 'Create Account',
   account_merge: 'Account Merge',
@@ -72,13 +74,13 @@ function normalizeAddress(address?: string | null): string {
 }
 
 /**
- * Resolves an asset's code, issuer, and canonical representation from operation metadata.
+ * Resolves an asset's code, issuer, and canonical representation.
  *
  * Rules:
- * - Native assets ('XLM' or 'native'): canonical is 'XLM', isNative is true.
- * - Issued assets with issuer: canonical is '<CODE>:<ISSUER>', isNative is false.
- * - Issued assets without issuer (incomplete metadata): canonical is '<CODE>', hasIncompleteMetadata is true.
- * - Missing/empty metadata: safely falls back to native 'XLM'.
+ * - Native assets ('XLM' or 'native') resolve to XLM.
+ * - Issued assets with an issuer resolve to CODE:ISSUER.
+ * - Issued assets without an issuer are marked as incomplete.
+ * - Missing metadata safely falls back to native XLM.
  */
 export function resolveAssetIdentifier(
   asset?: string | null,
@@ -95,7 +97,7 @@ export function resolveAssetIdentifier(
     };
   }
 
-  // Handle canonical string format "CODE:ISSUER"
+  // Handle the canonical format "CODE:ISSUER".
   if (asset && asset.includes(':')) {
     const [rawCode, ...rest] = asset.split(':');
     const parsedIssuer = rest.join(':').trim();
@@ -143,7 +145,7 @@ export function resolveAssetIdentifier(
     };
   }
 
-  // Issued code is present, but issuer metadata is incomplete
+  // Issued asset code is present, but issuer metadata is missing.
   return {
     code: cleanCode,
     issuer: undefined,
@@ -154,7 +156,8 @@ export function resolveAssetIdentifier(
 }
 
 /**
- * Formats an asset identifier for display, distinguishing same-code distinct issuers.
+ * Formats an asset identifier for display, distinguishing
+ * assets that share a code but have different issuers.
  */
 export function formatAssetDisplay(
   asset?: string | null,
@@ -162,26 +165,24 @@ export function formatAssetDisplay(
   options?: { compact?: boolean }
 ): string {
   const info = resolveAssetIdentifier(asset, issuer);
+
   if (info.isNative) {
     return info.code;
   }
+
   if (info.issuer) {
     if (options?.compact) {
       return `${info.code} (${formatAddress(info.issuer, 4, 4)})`;
     }
+
     return info.canonical;
   }
+
   return `${info.code} (unverified)`;
 }
 
 /**
- * Classifies an individual operation's direction relative to the active account address.
- *
- * Rules:
- * - 'self': both source and destination match the active address.
- * - 'incoming': destination matches active address, and source does not.
- * - 'outgoing': source matches active address, and destination is present and does not match active address.
- * - 'unknown': missing active address, missing operation accounts, non-transfer ops, or neither matches.
+ * Classifies an operation's direction relative to the active account.
  */
 export function getOperationDirection(
   operation?: Partial<StellarOperation> | null,
@@ -189,64 +190,71 @@ export function getOperationDirection(
   txSourceAccount?: string | null
 ): TransactionDirection {
   const normActive = normalizeAddress(activeAccountAddress);
-  if (!normActive) {
+
+  if (!normActive || !operation) {
     return 'unknown';
   }
 
-  if (!operation) {
-    return 'unknown';
-  }
+  const operationMetadata = operation as Record<string, unknown>;
 
-  // Derive source account: explicit `from`, then operation `source_account`, then fallback to txSourceAccount
+  // Resolve the source account using the available operation metadata.
   const rawSource =
     operation.from ||
     operation.source_account ||
-    ((operation as Record<string, unknown>).funder as string | undefined) ||
+    (typeof operationMetadata.funder === 'string'
+      ? operationMetadata.funder
+      : undefined) ||
     txSourceAccount;
 
-  // Derive destination account: explicit `to`, or Horizon alternatives `account`, `into`
+  // Resolve the destination account using supported Horizon fields.
   const rawDest =
     operation.to ||
-    ((operation as Record<string, unknown>).account as string | undefined) ||
-    ((operation as Record<string, unknown>).into as string | undefined);
+    (typeof operationMetadata.account === 'string'
+      ? operationMetadata.account
+      : undefined) ||
+    (typeof operationMetadata.into === 'string'
+      ? operationMetadata.into
+      : undefined);
 
   const normSource = normalizeAddress(rawSource);
   const normDest = normalizeAddress(rawDest);
 
-  // Missing operation accounts: neither source nor destination present
   if (!normSource && !normDest) {
     return 'unknown';
   }
 
-  // Self-transfer: Both source and destination match the active account
+  // Both accounts are the active account.
   if (normSource === normActive && normDest === normActive) {
     return 'self';
   }
 
-  // Incoming: Funds received at active account
+  // The active account received the transfer.
   if (normDest === normActive && normSource !== normActive) {
     return 'incoming';
   }
 
-  // Outgoing: Funds sent from active account to a different destination
-  if (normSource === normActive && normDest && normDest !== normActive) {
+  // The active account sent the transfer to another account.
+  if (
+    normSource === normActive &&
+    normDest &&
+    normDest !== normActive
+  ) {
     return 'outgoing';
   }
 
-  // Missing destination (e.g. non-transfer operation, change_trust, or incomplete record)
-  // or neither matches the active account
+  // The operation does not establish a transfer direction.
   return 'unknown';
 }
 
 /**
- * Classifies a transaction's direction relative to the active account address.
- * Inspects transaction operations and resolves direction.
+ * Classifies a transaction's direction relative to the active account.
  */
 export function getTransactionDirection(
   tx: StellarTransaction,
   activeAccountAddress?: string | null
 ): TransactionDirection {
   const normActive = normalizeAddress(activeAccountAddress);
+
   if (!normActive) {
     return tx.direction || 'unknown';
   }
@@ -255,19 +263,20 @@ export function getTransactionDirection(
     return 'unknown';
   }
 
-  // Locate primary operation with transfer details (amount, to, or from)
+  // Prefer an operation containing transfer details.
   const primaryOp =
-    tx.operations.find((op) => op.amount || op.to || op.from) || tx.operations[0];
+    tx.operations.find((op) => op.amount || op.to || op.from) ||
+    tx.operations[0];
 
-  return getOperationDirection(primaryOp, activeAccountAddress, tx.source_account);
+  return getOperationDirection(
+    primaryOp,
+    activeAccountAddress,
+    tx.source_account
+  );
 }
 
 /**
- * Formats a transaction amount consistently with directional prefix and asset symbol/identifier.
- * - incoming: "+<amount> <asset>"
- * - outgoing: "-<amount> <asset>"
- * - self: "<amount> <asset>"
- * - unknown: "<amount> <asset>" (or "-" if amount is missing)
+ * Formats a transaction amount with its direction and asset identifier.
  */
 export function formatTransactionAmount(
   amount?: string | number | null,
@@ -287,10 +296,15 @@ export function formatTransactionAmount(
   const assetInfo = resolveAssetIdentifier(asset, options?.issuer);
 
   let assetLabel = assetInfo.code;
+
   if (options?.showCanonical) {
     assetLabel = assetInfo.canonical;
   } else if (options?.compactIssuer && assetInfo.issuer) {
-    assetLabel = `${assetInfo.code} (${formatAddress(assetInfo.issuer, 4, 4)})`;
+    assetLabel = `${assetInfo.code} (${formatAddress(
+      assetInfo.issuer,
+      4,
+      4
+    )})`;
   }
 
   if (options?.language || options?.locale) {
@@ -301,21 +315,29 @@ export function formatTransactionAmount(
         decimals !== undefined
           ? decimals
           : assetInfo.code
-          ? ASSET_PRECISION[assetInfo.code.toUpperCase()]
-          : undefined,
+            ? ASSET_PRECISION[assetInfo.code.toUpperCase()]
+            : undefined,
     });
-    if (rawFormatted === '-') return '-';
+
+    if (rawFormatted === '-') {
+      return '-';
+    }
 
     if (direction === 'incoming' && !rawFormatted.startsWith('+')) {
       return `+${rawFormatted}`;
     }
+
     if (direction === 'outgoing' && !rawFormatted.startsWith('-')) {
       return `-${rawFormatted}`;
     }
+
     return rawFormatted;
   }
 
-  const tokenFormatted = formatTokenAmount(amount, decimals !== undefined ? decimals : 2);
+  const tokenFormatted = formatTokenAmount(
+    amount,
+    decimals !== undefined ? decimals : 2
+  );
   const assetSuffix = assetLabel ? ` ${assetLabel}` : '';
 
   if (direction === 'incoming') {
@@ -330,7 +352,7 @@ export function formatTransactionAmount(
 }
 
 /**
- * Formats an asset amount without directional prefixes, with optional canonical/compact issuer format.
+ * Formats an asset amount without a directional prefix.
  */
 export function formatAssetAmount(
   amount?: string | number | null,
@@ -354,14 +376,23 @@ export function formatAssetAmount(
     const formatted = formatLocaleAmount(amount, {
       language: options.language,
       locale: options.locale,
-      decimals: assetInfo.code ? ASSET_PRECISION[assetInfo.code.toUpperCase()] : decimals,
+      decimals: assetInfo.code
+        ? ASSET_PRECISION[assetInfo.code.toUpperCase()]
+        : decimals,
     });
+
     if (options?.showCanonical) {
       return `${formatted} ${assetInfo.canonical}`;
     }
+
     if (options?.compactIssuer && assetInfo.issuer) {
-      return `${formatted} ${assetInfo.code} (${formatAddress(assetInfo.issuer, 4, 4)})`;
+      return `${formatted} ${assetInfo.code} (${formatAddress(
+        assetInfo.issuer,
+        4,
+        4
+      )})`;
     }
+
     return `${formatted} ${assetInfo.code}`;
   }
 
@@ -370,8 +401,13 @@ export function formatAssetAmount(
   if (options?.showCanonical) {
     return `${formatted} ${assetInfo.canonical}`;
   }
+
   if (options?.compactIssuer && assetInfo.issuer) {
-    return `${formatted} ${assetInfo.code} (${formatAddress(assetInfo.issuer, 4, 4)})`;
+    return `${formatted} ${assetInfo.code} (${formatAddress(
+      assetInfo.issuer,
+      4,
+      4
+    )})`;
   }
 
   return `${formatted} ${assetInfo.code}`;
@@ -391,14 +427,28 @@ export default function TransactionTable({
   activeAccountAddress,
   accountAddress,
 }: TransactionTableProps) {
-  const reduxLanguage = useAppSelector((state) => state.ui?.language) as Language | undefined;
+  const reduxLanguage = useAppSelector(
+    (state) => state.ui?.language
+  ) as Language | undefined;
+
   const currentLanguage = language || reduxLanguage || 'en';
 
   const reduxContext = useContext(ReactReduxContext);
+
   const storeState = reduxContext?.store?.getState?.() as
     | {
-        auth?: { user?: { address?: string; publicKey?: string } };
-        account?: { status?: { address?: string; publicKey?: string } };
+        auth?: {
+          user?: {
+            address?: string;
+            publicKey?: string;
+          };
+        };
+        account?: {
+          status?: {
+            address?: string;
+            publicKey?: string;
+          };
+        };
       }
     | undefined;
 
@@ -411,48 +461,76 @@ export default function TransactionTable({
     storeState?.account?.status?.publicKey;
 
   const totalPages = Math.ceil(totalCount / pageSize);
-  const startIndex = (currentPage - 1) * pageSize + 1;
+  const startIndex =
+    totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const endIndex = Math.min(currentPage * pageSize, totalCount);
 
-  const handleCopyHash = (hash: string) => {
-    navigator.clipboard.writeText(hash);
-    toast.success('Transaction hash copied');
+  const handleCopyHash = async (hash: string) => {
+    try {
+      await navigator.clipboard.writeText(hash);
+      toast.success('Transaction hash copied');
+    } catch {
+      toast.error('Unable to copy transaction hash');
+    }
   };
 
-  const getOperationType = (operations?: StellarOperation[]): string => {
-    if (!operations || operations.length === 0) return 'Unknown';
-    const mainOp = operations[0];
-    return OPERATION_TYPE_LABELS[mainOp.type] || mainOp.type;
+  const getOperationType = (
+    operations?: StellarOperation[]
+  ): string => {
+    const mainOp = operations?.[0];
+
+    if (!mainOp?.type) {
+      return 'Unknown';
+    }
+
+    return (
+      OPERATION_TYPE_LABELS[mainOp.type as StellarOperationType] ??
+      mainOp.type
+    );
   };
 
-  const getDirectionIcon = (direction: TransactionDirection, successful: boolean) => {
+  const getDirectionIcon = (
+    direction: TransactionDirection,
+    successful: boolean
+  ) => {
     if (!successful) {
       return <AlertCircle className="h-4 w-4 text-red-400" />;
     }
+
     switch (direction) {
       case 'incoming':
         return <ArrowDownLeft className="h-4 w-4 text-emerald-400" />;
+
       case 'outgoing':
         return <ArrowUpRight className="h-4 w-4 text-blue-400" />;
+
       case 'self':
         return <ArrowLeftRight className="h-4 w-4 text-purple-400" />;
+
       case 'unknown':
       default:
         return <ArrowUpRight className="h-4 w-4 text-gray-400" />;
     }
   };
 
-  const getDirectionContainerClass = (direction: TransactionDirection, successful: boolean) => {
+  const getDirectionContainerClass = (
+    direction: TransactionDirection,
+    successful: boolean
+  ) => {
     if (!successful) {
       return 'bg-red-500/20';
     }
+
     switch (direction) {
       case 'incoming':
         return 'bg-emerald-500/20';
+
       case 'outgoing':
         return 'bg-blue-500/20';
+
       case 'self':
         return 'bg-purple-500/20';
+
       case 'unknown':
       default:
         return 'bg-gray-800';
@@ -532,12 +610,22 @@ export default function TransactionTable({
                 </th>
               </tr>
             </thead>
+
             <tbody>
               {transactions.map((tx) => {
-                const direction = getTransactionDirection(tx, resolvedActiveAddress);
+                const direction = getTransactionDirection(
+                  tx,
+                  resolvedActiveAddress
+                );
+
                 const mainOp =
                   tx.operations && tx.operations.length > 0
-                    ? tx.operations.find((o) => o.amount || o.to || o.from) || tx.operations[0]
+                    ? tx.operations.find(
+                        (operation) =>
+                          operation.amount ||
+                          operation.to ||
+                          operation.from
+                      ) || tx.operations[0]
                     : null;
 
                 const assetInfo = resolveAssetIdentifier(
@@ -552,7 +640,10 @@ export default function TransactionTable({
                       direction,
                       assetInfo.code,
                       undefined,
-                      { language: currentLanguage, locale }
+                      {
+                        language: currentLanguage,
+                        locale,
+                      }
                     )
                   : '-';
 
@@ -571,6 +662,7 @@ export default function TransactionTable({
                         >
                           {getDirectionIcon(direction, tx.successful)}
                         </div>
+
                         <div>
                           <p className="font-medium text-white">
                             {getOperationType(tx.operations)}
@@ -582,6 +674,7 @@ export default function TransactionTable({
                         </div>
                       </div>
                     </td>
+
                     <td className="py-3 px-4">
                       <span
                         data-testid={`tx-direction-${tx.id}`}
@@ -589,17 +682,21 @@ export default function TransactionTable({
                           direction === 'incoming'
                             ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                             : direction === 'outgoing'
-                            ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                            : direction === 'self'
-                            ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
-                            : 'bg-gray-800 text-gray-400 border border-gray-700'
+                              ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                              : direction === 'self'
+                                ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                                : 'bg-gray-800 text-gray-400 border border-gray-700'
                         }`}
                       >
-                        {direction === 'self' ? 'Self-Transfer' : direction}
+                        {direction === 'self'
+                          ? 'Self-Transfer'
+                          : direction}
                       </span>
                     </td>
+
                     <td className="py-3 px-4">
                       <button
+                        type="button"
                         onClick={() => handleCopyHash(tx.hash)}
                         className="font-mono text-xs text-blue-400 hover:text-blue-300 truncate max-w-xs"
                         title={tx.hash}
@@ -607,6 +704,7 @@ export default function TransactionTable({
                         {formatAddress(tx.hash)}
                       </button>
                     </td>
+
                     <td className="py-3 px-4">
                       <div className="flex flex-col items-start space-y-0.5">
                         <span
@@ -615,14 +713,15 @@ export default function TransactionTable({
                             direction === 'incoming'
                               ? 'text-emerald-400 font-medium'
                               : direction === 'outgoing'
-                              ? 'text-rose-400 font-medium'
-                              : direction === 'self'
-                              ? 'text-purple-300 font-medium'
-                              : 'text-gray-300'
+                                ? 'text-rose-400 font-medium'
+                                : direction === 'self'
+                                  ? 'text-purple-300 font-medium'
+                                  : 'text-gray-300'
                           }`}
                         >
                           {formattedAmount}
                         </span>
+
                         {assetInfo.issuer ? (
                           <span
                             data-testid={`tx-asset-issuer-${tx.id}`}
@@ -630,7 +729,9 @@ export default function TransactionTable({
                             title={`Canonical Asset: ${assetInfo.canonical}`}
                           >
                             <span className="text-gray-500">issuer:</span>
-                            <span>{formatAddress(assetInfo.issuer, 4, 4)}</span>
+                            <span>
+                              {formatAddress(assetInfo.issuer, 4, 4)}
+                            </span>
                           </span>
                         ) : assetInfo.hasIncompleteMetadata ? (
                           <span
@@ -638,20 +739,30 @@ export default function TransactionTable({
                             className="text-[11px] text-amber-400/90 inline-flex items-center gap-1"
                             title="Asset issuer metadata is missing or unverified"
                           >
-                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400" />
                             <span>unverified issuer</span>
                           </span>
                         ) : null}
+
                         {tx.fee_charged && (
                           <span className="text-xs text-gray-500 block">
-                            Fee: {formatTransactionFee(tx.fee_charged, { language: currentLanguage, locale, asset: 'XLM' })}
+                            Fee:{' '}
+                            {formatTransactionFee(tx.fee_charged, {
+                              language: currentLanguage,
+                              locale,
+                              asset: 'XLM',
+                            })}
                           </span>
                         )}
                       </div>
                     </td>
+
                     <td className="py-3 px-4">
-                      <span className="text-gray-300">#{tx.ledger}</span>
+                      <span className="text-gray-300">
+                        #{tx.ledger}
+                      </span>
                     </td>
+
                     <td className="py-3 px-4">
                       <span className="text-gray-300">
                         {formatTransactionDate(tx.created_at, {
@@ -660,19 +771,25 @@ export default function TransactionTable({
                         })}
                       </span>
                     </td>
+
                     <td className="py-3 px-4">
                       {tx.successful ? (
                         <div className="flex items-center space-x-1">
                           <Check className="h-4 w-4 text-green-400" />
-                          <span className="text-green-400 font-medium">Success</span>
+                          <span className="text-green-400 font-medium">
+                            Success
+                          </span>
                         </div>
                       ) : (
                         <div className="flex items-center space-x-1">
                           <AlertCircle className="h-4 w-4 text-red-400" />
-                          <span className="text-red-400 font-medium">Failed</span>
+                          <span className="text-red-400 font-medium">
+                            Failed
+                          </span>
                         </div>
                       )}
                     </td>
+
                     <td className="py-3 px-4 text-right">
                       <a
                         href={`https://stellar.expert/explorer/public/tx/${tx.hash}`}
@@ -695,13 +812,24 @@ export default function TransactionTable({
         <div className="flex items-center justify-between pt-4 border-t border-gray-800">
           <div className="flex items-center space-x-4">
             <span className="text-sm text-gray-400">
-              Showing {startIndex} to {endIndex} of {totalCount} transactions
+              Showing {startIndex} to {endIndex} of {totalCount}{' '}
+              transactions
             </span>
+
             <div className="flex items-center space-x-2">
-              <label className="text-sm text-gray-300">Per page:</label>
+              <label
+                htmlFor="transaction-page-size"
+                className="text-sm text-gray-300"
+              >
+                Per page:
+              </label>
+
               <select
+                id="transaction-page-size"
                 value={pageSize}
-                onChange={(e) => onPageSizeChange(parseInt(e.target.value))}
+                onChange={(event) =>
+                  onPageSizeChange(parseInt(event.target.value, 10))
+                }
                 className="px-2 py-1 bg-gray-900 border border-gray-700 rounded text-sm text-white hover:border-gray-500 transition-colors"
               >
                 <option value={10}>10</option>
@@ -717,35 +845,50 @@ export default function TransactionTable({
               variant="ghost"
               size="sm"
               onClick={() => onPageChange(currentPage - 1)}
-              disabled={currentPage === 1 || isLoading}
-              className={`!p-2 ${currentPage === 1 || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              disabled={currentPage <= 1 || isLoading}
+              className={`!p-2 ${
+                currentPage <= 1 || isLoading
+                  ? 'opacity-50 cursor-not-allowed'
+                  : ''
+              }`}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
 
             <div className="flex items-center space-x-1">
-              {Array.from({ length: Math.min(5, totalPages) }).map((_, i) => {
+              {Array.from({
+                length: Math.min(5, totalPages),
+              }).map((_, index) => {
                 let pageNum: number;
+
                 if (totalPages <= 5) {
-                  pageNum = i + 1;
+                  pageNum = index + 1;
                 } else if (currentPage <= 3) {
-                  pageNum = i + 1;
+                  pageNum = index + 1;
                 } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
+                  pageNum = totalPages - 4 + index;
                 } else {
-                  pageNum = currentPage - 2 + i;
+                  pageNum = currentPage - 2 + index;
                 }
 
                 return (
                   <button
+                    type="button"
                     key={pageNum}
                     onClick={() => onPageChange(pageNum)}
                     disabled={isLoading}
+                    aria-current={
+                      currentPage === pageNum ? 'page' : undefined
+                    }
                     className={`px-2 py-1 rounded text-sm transition-colors ${
                       currentPage === pageNum
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-900 text-gray-300 hover:bg-gray-800'
-                    } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    } ${
+                      isLoading
+                        ? 'opacity-50 cursor-not-allowed'
+                        : ''
+                    }`}
                   >
                     {pageNum}
                   </button>
@@ -758,7 +901,11 @@ export default function TransactionTable({
               size="sm"
               onClick={() => onPageChange(currentPage + 1)}
               disabled={currentPage >= totalPages || isLoading}
-              className={`!p-2 ${currentPage >= totalPages || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`!p-2 ${
+                currentPage >= totalPages || isLoading
+                  ? 'opacity-50 cursor-not-allowed'
+                  : ''
+              }`}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>

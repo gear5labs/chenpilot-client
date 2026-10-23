@@ -20,6 +20,15 @@ import TransactionTable, {
   formatAssetDisplay,
   formatAssetAmount,
 } from './TransactionTable';
+import {
+  accountCreationTransaction,
+  mixedOperationsTransaction,
+  paymentTransaction,
+  transactionFixtures,
+  trustTransaction,
+  unlabeledOperationTransaction,
+  unrecognizedOperationTransaction,
+} from '@/fixtures/transactionFixtures';
 
 const transactions: StellarTransaction[] = [
   {
@@ -636,5 +645,65 @@ describe('TransactionTable - Asset Disambiguation & Canonical Identifiers', () =
 
       expect(screen.getByText('Network error fetching transactions')).toBeDefined();
     });
+  });
+});
+
+describe('Operation type fixtures (#245)', () => {
+  const renderFixtures = (fixtures: StellarTransaction[]) =>
+    render(
+      <TransactionTable
+        transactions={fixtures}
+        isLoading={false}
+        error={null}
+        currentPage={1}
+        pageSize={10}
+        totalCount={fixtures.length}
+        onPageChange={vi.fn()}
+        onPageSizeChange={vi.fn()}
+      />
+    );
+
+  beforeEach(() => {
+    appState.language = 'en';
+  });
+
+  it.each([
+    { label: 'Payment', transaction: paymentTransaction },
+    { label: 'Create Account', transaction: accountCreationTransaction },
+    { label: 'Change Trust', transaction: trustTransaction },
+  ])('renders the "$label" label for its operation variant', ({ label, transaction }) => {
+    renderFixtures([transaction]);
+
+    expect(screen.getByText(label)).toBeInTheDocument();
+    expect(screen.getByText('1 op')).toBeInTheDocument();
+  });
+
+  it('renders unrecognised operation types with their raw Horizon value', () => {
+    renderFixtures([unrecognizedOperationTransaction]);
+
+    expect(screen.getByText('manage_data')).toBeInTheDocument();
+  });
+
+  it('renders the generic Unknown label when the operation type is absent', () => {
+    renderFixtures([unlabeledOperationTransaction]);
+
+    expect(screen.getByText('Unknown')).toBeInTheDocument();
+  });
+
+  it('renders a mixed-operation row from its first operation and counts every operation', () => {
+    renderFixtures([mixedOperationsTransaction]);
+
+    expect(screen.getByText('Payment')).toBeInTheDocument();
+    expect(screen.getByText('3 ops')).toBeInTheDocument();
+  });
+
+  it('renders every fixture variant in one pass', () => {
+    renderFixtures(transactionFixtures);
+
+    expect(screen.getAllByRole('row')).toHaveLength(transactionFixtures.length + 1);
+    expect(screen.getByText('Create Account')).toBeInTheDocument();
+    expect(screen.getByText('Change Trust')).toBeInTheDocument();
+    expect(screen.getByText('manage_data')).toBeInTheDocument();
+    expect(screen.getByText('Unknown')).toBeInTheDocument();
   });
 });

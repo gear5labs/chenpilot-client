@@ -44,6 +44,10 @@ The default environment is `jsdom`, including for non-UI tests. That provides br
 
 Vitest globals (`describe`, `it`, `expect`, and lifecycle hooks) are enabled; explicit imports from `vitest` are also used in this repository and are preferred in new examples for clarity. Use `vi.mock()` at module scope to replace network services or other external dependencies, and `vi.fn()` for controllable functions. Reset mock call history in `beforeEach` with `vi.clearAllMocks()`. Avoid mocking the reducer or component under test. If a test changes environment variables, restore them after the test (or use Vitest's environment stubbing and undo it) so the next test is isolated.
 
+## Reusable Fixtures
+
+Shared data fixtures live in `src/fixtures/` and are imported through the `@/fixtures/*` alias instead of being re-declared inside each test. `src/fixtures/transactionFixtures.ts` exports `createStellarOperation`/`createStellarTransaction` builders plus named transaction variants — payment, account creation, trust, an unrecognised operation type, an empty type, and a mixed-operation row — which `src/components/dashboard/TransactionTable.test.tsx` renders directly.
+
 ## Slice Test Example
 
 Create `src/store/slices/authSlice.test.ts` to exercise the reducer and a public action without involving a configured store or network:
