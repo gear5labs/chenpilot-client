@@ -52,19 +52,6 @@ import {
   isPaymentOutcomeUnknown,
 } from "@/utils/paymentOutcome";
 
-/**
- * Local trustline types keep this service independent of whether the
- * application-wide @/types barrel exports these types.
- */
-export interface Trustline {
-  assetCode: string;
-  assetIssuer: string;
-  balance: string;
-  limit: string;
-  assetType?: string;
-  buyingLiabilities?: string;
-  sellingLiabilities?: string;
-}
 
 export interface AddTrustlineRequest {
   assetCode: string;
@@ -1421,11 +1408,22 @@ class ApiService {
     return response.data;
   }
 
-
-  // Generic request helper
-
-  async request<T>(config: AxiosRequestConfig): Promise<T> {
-    const response = await this.api.request<T>(config);
+  /**
+   * Generic request method for custom endpoints.
+   *
+   * @template T - Expected response payload type.
+   * @param config - Axios request configuration.
+   * @returns Promise resolving to data payload of type T.
+   * @throws {AxiosError} Throws if request fails.
+   */
+  async request<T>(
+    config: AxiosRequestConfig,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    const response = await this.api.request<T>({
+      ...config,
+      ...(signal ? { signal } : {}),
+    });
     return response.data;
   }
 
