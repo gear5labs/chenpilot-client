@@ -44,27 +44,9 @@ import {
   sleep,
   incrementRetryCount,
   retryLabel,
-} from "@/utils/retryUtils";
-import { horizonFetch } from "@/utils/horizonFetch";
-import { buildPaymentIdempotencyKey } from "@/utils/paymentIdempotency";
-import {
-  PaymentOutcomeUnknownError,
-  isPaymentOutcomeUnknown,
-} from "@/utils/paymentOutcome";
+} from '@/utils/retryUtils';
+import { RETRY_CONFIG } from '@/constants';
 
-/**
- * Local trustline types keep this service independent of whether the
- * application-wide @/types barrel exports these types.
- */
-export interface Trustline {
-  assetCode: string;
-  assetIssuer: string;
-  balance: string;
-  limit: string;
-  assetType?: string;
-  buyingLiabilities?: string;
-  sellingLiabilities?: string;
-}
 
 export interface AddTrustlineRequest {
   assetCode: string;
@@ -259,8 +241,8 @@ class ApiService {
             payload: {
               label,
               attempt,
-              maxAttempts: 3,
-              nextRetryAt: Date.now() + delayMs,
+              maxAttempts: RETRY_CONFIG.MAX_ATTEMPTS,
+              nextRetryAt: Date.now() + delayMs, // circular dep issues in tests
             },
           });
         }
