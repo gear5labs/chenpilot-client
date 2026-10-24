@@ -1,7 +1,6 @@
 import { z } from 'zod';
-import { VALIDATION_MESSAGES, PAYMENT_LIMITS, SECURITY_VALIDATION } from '@/constants';
-import { SUPPORTED_ASSETS } from '@/types';
 import { VALIDATION_MESSAGES, PAYMENT_LIMITS, SECURITY_VALIDATION, TOKEN_DECIMALS } from '@/constants';
+import { SUPPORTED_ASSETS } from '@/types';
 
 // Email validation schema. Surrounding whitespace is accepted (and trimmed in the parsed
 // value) so an accidental space doesn't block sign-in; see normalizeEmail (#259).
