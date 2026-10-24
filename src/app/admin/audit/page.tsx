@@ -39,8 +39,6 @@ import {
   Clock,
   Activity,
   FileText,
-  ExternalLink,
-  Loader2,
   Copy,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
