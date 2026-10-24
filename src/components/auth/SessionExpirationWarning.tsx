@@ -90,7 +90,7 @@ export function SessionExpirationWarning() {
         <div className="px-6 py-4 space-y-4">
           <p className="text-gray-700 dark:text-gray-300 text-sm">
             Your session will expire due to inactivity. Click extend to stay logged in or
-            you'll be redirected to the login page.
+            you&apos;ll be redirected to the login page.
           </p>
 
           {/* Time Display */}

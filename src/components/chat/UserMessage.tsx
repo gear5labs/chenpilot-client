@@ -7,9 +7,7 @@ import type { Components } from 'react-markdown';
 import { ChatMessage } from '@/types';
 import { useAppSelector } from '@/store';
 import VoiceMessagePlayer from '@/components/chat/VoiceMessagePlayer';
-
-import { ChatMessage } from "@/types";
-import { Copy, Check, Edit2, Check as CheckIcon, X, Clock, AlertCircle, RefreshCw, CloudOff,MessageSquare } from "lucide-react";
+import { Copy, Check, Edit2, Check as CheckIcon, X, Clock, AlertCircle, RefreshCw, CloudOff, MessageSquare } from "lucide-react";
 import { canRetry, getDeliveryState } from "@/store/messageDelivery";
 
 interface UserMessageProps {
@@ -36,7 +34,6 @@ const markdownComponents: Components = {
   li: ({ children, ...props }) => <li className="text-gray-200" {...props}>{children}</li>,
 };
 
-export default function UserMessage({ message, onCopy, onEdit, onReply }: UserMessageProps) {
 export default function UserMessage({
   message,
   onCopy,
