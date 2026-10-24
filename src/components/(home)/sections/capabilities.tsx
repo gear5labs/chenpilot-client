@@ -60,7 +60,7 @@ export default function Capabilities() {
 
                 <div className="flex-1">
                   <p className="text-lg text-white/60 group-hover:text-white/90 font-light transition-colors duration-500">
-                    "{capability.text}"
+                    &ldquo;{capability.text}&rdquo;
                   </p>
                 </div>
 
