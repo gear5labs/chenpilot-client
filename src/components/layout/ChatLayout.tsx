@@ -39,6 +39,33 @@ export function ChatLayout({ children }: ChatLayoutProps) {
   // Conversation awaiting delete confirmation (#269)
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
 
+  // ── Search ──
+  const search = useChatSearch();
+  const { isSearchOpen, openSearch, closeSearch, setQuery, goToNext, goToPrev, searchState, searchInputRef } = search;
+
+  // Ctrl/Cmd+F – intercept only when focus is inside the chat route.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        // Only hijack the shortcut on the chat page.
+        if (pathname?.startsWith('/chat')) {
+          e.preventDefault();
+          if (isSearchOpen) {
+            searchInputRef.current?.focus();
+          } else {
+            openSearch();
+          }
+        }
+      }
+      if (e.key === 'Escape' && isSearchOpen) {
+        closeSearch();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [pathname, isSearchOpen, openSearch, closeSearch, searchInputRef]);
+
   // Get chat history from Redux store
   const { chatHistory, currentConversation, conversations } = useAppSelector(
     (state) => state.chat,
@@ -82,7 +109,6 @@ export function ChatLayout({ children }: ChatLayoutProps) {
   ];
 
   const handleNewChat = () => {
-    // Start new chat - this will save current conversation and clear messages
     dispatch(startNewChat());
     toast.success("Starting new chat...");
     router.push("/chat");
@@ -144,6 +170,8 @@ export function ChatLayout({ children }: ChatLayoutProps) {
   const toggleSidebar = () => {
     setSidebarCollapsed(!sidebarCollapsed);
   };
+
+  const isChatRoute = pathname?.startsWith('/chat');
 
   return (
     <div className="h-screen flex flex-col lg:flex-row bg-gray-50 dark:bg-gray-900">
@@ -229,6 +257,17 @@ export function ChatLayout({ children }: ChatLayoutProps) {
                   </span>
                 </div>
               )}
+
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSidebarOpen(false)}
+                  className="lg:hidden text-gray-400 hover:text-white"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
             </div>
 
             {!sidebarCollapsed && (
@@ -243,7 +282,8 @@ export function ChatLayout({ children }: ChatLayoutProps) {
               </div>
             )}
 
-            <div className="flex items-center space-x-2">
+            {/* New Chat Button */}
+            <div className="px-4 py-4">
               <Button
                 variant="ghost"
                 size="sm"
@@ -253,7 +293,11 @@ export function ChatLayout({ children }: ChatLayoutProps) {
                 }}
                 className="lg:hidden text-gray-400 hover:text-white"
               >
-                <X className="h-5 w-5" />
+                {sidebarCollapsed ? (
+                  <Plus className="h-5 w-5" />
+                ) : (
+                  <span>New Chat</span>
+                )}
               </Button>
             </div>
           </div>
@@ -349,17 +393,26 @@ export function ChatLayout({ children }: ChatLayoutProps) {
                   ))}
               </button>
 
-              {/* Profile Menu Dropdown */}
-              {profileMenuOpen && !sidebarCollapsed && (
-                <div className="absolute bottom-full left-0 right-0 mb-2 bg-gray-800/95 backdrop-blur-sm rounded-xl shadow-2xl border border-gray-700 overflow-hidden">
-                  {profileMenuItems.map((item) => {
-                    return (
+                {/* Profile Menu Dropdown */}
+                {profileMenuOpen && !sidebarCollapsed && (
+                  <div className="absolute bottom-full left-0 right-0 mb-2 bg-gray-800/95 backdrop-blur-sm rounded-xl shadow-2xl border border-gray-700 overflow-hidden">
+                    {profileMenuItems.map((item) => {
+                      return (
+                        <button
+                          key={item.name}
+                          onClick={() => handleNavigation(item.href)}
+                          className="w-full flex items-center space-x-3 px-4 py-3 text-sm text-gray-200 hover:bg-gray-700/50 transition-all duration-200"
+                        >
+                          <span>{item.name}</span>
+                        </button>
+                      );
+                    })}
+                    <div className="border-t border-gray-700">
                       <button
-                        key={item.name}
-                        onClick={() => handleNavigation(item.href)}
-                        className="w-full flex items-center space-x-3 px-4 py-3 text-sm text-gray-200 hover:bg-gray-700/50 transition-all duration-200"
+                        onClick={handleLogout}
+                        className="w-full flex items-center space-x-3 px-4 py-3 text-sm text-red-400 hover:bg-red-900/20 transition-all duration-200"
                       >
-                        <span>{item.name}</span>
+                        <span>Sign Out</span>
                       </button>
                     );
                   })}
@@ -377,8 +430,8 @@ export function ChatLayout({ children }: ChatLayoutProps) {
                       <span>Sign Out</span>
                     </button>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>

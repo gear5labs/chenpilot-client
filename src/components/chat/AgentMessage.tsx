@@ -249,13 +249,41 @@ export default function AgentMessage({
     try {
       await navigator.clipboard.writeText(content);
       setCopied(true);
-      if (onCopy) {
-        onCopy(content);
-      }
+      if (onCopy) onCopy(content);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       console.error("Failed to copy text:", error);
     }
+  };
+
+  // Track a running offset so each text node in the markdown gets the right
+  // global match index. Re-created on each component render, stable within
+  // the single ReactMarkdown render pass.
+  const offsetTracker = useMemo(
+    () => ({ current: searchMatchOffset }),
+    [searchMatchOffset]
+  );
+
+  /**
+   * Wrap a child string (text node inside a ReactMarkdown component) with
+   * HighlightedText, advancing the running offset by the number of matches.
+   */
+  const wrapChildren = (children: React.ReactNode): React.ReactNode => {
+    if (!searchQuery) return children;
+    if (typeof children === 'string') {
+      const matchCount = findMatches(children, searchQuery).length;
+      const offset = offsetTracker.current;
+      offsetTracker.current += matchCount;
+      return (
+        <HighlightedText
+          text={children}
+          query={searchQuery}
+          activeIndex={searchActiveIndex}
+          matchOffset={offset}
+        />
+      );
+    }
+    return children;
   };
 
   return (

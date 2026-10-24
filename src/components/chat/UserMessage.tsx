@@ -85,6 +85,40 @@ export default function UserMessage({
     }
   };
 
+  // Track a running offset so each text node in the markdown gets the right
+  // global match index. We accumulate it across node renders using a ref-like
+  // mutable object that is re-created on each component render (but stable
+  // within the single ReactMarkdown render pass).
+  const offsetTracker = useMemo(() => ({ current: searchMatchOffset }), [searchMatchOffset]);
+
+  /**
+   * Wrap a child string (text node inside a ReactMarkdown component) with
+   * HighlightedText, advancing the running offset by the number of matches.
+   */
+  const wrapChildren = (children: React.ReactNode): React.ReactNode => {
+    if (!searchQuery) return children;
+    if (typeof children === 'string') {
+      const matchCount = findMatches(children, searchQuery).length;
+      const offset = offsetTracker.current;
+      offsetTracker.current += matchCount;
+      return (
+        <HighlightedText
+          text={children}
+          query={searchQuery}
+          activeIndex={searchActiveIndex}
+          matchOffset={offset}
+        />
+      );
+    }
+    // React.Children are already nodes – pass through.
+    return children;
+  };
+
+  const markdownContent =
+    typeof message.content === 'string'
+      ? message.content
+      : JSON.stringify(message.content, null, 2);
+
   return (
     <div
       className={`max-w-3xl ${isPending || isQueued ? "opacity-75" : ""} ${isFailed ? "ring-1 ring-red-400" : ""} bg-[#7C3AED] text-white rounded-2xl px-6 py-4 group relative`}
