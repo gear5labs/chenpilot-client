@@ -156,8 +156,7 @@ export const SendPaymentForm: React.FC<SendPaymentFormProps> = ({
     } catch {
       // fall through to explicit fallback below
     }
-
-    try {
+  };
       const textarea = document.createElement('textarea');
       textarea.value = text;
       textarea.style.position = 'fixed';
