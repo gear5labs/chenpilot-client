@@ -94,7 +94,7 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
       stopStream();
       stopRecognition();
     };
-  }, [stopRecording]);
+  }, []);
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
