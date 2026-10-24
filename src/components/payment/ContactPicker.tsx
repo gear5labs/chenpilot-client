@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import {
   Search,
-  User,
   X,
   Star,
   Clock,
@@ -34,7 +33,7 @@ export const ContactPicker: React.FC<ContactPickerProps> = ({
       id: contact.id,
       name: contact.name,
       address: contact.address,
-      tokenType: contact.tokenType as any,
+      tokenType: contact.tokenType as string,
       avatar: contact.avatar,
       isFavorite: contact.isFavorite,
       lastUsed: contact.lastUsed,

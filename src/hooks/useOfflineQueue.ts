@@ -1,11 +1,22 @@
-import { useEffect, useCallback } from 'react';
-import { useAppDispatch, useAppSelector } from '@/store';
-import {
-  queueMessage,
-  dequeueMessage,
-  sendMessage,
-} from '@/store/slices/chatSlice';
-import toast from 'react-hot-toast';
+'use client';
+
+import { useState, useCallback, useEffect } from 'react';
+export const useOfflineQueue = () => {
+  const dispatch = useAppDispatch();
+  const { isOnline, messageQueue, error } = useAppSelector((state) => state.chat);
+
+  useEffect(() => {
+    if (error && /offline .*unavailable|browser storage is full|expired offline data/i.test(error)) {
+      toast.error(error, { id: 'offline-storage-quota' });
+    }
+  }, [error]);
+
+export interface OfflineAction {
+  id: string;
+  type: string;
+  payload: Record<string, unknown>;
+  timestamp?: number;
+}
 
 export const useOfflineQueue = () => {
   const dispatch = useAppDispatch();
@@ -27,47 +38,30 @@ export const useOfflineQueue = () => {
   const processQueue = useCallback(async () => {
     const queueCopy = [...messageQueue];
 
-    for (const queuedMsg of queueCopy) {
-      try {
-        // Send with the queued row's id so it moves queued → sending → sent instead of a
-        // second bubble being added (#266)
-        await dispatch(sendMessage({ query: queuedMsg.query, tempId: queuedMsg.id })).unwrap();
+export function useOfflineQueue() {
+  const [queue, setQueue] = useState<OfflineAction[]>([]);
 
-        // Remove from queue
-        dispatch(dequeueMessage(queuedMsg.id));
+  const isSupportedAction = useCallback((type: string): boolean => {
+    const excluded = ['send_payment', 'sign_transaction', 'transfer', 'sign'];
+    return !excluded.includes(type);
+  }, []);
 
-        toast.success('Queued message sent');
-      } catch (error: any) {
-        // The row is now `failed` with a retry action; drop it from the automatic queue
-        dispatch(dequeueMessage(queuedMsg.id));
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        toast.error(`Failed to send queued message: ${errorMsg}`);
+  const enqueueAction = useCallback((action: OfflineAction) => {
+    if (!isSupportedAction(action.type)) {
+      return false;
+    }
+    setQueue((prev) => {
+      if (prev.some((item) => item.id === action.id)) {
+        return prev;
       }
-    }
-
-    if (queueCopy.length > 0) {
-      toast.success(`All ${queueCopy.length} queued message${queueCopy.length !== 1 ? 's' : ''} sent!`);
-    }
-  }, [messageQueue, dispatch]);
-
-  const queueMessageForSending = useCallback(
-    (query: string) => {
-      const msgId = `queued_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      dispatch(
-        queueMessage({
-          id: msgId,
-          query,
-        })
-      );
-      return msgId;
-    },
-    [dispatch]
-  );
+      return [...prev, { ...action, timestamp: Date.now() }];
+    });
+    return true;
+  }, [isSupportedAction]);
 
   return {
-    isOnline,
-    messageQueue,
-    queueMessageForSending,
-    processQueue,
+    queue,
+    enqueueAction,
+    isSupportedAction,
   };
-};
+}
