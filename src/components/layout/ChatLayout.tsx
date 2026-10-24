@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAppDispatch, useAppSelector } from "@/store";
 import { logout } from "@/store/slices/authSlice";
-import { toggleTheme } from "@/store/slices/uiSlice";
 import {
   startNewChat,
   loadChatHistory,
