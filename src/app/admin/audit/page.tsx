@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppSelector } from '@/store';
 import { ChatLayout } from '@/components/layout/ChatLayout';
@@ -10,8 +10,6 @@ import apiService from '@/services/api';
 import { formatRelativeTime, formatAddress } from '@/utils/format';
 import {
   AuditLogEntry,
-  AuditLogsQueryParams,
-  AuditLogsResponse,
   AuditAction,
   AuditSeverity,
 } from '@/types';
@@ -41,8 +39,6 @@ import {
   Clock,
   Activity,
   FileText,
-  ExternalLink,
-  Loader2,
   Copy,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
