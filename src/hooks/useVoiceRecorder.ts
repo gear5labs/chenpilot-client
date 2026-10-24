@@ -80,7 +80,7 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
   const transcriptRef = useRef<string>('');
 
   // Speech recognition for live transcript
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<EventTarget | null>(null);
 
   const isSupported =
     typeof window !== 'undefined' &&
@@ -94,7 +94,7 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
       stopStream();
       stopRecognition();
     };
-  }, []);
+  }, [stopRecording]);
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -119,16 +119,16 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
 
   function startLiveTranscription() {
     if (typeof window === 'undefined') return;
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const win = window as unknown as Record<string, unknown>;
+    const SpeechRecognition = win.SpeechRecognition || win.webkitSpeechRecognition;
     if (!SpeechRecognition) return;
 
-    const recognition = new SpeechRecognition();
+    const recognition = new (SpeechRecognition as new () => { continuous: boolean; interimResults: boolean; lang: string; onresult: ((event: { results: Array<{ [index: number]: { transcript: string }; isFinal: boolean; length: number }> }) => void) | null; onerror: (() => void) | null; start: () => void; stop: () => void })();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
-    recognition.onresult = (event: any) => {
+    recognition.onresult = (event: { results: Array<{ [index: number]: { transcript: string }; isFinal: boolean; length: number }> }) => {
       let interim = '';
       let final = '';
       for (let i = 0; i < event.results.length; i++) {
