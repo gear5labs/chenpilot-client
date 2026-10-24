@@ -58,7 +58,7 @@ export default function AgentStatus({ className = '', showDetails = false }: Age
   const [isLoading, setIsLoading] = useState(false);
   const [lastCheck, setLastCheck] = useState<Date | null>(null);
 
-  const checkAgentStatus = async () => {
+  const checkAgentStatus = React.useCallback(async () => {
     setIsLoading(true);
     try {
       // Try to get status and capabilities, but don't fail if they're not available
@@ -93,7 +93,7 @@ export default function AgentStatus({ className = '', showDetails = false }: Age
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [dispatch]);
 
   useEffect(() => {
     checkAgentStatus();
