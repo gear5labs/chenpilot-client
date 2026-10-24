@@ -25,9 +25,9 @@ function validateBasicPayment() {
   const result = validateSendPayment(paymentData);
   
   if (result.isValid) {
-    console.log('Payment is valid:', paymentData);
+    // Valid payment check
   } else {
-    console.error('Validation errors:', result.errors);
+    // Validation failed
   }
 }
 
@@ -44,9 +44,9 @@ function validatePaymentWithMemo() {
   const result = validateSendPayment(paymentData);
   
   if (result.isValid) {
-    console.log('Payment with memo is valid:', paymentData);
+    // Valid payment with memo
   } else {
-    console.error('Validation errors:', result.errors);
+    // Validation failed
   }
 }
 
@@ -61,10 +61,9 @@ function validateWithZodSchema() {
       memoType: 'text' as const,
     };
 
-    const validatedData = sendPaymentSchema.parse(paymentData);
-    console.log('Zod validated data:', validatedData);
-  } catch (error) {
-    console.error('Zod validation error:', error);
+    sendPaymentSchema.parse(paymentData);
+  } catch {
+    // Zod validation error
   }
 }
 
@@ -78,9 +77,8 @@ function sanitizePaymentInputExample() {
     memoType: 'TEXT',
   };
 
-  const sanitizedData = sanitizePaymentInput(rawData);
-  console.log('Sanitized data:', sanitizedData);
-  // Output: {
+  sanitizePaymentInput(rawData);
+  // Sanitized data output
   //   recipientAddress: 'GABCD1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890',
   //   amount: '100.50',
   //   tokenType: 'XLM',
@@ -91,35 +89,22 @@ function sanitizePaymentInputExample() {
 
 // Example 5: Memo validation
 function validateMemoExamples() {
-  // Valid ID memo
-  console.log('ID memo valid:', validateMemo('12345', 'id')); // true
-  
-  // Invalid ID memo (contains letters)
-  console.log('ID memo invalid:', validateMemo('abc123', 'id')); // false
-  
-  // Valid hash memo
-  console.log('Hash memo valid:', validateMemo('a'.repeat(64), 'hash')); // true
-  
-  // Invalid hash memo (too short)
-  console.log('Hash memo invalid:', validateMemo('abc', 'hash')); // false
-  
-  // Valid text memo
-  console.log('Text memo valid:', validateMemo('Hello World', 'text')); // true
-  
-  // Invalid text memo (too long)
-  console.log('Text memo invalid:', validateMemo('a'.repeat(29), 'text')); // false
+  validateMemo('12345', 'id');
+  validateMemo('abc123', 'id');
+  validateMemo('a'.repeat(64), 'hash');
+  validateMemo('abc', 'hash');
+  validateMemo('Hello World', 'text');
+  validateMemo('a'.repeat(29), 'text');
 }
 
 // Example 6: Amount range validation
 function validateAmountExamples() {
-  console.log('Valid amount:', validateAmountRange('100.5')); // true
-  console.log('Too small:', validateAmountRange('0.00000001')); // false (below min)
-  console.log('Too large:', validateAmountRange('1000001')); // false (above max)
-  console.log('Invalid format:', validateAmountRange('abc')); // false (NaN)
-  
-  // Custom range
-  console.log('Custom range valid:', validateAmountRange('50', 10, 100)); // true
-  console.log('Custom range invalid:', validateAmountRange('5', 10, 100)); // false
+  validateAmountRange('100.5');
+  validateAmountRange('0.00000001');
+  validateAmountRange('1000001');
+  validateAmountRange('abc');
+  validateAmountRange('50', 10, 100);
+  validateAmountRange('5', 10, 100);
 }
 
 // Example 7: React Hook Form integration (conceptual)
@@ -169,9 +154,8 @@ function handleValidationError() {
   const result = validateSendPayment(invalidData);
   
   if (!result.isValid) {
-    // Display user-friendly error messages
+    // Error handling
     result.errors.forEach((error) => {
-      console.error('Error:', error);
       // Could map error paths to form fields for UI display
     });
   }
