@@ -26,7 +26,7 @@ export function AgentMarkdown({ children }: AgentMarkdownProps) {
       skipHtml
       urlTransform={markdownUrlTransform}
       components={{
-        a: ({ href, children, node: _node, ...props }: any) => {
+        a: ({ href, children, ...props }: any) => {
           const safeHref = sanitizeLinkUrl(href);
           if (!safeHref) {
             // Unsafe or empty URL: keep the text, drop the link
@@ -62,17 +62,17 @@ export function AgentMarkdown({ children }: AgentMarkdownProps) {
             </a>
           );
         },
-        p: ({ children, node: _node, ...props }: any) => (
+        p: ({ children, ...props }: any) => (
           <p className="mb-3 last:mb-0" {...props}>
             {children}
           </p>
         ),
-        strong: ({ children, node: _node, ...props }: any) => (
+        strong: ({ children, ...props }: any) => (
           <strong className="font-semibold text-white" {...props}>
             {children}
           </strong>
         ),
-        em: ({ children, node: _node, ...props }: any) => (
+        em: ({ children, ...props }: any) => (
           <em className="italic text-gray-300" {...props}>
             {children}
           </em>
@@ -88,37 +88,37 @@ export function AgentMarkdown({ children }: AgentMarkdownProps) {
           );
         },
         pre: ({ children }: any) => <>{children}</>,
-        ul: ({ children, node: _node, ...props }: any) => (
+        ul: ({ children, ...props }: any) => (
           <ul className="list-disc list-inside mb-3 space-y-1" {...props}>
             {children}
           </ul>
         ),
-        ol: ({ children, node: _node, ...props }: any) => (
+        ol: ({ children, ...props }: any) => (
           <ol className="list-decimal list-inside mb-3 space-y-1" {...props}>
             {children}
           </ol>
         ),
-        li: ({ children, node: _node, ...props }: any) => (
+        li: ({ children, ...props }: any) => (
           <li className="text-gray-200" {...props}>
             {children}
           </li>
         ),
-        h1: ({ children, node: _node, ...props }: any) => (
+        h1: ({ children, ...props }: any) => (
           <h1 className="text-2xl font-bold text-white mb-4" {...props}>
             {children}
           </h1>
         ),
-        h2: ({ children, node: _node, ...props }: any) => (
+        h2: ({ children, ...props }: any) => (
           <h2 className="text-xl font-bold text-white mb-3" {...props}>
             {children}
           </h2>
         ),
-        h3: ({ children, node: _node, ...props }: any) => (
+        h3: ({ children, ...props }: any) => (
           <h3 className="text-lg font-semibold text-white mb-2" {...props}>
             {children}
           </h3>
         ),
-        blockquote: ({ children, node: _node, ...props }: any) => (
+        blockquote: ({ children, ...props }: any) => (
           <blockquote
             className="border-l-4 border-purple-500 pl-4 italic text-gray-300 my-4"
             {...props}

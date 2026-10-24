@@ -3,20 +3,13 @@
 import React, { useState, useId } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { sendPaymentSchema, validateSendPayment, sanitizePaymentInput } from '@/utils/validation';
-import { SendPaymentRequest, ContactSelection, Contact } from '@/types';
-import { SUPPORTED_ASSETS } from '@/types';
-import React, { useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { sendPaymentSchema, validateSendPayment, sanitizePaymentInput } from '@/utils/validation';
-import { Contact, PaymentStatusResult, PaymentSubmissionResult, SendPaymentRequest, ContactSelection } from '@/types';
+import { sendPaymentSchema } from '@/utils/validation';
+import { Contact, PaymentStatusResult, PaymentSubmissionResult, SendPaymentRequest, ContactSelection, SUPPORTED_ASSETS } from '@/types';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { StellarNetworkBadge } from '@/components/wallet/StellarNetworkBadge';
-import { createPaymentIdempotencyKey, isPaymentOutcomeUnknown } from '@/utils/paymentOutcome';
 import ContactPicker from './ContactPicker';
 import {
   Send,
@@ -35,35 +28,20 @@ import { calculateSpendableNativeBalance } from '@/utils/nativeBalance';
 import toast from 'react-hot-toast';
 
 interface SendPaymentFormProps {
-  onSubmit: (data: SendPaymentRequest) => Promise<void>;
-  contacts: Contact[];
-  isLoading?: boolean;
-  defaultTokenType?: typeof SUPPORTED_ASSETS[number];
-  /**
-   * The address of the currently signed-in wallet.  When provided the form
-   * will warn the user if they try to send to themselves.  The warning is
-   * advisory only — the user can still submit after acknowledging it.
-   * Server-side authorisation must never rely on this client-side check.
-   */
-  senderAddress?: string;
-}
-
-/**
- * Normalise a Stellar-style address for comparison:
- * trim whitespace and convert to upper-case.
- * Never use this to authorise a transaction; it is a UX hint only.
- */
-function normalizeAddress(addr: string): string {
-  return addr.trim().toUpperCase();
   onSubmit: (data: SendPaymentRequest, idempotencyKey: string) => Promise<PaymentSubmissionResult>;
   onCheckStatus: (idempotencyKey: string) => Promise<PaymentStatusResult>;
   contacts: Contact[];
   isOnline: boolean;
   isLoading?: boolean;
-  defaultTokenType?: 'XLM' | 'USDC' | 'USDT' | 'BTC' | 'ETH' | 'AQUA';
+  defaultTokenType?: typeof SUPPORTED_ASSETS[number];
   nativeBalance?: string;
   requiredReserve?: string;
   availableBalance?: number | string;
+  senderAddress?: string;
+}
+
+function normalizeAddress(addr: string): string {
+  return addr.trim().toUpperCase();
 }
 
 export const SendPaymentForm: React.FC<SendPaymentFormProps> = ({

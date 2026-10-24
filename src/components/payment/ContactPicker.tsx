@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import {
   Search,
-  User,
   X,
   Star,
   Clock,
