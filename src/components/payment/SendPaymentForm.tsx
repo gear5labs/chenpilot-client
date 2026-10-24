@@ -1,9 +1,5 @@
 'use client';
 
-import React, { useState, useId } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { sendPaymentSchema, validateSendPayment, sanitizePaymentInput } from '@/utils/validation';
 import React, { useState, useId, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
