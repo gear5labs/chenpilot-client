@@ -5,6 +5,10 @@ on:
     branches:
       - "*"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 # Minimal permissions — read-only on contents and PRs for commenting
 permissions:
   contents: read
