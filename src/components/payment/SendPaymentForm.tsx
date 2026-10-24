@@ -4,13 +4,11 @@ import React, { useState, useId } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { sendPaymentSchema, validateSendPayment, sanitizePaymentInput } from '@/utils/validation';
-import { SendPaymentRequest, ContactSelection, Contact } from '@/types';
-import { SUPPORTED_ASSETS } from '@/types';
-import React, { useRef, useState } from 'react';
+import React, { useState, useId, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { sendPaymentSchema, validateSendPayment, sanitizePaymentInput } from '@/utils/validation';
-import { Contact, PaymentStatusResult, PaymentSubmissionResult, SendPaymentRequest, ContactSelection } from '@/types';
+import { Contact, PaymentStatusResult, PaymentSubmissionResult, SendPaymentRequest, ContactSelection, SUPPORTED_ASSETS } from '@/types';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -55,15 +53,6 @@ interface SendPaymentFormProps {
  */
 function normalizeAddress(addr: string): string {
   return addr.trim().toUpperCase();
-  onSubmit: (data: SendPaymentRequest, idempotencyKey: string) => Promise<PaymentSubmissionResult>;
-  onCheckStatus: (idempotencyKey: string) => Promise<PaymentStatusResult>;
-  contacts: Contact[];
-  isOnline: boolean;
-  isLoading?: boolean;
-  defaultTokenType?: 'XLM' | 'USDC' | 'USDT' | 'BTC' | 'ETH' | 'AQUA';
-  nativeBalance?: string;
-  requiredReserve?: string;
-  availableBalance?: number | string;
 }
 
 export const SendPaymentForm: React.FC<SendPaymentFormProps> = ({

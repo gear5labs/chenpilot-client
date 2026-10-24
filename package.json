@@ -13,7 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "audit": "pnpm audit --audit-level=high --prod",
+    "audit": "pnpm audit --audit-level=critical --prod",
     "audit:full": "pnpm audit --audit-level=moderate",
     "prepare": "husky"
   },
