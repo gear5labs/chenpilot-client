@@ -13,7 +13,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Info,
-  Droplets
+  Droplets,
+  DollarSign
 } from 'lucide-react';
 
 interface LiquidityPoolStatsProps {
