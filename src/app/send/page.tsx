@@ -42,25 +42,32 @@ export default function SendPaymentPage() {
     });
 
 
-  const handleSendPayment = async (data: SendPaymentRequest) => {
-    // NOTE: the self-transfer comparison in SendPaymentForm is a UX hint only.
-    // Server-side authorisation and balance checks are the authoritative gate.
+  const handleSendPayment = async (data: SendPaymentRequest, idempotencyKey: string): Promise<PaymentSubmissionResult> => {
     const toastId = toast.loading('Sending payment…');
     try {
-      const response = await apiService.sendPayment(data);
+      const response = await apiService.sendPayment(data, idempotencyKey);
 
       if (response.success) {
         toast.success('Payment sent successfully!', { id: toastId });
         router.push('/transactions');
+        return response;
       } else {
         toast.error(
           (response as { message?: string }).message || 'Payment failed. Please try again.',
           { id: toastId },
         );
+        return response;
       }
     } catch (error: unknown) {
       const message =
         (error as { response?: { data?: { message?: string } }; message?: string })
+          ?.response?.data?.message ||
+        (error as { message?: string })?.message ||
+        'Failed to send payment';
+      toast.error(message, { id: toastId });
+      throw error;
+    }
+  };
           ?.response?.data?.message ||
         (error as { message?: string })?.message ||
         'Failed to send payment';
