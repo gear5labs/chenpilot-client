@@ -7,8 +7,6 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { 
   TrendingUp, 
-  TrendingDown, 
-  DollarSign, 
   Activity, 
   BarChart3, 
   RefreshCw,
