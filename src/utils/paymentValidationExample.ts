@@ -155,7 +155,7 @@ function handleValidationError() {
   
   if (!result.isValid) {
     // Error handling
-    result.errors.forEach((error) => {
+    result.errors.forEach(() => {
       // Could map error paths to form fields for UI display
     });
   }
@@ -191,12 +191,10 @@ async function sendPaymentMiddleware(paymentData: SendPaymentRequest) {
   // Step 3: Additional business logic checks
   if (parseFloat(sanitizedData.amount) > 10000) {
     // Require additional confirmation for large amounts
-    console.warn('Large payment detected - requires confirmation');
   }
   
   // Step 4: Process payment
   // return await apiService.sendPayment(sanitizedData);
-  console.log('Payment processed:', sanitizedData);
 }
 
 export {
