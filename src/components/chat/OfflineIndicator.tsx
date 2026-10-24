@@ -3,7 +3,8 @@
 import React, { useEffect } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { setOnlineStatus, loadMessageQueue } from '@/store/slices/chatSlice';
-import { WifiOff, Wifi } from 'lucide-react';
+import { useSocketConnection } from '@/hooks/useSocket';
+import { WifiOff, Wifi, RefreshCw, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
 interface OfflineIndicatorProps {
@@ -17,6 +18,7 @@ export const OfflineIndicator: React.FC<OfflineIndicatorProps> = ({
 }) => {
   const dispatch = useAppDispatch();
   const { isOnline, messageQueue } = useAppSelector((state) => state.chat);
+const { connectionState } = useSocketConnection();
   const [connectionRestored, setConnectionRestored] = React.useState(false);
 
   useEffect(() => {
@@ -44,28 +46,34 @@ export const OfflineIndicator: React.FC<OfflineIndicatorProps> = ({
     };
   }, [dispatch]);
 
-  useEffect(() => {
-    if (!connectionRestored || canRetry || messageQueue.length > 0) return;
+const isEffectivelyOnline = isOnline && connectionState === 'connected';
 
-    const timeout = window.setTimeout(() => setConnectionRestored(false), 5000);
-    return () => window.clearTimeout(timeout);
-  }, [canRetry, connectionRestored, messageQueue.length]);
-
-  if (isOnline && messageQueue.length === 0 && !connectionRestored) {
+  if (isEffectivelyOnline && messageQueue.length === 0 && connectionState === 'connected' && !connectionRestored) {
     return null;
   }
 
+  const getBadgeStyle = () => {
+    switch (connectionState) {
+      case 'connected':
+        return 'bg-blue-900/80 border border-blue-700 text-blue-200';
+      case 'reconnecting':
+        return 'bg-amber-900/80 border border-amber-700 text-amber-200 animate-pulse';
+      case 'failed':
+        return 'bg-red-900/80 border border-red-700 text-red-200 animate-pulse';
+      case 'disconnected':
+      case 'unknown':
+      default:
+        return 'bg-red-900/80 border border-red-700 text-red-200 animate-pulse';
+    }
+  };
+
   return (
     <div
-      className={`fixed bottom-20 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 text-sm font-medium z-40 transition-all duration-300 ${
-        isOnline
-          ? 'bg-blue-900/80 border border-blue-700 text-blue-200'
-          : 'bg-red-900/80 border border-red-700 text-red-200 animate-pulse'
-      }`}
+      className={`fixed bottom-20 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 text-sm font-medium z-40 transition-all duration-300 ${getBadgeStyle()}`}
     >
-      {isOnline ? (
+      {connectionState === 'connected' && isOnline ? (
         <>
-          <Wifi className="h-4 w-4" />
+          <Wifi className="h-4 w-4 text-blue-300" />
           <span>
             {messageQueue.length > 0
               ? `Online • ${messageQueue.length} message${messageQueue.length !== 1 ? 's' : ''} queued`
@@ -84,11 +92,25 @@ export const OfflineIndicator: React.FC<OfflineIndicatorProps> = ({
             </Button>
           )}
         </>
+      ) : connectionState === 'reconnecting' ? (
+        <>
+          <RefreshCw className="h-4 w-4 animate-spin text-amber-300" />
+          <span>
+            Socket reconnecting... {messageQueue.length > 0 ? `• ${messageQueue.length} queued` : ''}
+          </span>
+        </>
+      ) : connectionState === 'failed' ? (
+        <>
+          <AlertCircle className="h-4 w-4 text-red-300" />
+          <span>
+            Connection failed • Retrying... {messageQueue.length > 0 ? `• ${messageQueue.length} queued` : ''}
+          </span>
+        </>
       ) : (
         <>
-          <WifiOff className="h-4 w-4" />
+          <WifiOff className="h-4 w-4 text-red-300" />
           <span>
-            You are offline • network actions are paused{messageQueue.length > 0
+{connectionState === 'unknown' ? 'Connecting to socket...' : "You are offline • network actions are paused"}{messageQueue.length > 0
               ? ` • ${messageQueue.length} message${messageQueue.length !== 1 ? 's' : ''} queued`
               : ''}
           </span>

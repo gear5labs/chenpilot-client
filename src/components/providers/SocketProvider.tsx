@@ -8,12 +8,13 @@ import {
   SocketConnectionState,
   initializeSocketManager,
 } from '@/services/socketManager';
+import { SocketConnectionState as AppSocketConnectionState } from '@/types';
 
 interface SocketContextType {
   socket: Socket | null;
   socketManager: SocketManager | null;
   isConnected: boolean;
-  connectionState: SocketConnectionState;
+connectionState: SocketConnectionState;
   reconnectAttempt: number;
   maxReconnectAttempts: number;
   retry: () => void;
@@ -37,15 +38,17 @@ interface SocketProviderProps {
 export function SocketProvider({ children, config, configKey, autoConnect = true }: SocketProviderProps) {
   const [socketManager, setSocketManager] = useState<SocketManager | null>(null);
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [connectionState, setConnectionState] = useState<SocketConnectionState>('idle');
+const [connectionState, setConnectionState] = useState<SocketConnectionState>('idle');
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const isConnected = connectionState === 'connected';
 
   // Stable handler refs so the same function identity is used for on() and off().
   // Using refs avoids declaring the handlers as useCallback dependencies and
   // ensures off() can always remove exactly what on() registered.
-  const handleConnect = useRef(() => setIsConnected(true));
-  const handleDisconnect = useRef(() => setIsConnected(false));
+  const handleConnect = useRef(() => setConnectionState('connected'));
+  const handleDisconnect = useRef(() => setConnectionState('disconnected'));
+  const handleConnectError = useRef(() => setConnectionState('failed'));
+  const handleReconnectAttempt = useRef(() => setConnectionState('reconnecting'));
 
   /**
    * Registers the connect/disconnect state handlers exactly once per manager.
@@ -54,36 +57,45 @@ export function SocketProvider({ children, config, configKey, autoConnect = true
   const registerStateHandlers = useCallback((manager: SocketManager) => {
     manager.off('connect', handleConnect.current);
     manager.off('disconnect', handleDisconnect.current);
+    manager.off('connect_error', handleConnectError.current);
+    manager.off('reconnect_attempt', handleReconnectAttempt.current);
+
     manager.on('connect', handleConnect.current);
     manager.on('disconnect', handleDisconnect.current);
+    manager.on('connect_error', handleConnectError.current);
+    manager.on('reconnect_attempt', handleReconnectAttempt.current);
   }, []);
 
   useEffect(() => {
     const manager = initializeSocketManager(config);
     setSocketManager(manager);
-    const unsubscribeState = manager.onStateChange((state, attempt) => {
+const unsubscribeState = manager.onStateChange((state, attempt) => {
       setConnectionState(state);
       setReconnectAttempt(attempt);
     });
+    setConnectionState('disconnected');
 
     if (autoConnect) {
+      setConnectionState('reconnecting');
       const socketInstance = manager.connect();
       setSocket(socketInstance);
-      setIsConnected(socketInstance.connected);
+      setConnectionState(socketInstance.connected ? 'connected' : 'disconnected');
       registerStateHandlers(manager);
     }
 
     return () => {
       unsubscribeState();
       manager.disconnect();
+      setConnectionState('disconnected');
     };
   }, [config, configKey, autoConnect, registerStateHandlers]);
 
   const connect = useCallback(() => {
     if (socketManager) {
+      setConnectionState('reconnecting');
       const socketInstance = socketManager.connect();
       setSocket(socketInstance);
-      setIsConnected(socketInstance.connected);
+      setConnectionState(socketInstance.connected ? 'connected' : 'disconnected');
       registerStateHandlers(socketManager);
     }
   }, [socketManager, registerStateHandlers]);
@@ -100,7 +112,7 @@ export function SocketProvider({ children, config, configKey, autoConnect = true
     if (socketManager) {
       socketManager.disconnect();
       setSocket(null);
-      setIsConnected(false);
+      setConnectionState('disconnected');
     }
   };
 
@@ -124,7 +136,7 @@ export function SocketProvider({ children, config, configKey, autoConnect = true
     socket,
     socketManager,
     isConnected,
-    connectionState,
+connectionState,
     reconnectAttempt,
     maxReconnectAttempts: socketManager?.getMaxReconnectAttempts() ?? 0,
     retry,
