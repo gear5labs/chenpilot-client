@@ -190,7 +190,6 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
         stopStream();
         stopRecognition();
 
-        const elapsed = Math.round((Date.now() - startTimeRef.current) / 1000);
         const effectiveMime = mimeTypeRef.current || 'audio/webm';
         const blob = new Blob(chunksRef.current, { type: effectiveMime });
 
@@ -239,7 +238,7 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
       setStatus('idle');
       throw err; // caller (ChatEngine) shows the toast
     }
-  }, [isSupported]);
+  }, [isSupported, stopRecording]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current?.state === 'recording') {
