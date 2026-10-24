@@ -4,8 +4,6 @@ import React, { useEffect, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { updateAgentStatus } from '@/store/slices/chatSlice';
 import { 
-  Wifi, 
-  WifiOff, 
   Activity, 
   Zap, 
   DollarSign, 
