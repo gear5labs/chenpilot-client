@@ -152,32 +152,47 @@ export const sendPaymentSchema = z.object({
     });
   }
 
-  if (data.memo && data.memo.length > 0 && !data.memoType) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: VALIDATION_MESSAGES.MEMO_TYPE_REQUIRED,
-      path: ['memoType'],
-    });
-    return;
-  }
-
-  if (data.memo && data.memoType === 'id') {
-    if (!SECURITY_VALIDATION.MEMO_ID_REGEX.test(data.memo)) {
+  if (data.memo && data.memo.length > 0) {
+    if (!data.memoType || data.memoType === 'none') {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: VALIDATION_MESSAGES.MEMO_ID_INVALID,
-        path: ['memo'],
+        message: VALIDATION_MESSAGES.MEMO_TYPE_REQUIRED,
+        path: ['memoType'],
       });
+      return;
     }
-  }
 
-  if (data.memo && data.memoType === 'hash') {
-    if (!SECURITY_VALIDATION.MEMO_HASH_REGEX.test(data.memo)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: VALIDATION_MESSAGES.MEMO_HASH_INVALID,
-        path: ['memo'],
-      });
+    if (data.memoType === 'text') {
+      if (new TextEncoder().encode(data.memo).length > PAYMENT_LIMITS.MAX_MEMO_LENGTH) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: VALIDATION_MESSAGES.MEMO_TOO_LONG,
+          path: ['memo'],
+        });
+      }
+    }
+
+    if (data.memoType === 'id') {
+      if (
+        !SECURITY_VALIDATION.MEMO_ID_REGEX.test(data.memo) ||
+        BigInt(data.memo) > 18446744073709551615n
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: VALIDATION_MESSAGES.MEMO_ID_INVALID,
+          path: ['memo'],
+        });
+      }
+    }
+
+    if (data.memoType === 'hash') {
+      if (!SECURITY_VALIDATION.MEMO_HASH_REGEX.test(data.memo)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: VALIDATION_MESSAGES.MEMO_HASH_INVALID,
+          path: ['memo'],
+        });
+      }
     }
   }
 });
