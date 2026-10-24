@@ -33,7 +33,7 @@ export const ContactPicker: React.FC<ContactPickerProps> = ({
       id: contact.id,
       name: contact.name,
       address: contact.address,
-      tokenType: contact.tokenType as any,
+      tokenType: contact.tokenType as 'XLM' | 'USDC' | 'AQUA' | 'BTC' | 'ETH',
       avatar: contact.avatar,
       isFavorite: contact.isFavorite,
       lastUsed: contact.lastUsed,
