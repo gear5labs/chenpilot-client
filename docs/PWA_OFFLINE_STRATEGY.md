@@ -11,9 +11,10 @@ This document outlines the Progressive Web App (PWA) configuration and caching b
 
 ---
 
-## 2. Offline Caching Strategy
+## 2. Offline Caching & Service Worker Status
+- **Implementation Status**: This Next.js web client relies on Next.js native HTTP caching, browser standard HTTP headers, and local state persistence, alongside a production service worker configured via explicit allowlists and sensitive-response exclusions.
 - **Explicit public-resource allowlist**: The production service worker caches only same-origin `GET` requests for `/_next/static/*` build assets and the exact public files listed in `public/offline-cache-policy.js` (the manifest, favicon, and named static images/SVGs). It does not cache HTML routes, image-optimization responses, arbitrary public paths, or cross-origin resources.
-- **Sensitive response exclusion**: Auth, protected, account/wallet/balance, contact, and transaction paths are explicitly denied before cache eligibility. In practice, all non-allowlisted requests bypass Cache Storage, so new backend endpoints are not cacheable by default. Static responses marked `private` or `no-store` are also not persisted.
+- **Sensitive response exclusion**: Auth, protected, account/wallet/balance, contact, and transaction paths are explicitly denied before cache eligibility. To prevent stale session data or security leaks, all API routes matching `/api/auth/*` and protected endpoints bypass local caching and hit live server endpoints directly. Static responses marked `private` or `no-store` are also not persisted.
 - **Tested patterns**: `src/app/offlineCachePolicy.test.ts` verifies allowed build/static resources, denies navigation and image optimization routes, and checks auth, balance, contact, and transaction endpoint patterns.
 - The worker is registered only in production. It uses a cache-first strategy for allowlisted static resources; there is no API response cache or runtime fallback for authenticated HTML.
 
