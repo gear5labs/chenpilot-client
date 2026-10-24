@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import dynamic from "next/dynamic";
 import Header from "@/components/(home)/layout/header";
 
@@ -25,7 +25,7 @@ const Footer = dynamic(() => import("@/components/(home)/layout/footer"), {
 
 export default function Home() {
   useEffect(() => {
-    const handleMouseMove = (_e: MouseEvent) => {};
+    const handleMouseMove = () => {};
     window.addEventListener("mousemove", handleMouseMove);
     return () => window.removeEventListener("mousemove", handleMouseMove);
   }, []);
