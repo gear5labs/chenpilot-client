@@ -6,10 +6,8 @@ import { useAppDispatch, useAppSelector } from "@/store";
 import { logout } from "@/store/slices/authSlice";
 import { toggleTheme } from "@/store/slices/uiSlice";
 import {
-  clearMessages,
   startNewChat,
   loadChatHistory,
-  deleteChatHistory,
   loadConversationsLocally,
   deleteConversation,
   setCurrentConversation,
@@ -29,10 +27,10 @@ interface ChatLayoutProps {
 
 export function ChatLayout({ children }: ChatLayoutProps) {
   const router = useRouter();
-  const pathname = usePathname();
+  usePathname();
   const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
-  const theme = useAppSelector((state) => state.ui) || { mode: "dark" };
+  useAppSelector((state) => state.ui);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -123,7 +121,7 @@ export function ChatLayout({ children }: ChatLayoutProps) {
       await dispatch(logout()).unwrap();
       toast.success("Successfully logged out!");
       router.push("/auth/login");
-    } catch (error: any) {
+    } catch (error: unknown) {
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -132,9 +130,7 @@ export function ChatLayout({ children }: ChatLayoutProps) {
     }
   };
 
-  const handleThemeToggle = () => {
-    dispatch(toggleTheme());
-  };
+
 
   // Load conversations from localStorage on component mount
   React.useEffect(() => {
