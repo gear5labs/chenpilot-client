@@ -62,7 +62,6 @@ export const createContactSchema = z.object({
   name: nameSchema,
   address: stellarAddressSchema,
   tokenType: z.enum(SUPPORTED_ASSETS, {
-  tokenType: z.enum(['XLM', 'STRK', 'USDC', 'USDT', 'BTC', 'ETH', 'AQUA'], {
     required_error: 'Please select a token type',
     invalid_type_error: `Unsupported token type. Supported tokens are: ${SUPPORTED_ASSETS.join(', ')}`,
   }),
@@ -75,7 +74,6 @@ export const updateContactSchema = z.object({
   tokenType: z.enum(SUPPORTED_ASSETS, {
     invalid_type_error: `Unsupported token type. Supported tokens are: ${SUPPORTED_ASSETS.join(', ')}`,
   }).optional(),
-  tokenType: z.enum(['XLM', 'STRK', 'USDC', 'USDT', 'BTC', 'ETH', 'AQUA']).optional(),
   note: z.string().max(280, 'Contact notes are limited to 280 characters').optional(),
 });
 
