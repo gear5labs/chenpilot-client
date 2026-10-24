@@ -10,6 +10,9 @@ import { ThemeProvider } from "./ThemeProvider";
 import { LanguageProvider } from "./LanguageProvider";
 import apiService from "@/services/api";
 import { SocketProvider } from "./SocketProvider";
+import { SessionManagementProvider } from "./SessionManagementProvider";
+import { PresenceProvider } from "./PresenceProvider";
+import { SessionExpirationWarning } from "../auth/SessionExpirationWarning";
 import { CHAT_MESSAGE_EVENT } from "@/hooks/useChatResync";
 import { TransactionToastListener } from "@/components/TransactionToastListener";
 
