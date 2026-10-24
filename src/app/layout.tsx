@@ -21,6 +21,12 @@ export const metadata: Metadata = {
     "AI-powered multi-agent system that simplifies how users interact with Bitcoin and Starknet",
   keywords: ["DeFi", "Starknet", "Bitcoin", "AI", "Cross-chain", "Crypto"],
   authors: [{ name: "ChenPilot Team" }],
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "ChenPilot",
+  },
 };
 
 export default function RootLayout({
