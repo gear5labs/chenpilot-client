@@ -187,6 +187,80 @@ describe('useSocketEvent', () => {
   });
 });
 
+describe('useSocketConnection State and Transitions', () => {
+  it('supports initial unknown connection state', () => {
+    capturedSocketContext = createMockContext({
+      isConnected: false,
+    });
+    (capturedSocketContext as any).connectionState = 'unknown';
+
+    const { result } = renderHook(() => useSocketConnection());
+
+    expect(result.current.connectionState).toBe('unknown');
+    expect(result.current.isConnected).toBe(false);
+  });
+
+  it('transitions through connected, reconnecting, disconnected, and failed states', () => {
+    let connectionState = 'unknown' as any;
+    let isConnected = false;
+    const connect = vi.fn();
+    const disconnect = vi.fn();
+
+    capturedSocketContext = createMockContext({
+      isConnected,
+      connect,
+      disconnect,
+    });
+    (capturedSocketContext as any).connectionState = connectionState;
+
+    const { result, rerender } = renderHook(() => useSocketConnection());
+    expect(result.current.connectionState).toBe('unknown');
+
+    // Transition to connecting/reconnecting
+    connectionState = 'reconnecting';
+    (capturedSocketContext as any).connectionState = connectionState;
+    rerender();
+    expect(result.current.connectionState).toBe('reconnecting');
+
+    // Transition to connected
+    connectionState = 'connected';
+    isConnected = true;
+    capturedSocketContext = createMockContext({
+      isConnected,
+      connect,
+      disconnect,
+    });
+    (capturedSocketContext as any).connectionState = connectionState;
+    rerender();
+    expect(result.current.connectionState).toBe('connected');
+    expect(result.current.isConnected).toBe(true);
+
+    // Transition to failed
+    connectionState = 'failed';
+    isConnected = false;
+    capturedSocketContext = createMockContext({
+      isConnected,
+      connect,
+      disconnect,
+    });
+    (capturedSocketContext as any).connectionState = connectionState;
+    rerender();
+    expect(result.current.connectionState).toBe('failed');
+    expect(result.current.isConnected).toBe(false);
+
+    // Transition to disconnected
+    connectionState = 'disconnected';
+    capturedSocketContext = createMockContext({
+      isConnected,
+      connect,
+      disconnect,
+    });
+    (capturedSocketContext as any).connectionState = connectionState;
+    rerender();
+    expect(result.current.connectionState).toBe('disconnected');
+  });
+});
+
 describe('useSocketConnection', () => {
   it('returns connection controls', () => {
     const connect = vi.fn();

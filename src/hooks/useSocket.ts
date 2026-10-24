@@ -11,7 +11,7 @@ export function useSocket() {
     socket: context.socket,
     socketManager: context.socketManager,
     isConnected: context.isConnected,
-    connectionState,
+connectionState,
     isReconnecting: connectionState === 'reconnecting',
     isExhausted: connectionState === 'exhausted',
     reconnectAttempt: context.reconnectAttempt ?? 0,
@@ -63,7 +63,6 @@ export function useSocketConnection() {
     connect,
     disconnect,
   } = useSocket();
-
   return {
     isConnected,
     connectionState,

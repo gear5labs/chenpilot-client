@@ -10,7 +10,6 @@ import { ThemeProvider } from "./ThemeProvider";
 import { LanguageProvider } from "./LanguageProvider";
 import apiService from "@/services/api";
 import { SocketProvider } from "./SocketProvider";
-import apiService from "@/services/api";
 import { CHAT_MESSAGE_EVENT } from "@/hooks/useChatResync";
 import { TransactionToastListener } from "@/components/TransactionToastListener";
 import { ToastOverflowManager } from "@/components/providers/ToastOverflowManager";
