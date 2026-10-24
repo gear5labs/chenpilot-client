@@ -31,6 +31,16 @@ interface ContactsState {
   isLoading: boolean;
   error: string | null;
   selectedContact: Contact | null;
+  mutating: {
+    create: boolean;
+    update: string[];
+    delete: string[];
+  };
+  mutationError: {
+    create: string | null;
+    update: Record<string, string>;
+    delete: Record<string, string>;
+  };
   /** Contacts optimistically removed pending backend confirmation. */
   pendingDeletion: Contact[];
 }
@@ -70,29 +80,6 @@ export const getContacts = createAsyncThunk(
       const message = error instanceof Error ? error.message : 'Failed to load contacts';
       return rejectWithValue(message);
     }
-  },
-    // Mock contacts
-    const mockContacts: Contact[] = [
-      {
-        id: '1',
-        name: 'Mock Contact 1',
-        address: '0x1234567890abcdef',
-        tokenType: 'STRK',
-        note: 'Primary trading account for A/B testing.',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: '2',
-        name: 'Mock Contact 2',
-        address: '0xabcdef1234567890',
-        tokenType: 'ETH',
-        note: 'Treasury vault for monthly settlements.',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    ];
-    return mockContacts;
   }
 );
 
@@ -109,42 +96,8 @@ export const createContact = createAsyncThunk(
       const message = error instanceof Error ? error.message : 'Failed to create contact';
       return rejectWithValue(message);
     }
-  },
-  async (contactData: CreateContactRequest, { rejectWithValue, getState }) => {
-    const validation = validateContact(contactData);
-    if (!validation.isValid) {
-      const firstError = Object.values(validation.errors)[0] ?? 'Invalid contact data';
-      return rejectWithValue(firstError);
     }
-    const normalized: CreateContactRequest = {
-      ...contactData,
-      address: normalizeContactAddress(contactData.address),
-    };
-
-    // Duplicate check: same normalized address already exists
-    const state = getState() as { contacts: ContactsState };
-    const existing = state.contacts.list.find(
-      (c) => normalizeContactAddress(c.address) === normalized.address
     );
-    if (existing) {
-      return rejectWithValue(
-        `"${existing.name}" already uses this address. Edit that contact instead.`
-      );
-    }
-
-    // Mock create contact
-    const mockContact: Contact = {
-      id: `mock_${Date.now()}`,
-      name: contactData.name,
-      address: contactData.address,
-      tokenType: contactData.tokenType,
-      note: contactData.note?.trim() || undefined,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    return mockContact;
-  }
-);
 
 export const updateContact = createAsyncThunk(
   'contacts/updateContact',
@@ -159,27 +112,7 @@ export const updateContact = createAsyncThunk(
       const message = error instanceof Error ? error.message : 'Failed to update contact';
       return rejectWithValue({ id, message });
     }
-  },
-    const validation = validateUpdateContact(data);
-    if (!validation.isValid) {
-      const firstError = Object.values(validation.errors)[0] ?? 'Invalid contact data';
-      return rejectWithValue(firstError);
     }
-    const normalized: UpdateContactRequest = data.address
-      ? { ...data, address: normalizeContactAddress(data.address) }
-      : data;
-    // Mock update contact
-    const mockContact: Contact = {
-      id,
-      name: data.name || 'Updated Contact',
-      address: data.address || '0xupdatedaddress',
-      tokenType: data.tokenType || 'STRK',
-      note: data.note?.trim() || undefined,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    return mockContact;
-  }
 );
 
 export const deleteContact = createAsyncThunk(
@@ -383,10 +316,6 @@ const contactsSlice = createSlice({
           state.mutating.delete.push(id);
         }
         delete state.mutationError.delete[id];
-      // Delete Contact (legacy — kept for any direct callers)
-      .addCase(deleteContact.pending, (state) => {
-        state.isLoading = true;
-        state.error = null;
       })
       .addCase(deleteContact.fulfilled, (state, action) => {
         const id = action.payload;
@@ -398,11 +327,11 @@ const contactsSlice = createSlice({
         delete state.mutationError.delete[id];
       })
       .addCase(deleteContact.rejected, (state, action) => {
-        const { id, message } = action.payload as { id: string; message: string };
+        const payload = action.payload as { id: string; message: string } | string;
+        const id = typeof payload === 'object' && payload !== null ? payload.id : action.meta.arg;
+        const message = typeof payload === 'object' && payload !== null ? payload.message : String(payload);
         state.mutating.delete = state.mutating.delete.filter((did) => did !== id);
         state.mutationError.delete[id] = message;
-        state.isLoading = false;
-        state.error = action.payload as string;
       })
       // Commit Delete Contact
       .addCase(commitDeleteContact.fulfilled, (state, action) => {
@@ -452,14 +381,10 @@ export const {
   setSelectedContact,
   clearSelectedContact,
   searchContacts,
-} = contactsSlice.actions;
-
-  setSelectedContact,
-  clearSelectedContact,
-  searchContacts,
   softDeleteContact,
   restoreContact,
   clearPendingDeletion,
   optimisticToggleFavorite,
 } = contactsSlice.actions;
+
 export default contactsSlice.reducer;

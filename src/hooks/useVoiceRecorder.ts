@@ -94,7 +94,7 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
       stopStream();
       stopRecognition();
     };
-  }, []);
+  }, [stopRecording]);
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -219,25 +219,11 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
       // Request data every 250ms for live size checking
       recorder.start(250);
       startTimeRef.current = Date.now();
-      setElapsedSeconds(0);
-      setStatus('recording');
-
-      // Elapsed timer
-      timerRef.current = setInterval(() => {
-        const secs = Math.round((Date.now() - startTimeRef.current) / 1000);
-        setElapsedSeconds(secs);
-
-        // Auto-stop at max duration
-        if (secs >= VOICE_MESSAGE.MAX_DURATION_SECONDS) {
-          stopRecording();
-        }
-      }, 1000);
-
-      // Start optional live transcription in parallel
+      startTimer();
       startLiveTranscription();
-    } catch (err: any) {
-      setStatus('idle');
-      throw err; // caller (ChatEngine) shows the toast
+      setStatus('recording');
+    } catch {
+      setStatus('cancelled');
     }
   }, [isSupported]);
 
