@@ -53,3 +53,6 @@ next-env.d.ts
 tsc_output.txt
 *.tsc_output.txt
 fix.md
+
+# Generated test output logs (#336)
+vitest-out.txt
