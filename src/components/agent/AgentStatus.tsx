@@ -4,8 +4,6 @@ import React, { useEffect, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { updateAgentStatus } from '@/store/slices/chatSlice';
 import { 
-  Wifi, 
-  WifiOff, 
   Activity, 
   Zap, 
   DollarSign, 
@@ -60,7 +58,7 @@ export default function AgentStatus({ className = '', showDetails = false }: Age
   const [isLoading, setIsLoading] = useState(false);
   const [lastCheck, setLastCheck] = useState<Date | null>(null);
 
-  const checkAgentStatus = async () => {
+  const checkAgentStatus = useCallback(async () => {
     setIsLoading(true);
     try {
       // Try to get status and capabilities, but don't fail if they're not available
@@ -95,7 +93,7 @@ export default function AgentStatus({ className = '', showDetails = false }: Age
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [dispatch]);
 
   useEffect(() => {
     checkAgentStatus();
@@ -103,7 +101,7 @@ export default function AgentStatus({ className = '', showDetails = false }: Age
     // Check status every 30 seconds
     const interval = setInterval(checkAgentStatus, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [checkAgentStatus]);
 
   const getStatusIcon = () => {
     if (isLoading) {

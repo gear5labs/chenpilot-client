@@ -69,7 +69,9 @@ export default function LoginForm() {
         <span className="text-xs text-white/40 font-light tracking-[0.3em] uppercase block mb-6">
           Welcome Back
         </span>
-
+        <p className="text-sm text-white/60 font-light">
+        Sign in to your ChenPilot account &amp; manage your wallet securely.
+        </p>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit, onInvalid)} noValidate className="space-y-6">
@@ -201,9 +203,8 @@ export default function LoginForm() {
 
       <div className="mt-8 text-center">
         <p className="text-sm text-white/40 font-light">
-          Don't have an account?{" "}
+          Don&apos;t have an account?{" "}
           <Link
-            href="/auth/register"
             className="text-white hover:text-white/80 transition-colors"
           >
             Sign up
