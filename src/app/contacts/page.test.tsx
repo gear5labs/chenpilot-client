@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import ContactsPage from './page';
+import toast from 'react-hot-toast';
 import type { Contact } from '@/types';
 
 const mockPush = vi.fn();

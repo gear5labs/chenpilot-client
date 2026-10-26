@@ -69,7 +69,7 @@ export function TokenRefreshExample() {
         {/* Token Status */}
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium">Token Status:</span>
-          <Badge variant={tokenStatus.color}>
+<Badge variant={tokenStatus.color as 'default' | 'destructive'}>
             {tokenStatus.status}
           </Badge>
         </div>

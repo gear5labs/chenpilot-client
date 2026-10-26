@@ -8,7 +8,7 @@ import { useAppDispatch, useAppSelector } from '@/store';
 import { closeThread, addReply, setThreadTyping } from '@/store/slices/chatSlice';
 import { useSocket } from '@/hooks/useSocket';
 import { ChatMessage } from '@/types';
-import toast from 'react-hot-toast';
+
 import { cn } from '@/utils/cn';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 

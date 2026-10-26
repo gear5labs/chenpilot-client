@@ -73,8 +73,8 @@ export class OperationHistoryService {
     const { ...cleanEvent } = event;
 
     // Strip top-level internal fields if present
-    delete (cleanEvent as any).ipAddress;
-    delete (cleanEvent as any).userAgent;
+    delete (cleanEvent as Record<string, unknown>).ipAddress;
+    delete (cleanEvent as Record<string, unknown>).userAgent;
 
     if (cleanEvent.metadata) {
       const cleanMetadata: Record<string, unknown> = {};
