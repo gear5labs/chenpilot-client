@@ -15,8 +15,7 @@ import {
   AuditSeverity,
 } from '@/types';
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _statuses = [];
+
 
 
 import {
