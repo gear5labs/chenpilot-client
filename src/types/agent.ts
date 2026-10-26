@@ -169,7 +169,7 @@ export interface AgentMemory {
   userId: string;
   messages: string[];
   context: {
-    [key: string]: any;
+    [key: string]: unknown;
   };
   lastUpdated: string;
 }
@@ -187,7 +187,7 @@ export interface WorkflowStep {
   name: string;
   type: 'action' | 'condition' | 'loop' | 'parallel';
   parameters: {
-    [key: string]: any;
+    [key: string]: unknown;
   };
   dependencies?: string[];
 }
@@ -199,12 +199,12 @@ export interface AgentExecutionResult {
     id: string;
     name: string;
     status: 'pending' | 'running' | 'completed' | 'failed';
-    result?: any;
+    result?: unknown;
     error?: string;
     duration?: number;
   }[];
   totalDuration: number;
-  finalResult?: any;
+  finalResult?: unknown;
 }
 
 export interface AgentConfiguration {

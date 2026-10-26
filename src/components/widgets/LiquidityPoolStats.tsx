@@ -7,15 +7,14 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { 
   TrendingUp, 
-  TrendingDown, 
-  DollarSign, 
   Activity, 
   BarChart3, 
   RefreshCw,
   ArrowUpRight,
   ArrowDownRight,
   Info,
-  Droplets
+  Droplets,
+  DollarSign
 } from 'lucide-react';
 
 interface LiquidityPoolStatsProps {

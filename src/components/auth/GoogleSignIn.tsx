@@ -73,8 +73,8 @@ export default function GoogleSignIn({
         toast.error(errorMessage);
         onError?.(errorMessage);
       }
-    } catch (error: any) {
-      const errorMessage = error.message || 'Google authentication failed';
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Google authentication failed';
       toast.error(errorMessage);
       onError?.(errorMessage);
     } finally {
@@ -138,8 +138,8 @@ export function GoogleSignInButton({
         toast.error(errorMessage);
         onError?.(errorMessage);
       }
-    } catch (error: any) {
-      const errorMessage = error.message || 'Google authentication failed';
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Google authentication failed';
       toast.error(errorMessage);
       onError?.(errorMessage);
     } finally {
