@@ -813,7 +813,7 @@ function generateMockLogs(): AuditLogEntry[] {
     'account.fund',
     'liquidity.query',
   ];
-  const statuses: AuditLogEntry['status'][] = ['success', 'failure', 'pending'];
+  const _statuses: AuditLogEntry['status'][] = ['success', 'failure', 'pending'];
   const users = [
     { id: 'usr_001', email: 'alice@example.com', name: 'Alice Johnson' },
     { id: 'usr_002', email: 'bob@example.com', name: 'Bob Smith' },
