@@ -15,7 +15,6 @@ import { Button } from '@/components/ui/Button';
 
 export default function SendPaymentPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   // contactId query param can be used for pre-filling recipient if needed
   const dispatch = useAppDispatch();
   const { isAuthenticated, user } = useAppSelector((state) => state.auth);
