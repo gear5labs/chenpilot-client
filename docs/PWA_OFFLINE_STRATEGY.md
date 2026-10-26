@@ -3,6 +3,8 @@
 ## Overview
 This document outlines the offline action classification, payment/signing action exclusions, and duplicate replay protection policies for ChenPilot Client.
 
+## Offline Queue Strategy
+
 ## Restricted Offline Action Classification
 - **Payment & Signing Actions**: Actions such as `send_payment`, `sign_transaction`, `transfer`, and `sign` are strictly excluded from offline queuing by default to prevent unsafe replays after connectivity returns.
 - **Supported Actions**: Read operations, preference synchronization, and non-state-changing metadata updates are eligible for offline queuing.
