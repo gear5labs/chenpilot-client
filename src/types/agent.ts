@@ -168,9 +168,7 @@ export interface AgentTool {
 export interface AgentMemory {
   userId: string;
   messages: string[];
-  context: {
-    [key: string]: unknown;
-  };
+  context: Record<string, unknown>;
   lastUpdated: string;
 }
 
@@ -186,9 +184,7 @@ export interface WorkflowStep {
   id: string;
   name: string;
   type: 'action' | 'condition' | 'loop' | 'parallel';
-  parameters: {
-    [key: string]: unknown;
-  };
+  parameters: Record<string, unknown>;
   dependencies?: string[];
 }
 
