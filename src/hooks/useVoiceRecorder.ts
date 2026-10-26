@@ -88,13 +88,20 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
     typeof MediaRecorder !== 'undefined';
 
   // ── Clean up on unmount ──────────────────────────────────────────────────────
+  const stopRecording = useCallback(() => {
+    stopTimer();
+    stopStream();
+    stopRecognition();
+    setStatus('stopped');
+  }, []);
+
   useEffect(() => {
     return () => {
       stopTimer();
       stopStream();
       stopRecognition();
     };
-  }, []);
+  }, [stopRecording]);
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
