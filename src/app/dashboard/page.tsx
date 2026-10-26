@@ -1,4 +1,3 @@
-```tsx
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -11,11 +10,6 @@ import {
   getAccountTransactions,
 } from '@/store/slices/accountSlice';
 import { loadUser } from '@/store/slices/authSlice';
-  deployAccount,
-  fundAccount,
-  getStellarNetworkStatus,
-  getAccountTransactions,
-} from '@/store/slices/accountSlice';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ChatLayout } from '@/components/layout/ChatLayout';

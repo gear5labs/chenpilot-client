@@ -3,9 +3,7 @@ import { useAppDispatch, useAppSelector } from '@/store';
 import {
   addOrUpdatePresence,
   removePresence,
-  updateUserStatus,
 } from '@/store/slices/presenceSlice';
-import { presenceService, DEFAULT_PRESENCE_CONFIG } from '@/services/presenceService';
 import { useSocket } from '@/components/providers/SocketProvider';
 
 /**
@@ -27,12 +25,12 @@ export function usePresenceManagement() {
     });
 
     // Listen for other users joining
-    const handleUserJoin = (presence: any) => {
+    const handleUserJoin = (presence: Record<string, unknown>) => {
       dispatch(addOrUpdatePresence(presence));
     };
 
     // Listen for status changes
-    const handleStatusChange = (presence: any) => {
+    const handleStatusChange = (presence: Record<string, unknown>) => {
       dispatch(addOrUpdatePresence(presence));
     };
 
@@ -42,7 +40,7 @@ export function usePresenceManagement() {
     };
 
     // Listen for bulk presence updates
-    const handlePresenceList = (presences: any[]) => {
+    const handlePresenceList = (presences: Record<string, unknown>[]) => {
       presences.forEach((presence) => {
         dispatch(addOrUpdatePresence(presence));
       });

@@ -73,10 +73,10 @@ class GoogleAuthService {
               } else {
                 resolve({ success: false, error: result.message || 'Google authentication failed' });
               }
-            } catch (error: any) {
+            } catch (error: unknown) {
               resolve({ 
                 success: false, 
-                error: error.message || 'Failed to authenticate with Google' 
+                error: (error as Error).message || 'Failed to authenticate with Google' 
               });
             }
           },
@@ -92,8 +92,8 @@ class GoogleAuthService {
           resolve({ success: false, error: 'Google Identity Services not available' });
         }
       });
-    } catch (error: any) {
-      return { success: false, error: error.message || 'Google authentication failed' };
+    } catch (error: unknown) {
+      return { success: false, error: (error as Error).message || 'Google authentication failed' };
     }
   }
 
@@ -143,7 +143,7 @@ declare global {
         id: {
           initialize: (config: GoogleAuthConfig) => void;
           prompt: () => void;
-          renderButton: (element: HTMLElement | null, options: any) => void;
+          renderButton: (element: HTMLElement | null, options: Record<string, unknown>) => void;
           disableAutoSelect: () => void;
         };
       };
