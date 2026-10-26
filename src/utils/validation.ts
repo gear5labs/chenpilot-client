@@ -219,7 +219,7 @@ export const validateUpdateContact = (
     : data;
   const result = updateContactSchema.safeParse(normalized);
   if (result.success) return { isValid: true, errors: {} };
-  const issues = (result.error as any).issues ?? (result.error as any).errors ?? [];
+  const issues = (result.error as unknown as { issues?: Array<{ path: Array<string | number>; message: string }>; errors?: Array<{ path: Array<string | number>; message: string }> }).issues ?? (result.error as unknown as { issues?: Array<{ path: Array<string | number>; message: string }>; errors?: Array<{ path: Array<string | number>; message: string }> }).errors ?? [];
   const errors: Record<string, string> = {};
   for (const issue of issues) {
     const key = issue.path[0] as string;
