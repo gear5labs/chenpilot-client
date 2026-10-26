@@ -93,7 +93,7 @@ describe('parseImportFile', () => {
     it('accepts all supported tokenTypes', () => {
       const tokens = ['XLM', 'STRK', 'USDC', 'USDT', 'BTC', 'ETH', 'AQUA'];
       // Use distinct addresses for each token
-      const rows = tokens.map((t, i) => ({
+      const _mappedTokens = tokens.map((t, i) => ({
         name: `Contact ${i}`,
         address: `G${'B'.repeat(55 - i)}${'A'.repeat(i)}`.slice(0, 56),
         tokenType: t,
