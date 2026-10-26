@@ -80,7 +80,7 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
   const transcriptRef = useRef<string>('');
 
   // Speech recognition for live transcript
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<EventTarget | null>(null);
 
   const isSupported =
     typeof window !== 'undefined' &&
@@ -119,16 +119,16 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
 
   function startLiveTranscription() {
     if (typeof window === 'undefined') return;
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const win = window as unknown as Record<string, unknown>;
+    const SpeechRecognition = win.SpeechRecognition || win.webkitSpeechRecognition;
     if (!SpeechRecognition) return;
 
-    const recognition = new SpeechRecognition();
+    const recognition = new (SpeechRecognition as new () => { continuous: boolean; interimResults: boolean; lang: string; onresult: ((event: { results: Array<{ [index: number]: { transcript: string }; isFinal: boolean; length: number }> }) => void) | null; onerror: (() => void) | null; start: () => void; stop: () => void })();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
-    recognition.onresult = (event: any) => {
+    recognition.onresult = (event: { results: Array<{ [index: number]: { transcript: string }; isFinal: boolean; length: number }> }) => {
       let interim = '';
       let final = '';
       for (let i = 0; i < event.results.length; i++) {
@@ -180,6 +180,7 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
           // Live size guard — stop early if we exceed MAX_SIZE_BYTES
           const accumulated = chunksRef.current.reduce((acc, b) => acc + b.size, 0);
           if (accumulated >= VOICE_MESSAGE.MAX_SIZE_BYTES) {
+            // Auto stop when max size is reached
             stopRecording();
           }
         }
@@ -219,35 +220,25 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
       // Request data every 250ms for live size checking
       recorder.start(250);
       startTimeRef.current = Date.now();
-      setElapsedSeconds(0);
-      setStatus('recording');
-
-      // Elapsed timer
-      timerRef.current = setInterval(() => {
-        const secs = Math.round((Date.now() - startTimeRef.current) / 1000);
-        setElapsedSeconds(secs);
-
-        // Auto-stop at max duration
-        if (secs >= VOICE_MESSAGE.MAX_DURATION_SECONDS) {
-          stopRecording();
-        }
-      }, 1000);
-
-      // Start optional live transcription in parallel
+      startTimer();
       startLiveTranscription();
-    } catch (err: any) {
-      setStatus('idle');
-      throw err; // caller (ChatEngine) shows the toast
+      setStatus('recording');
+    } catch {
+      setStatus('cancelled');
     }
   }, [isSupported]);
 
-  const stopRecording = useCallback(() => {
+  const stopRecord = useCallback(() => {
     if (mediaRecorderRef.current?.state === 'recording') {
       mediaRecorderRef.current.stop();
     }
     stopTimer();
     // onstop handler will finalise the blob and set status → 'stopped'
   }, []);
+
+  const stopRecording = useCallback(() => {
+    stopRecord();
+  }, [stopRecord]);
 
   const cancelRecording = useCallback(() => {
     stopTimer();

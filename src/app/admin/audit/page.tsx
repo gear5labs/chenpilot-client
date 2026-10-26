@@ -1,20 +1,21 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppSelector } from '@/store';
+import { useMemo } from 'react';
 import { ChatLayout } from '@/components/layout/ChatLayout';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import apiService from '@/services/api';
-import { formatRelativeTime, formatAddress } from '@/utils/format';
+import { formatAddress } from '@/utils/format';
 import {
   AuditLogEntry,
-  AuditLogsQueryParams,
-  AuditLogsResponse,
   AuditAction,
   AuditSeverity,
 } from '@/types';
+
+
 import {
   Search,
   Filter,
@@ -41,8 +42,6 @@ import {
   Clock,
   Activity,
   FileText,
-  ExternalLink,
-  Loader2,
   Copy,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -256,7 +255,7 @@ function AuditDetailModal({
 
 export default function AdminAuditLogsPage() {
   const router = useRouter();
-  const { user, isAuthenticated } = useAppSelector((state) => state.auth);
+  const { isAuthenticated } = useAppSelector((state) => state.auth);
 
   // Data state
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
@@ -273,8 +272,8 @@ export default function AdminAuditLogsPage() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterAction, setFilterAction] = useState<AuditAction | ''>('');
-  const [filterSeverity, setFilterSeverity] = useState<AuditSeverity | ''>('');
-  const [filterStatus, setFilterStatus] = useState<'success' | 'failure' | 'pending' | ''>('');
+  const [filterSeverity] = useState<AuditSeverity | ''>('');
+  const [filterStatus] = useState<'success' | 'failure' | 'pending' | ''>('');
 
   // Sort state
   const [sortBy, setSortBy] = useState<'timestamp' | 'action' | 'userEmail' | 'severity'>('timestamp');
@@ -797,7 +796,6 @@ export default function AdminAuditLogsPage() {
 // ─── Mock Data Generator (for development without backend) ────────────────────
 
 function generateMockLogs(): AuditLogEntry[] {
-  const severities: AuditSeverity[] = ['info', 'warning', 'error', 'critical'];
   const actions: AuditAction[] = [
     'user.login',
     'user.logout',
