@@ -4,11 +4,6 @@ export const env = {
   // API Configuration
   API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:2333',
 
-  // Horizon proxy — routes through backend's /proxy pipeline
-  HORIZON_PROXY_URL: typeof window !== 'undefined'
-    ? `${window.location.origin}/horizon`
-    : '/horizon',
-
   // Google OAuth
   GOOGLE_CLIENT_ID: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '',
 
@@ -45,4 +40,23 @@ export const validateEnv = () => {
 // Initialize environment validation
 if (typeof window === 'undefined') {
   validateEnv();
+}
+
+/**
+ * Returns the Horizon proxy base URL.
+ *
+ * `window.location.origin` is only available in the browser, so it cannot be
+ * read at module-initialisation time (the `env` object is frozen once the
+ * module is imported). This function defers the read to the call site so it
+ * always reflects the real origin in the browser and safely falls back to the
+ * relative path `/horizon` during server-side rendering or in restricted
+ * environments (e.g. WebViews that expose no `window`).
+ *
+ * @returns Absolute Horizon proxy URL in the browser; relative path on the server.
+ */
+export function getHorizonProxyUrl(): string {
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/horizon`;
+  }
+  return '/horizon';
 }
