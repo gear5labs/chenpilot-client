@@ -6,6 +6,7 @@ import {
   sendMessage,
 } from '@/store/slices/chatSlice';
 import { offlineQueueRefusal, type OfflineActionKind } from '@/utils/offlineActions';
+import apiService from '@/services/api';
 import toast from 'react-hot-toast';
 
 /** Result of the most recent attempt to replay the offline queue. */
@@ -85,6 +86,11 @@ export const useOfflineQueue = () => {
       const refusal = offlineQueueRefusal(kind);
       if (refusal) {
         toast.error(refusal);
+        return null;
+      }
+
+      if (!apiService.isOperationQueueable(kind)) {
+        toast.error('Operation not permitted for offline queueing.');
         return null;
       }
 
