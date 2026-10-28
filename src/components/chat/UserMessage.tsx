@@ -36,6 +36,7 @@ const markdownComponents: Components = {
   li: ({ children, ...props }) => <li className="text-gray-200" {...props}>{children}</li>,
 };
 
+export default function UserMessage({ message, onCopy, onEdit, onReply }: UserMessageProps) {
 export default function UserMessage({
   message,
   onCopy,

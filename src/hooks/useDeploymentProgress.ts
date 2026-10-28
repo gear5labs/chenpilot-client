@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { DeploymentProgress, DeploymentStep, DeploymentStepInfo, DeploymentStepStatus } from '@/types';
-import { DEPLOYMENT_STEPS } from '@/constants';
+import { DEPLOYMENT_STEPS, DEPLOYMENT_STATUS } from '@/constants';
 
 const INITIAL_STEPS: DeploymentStepInfo[] = [
   {

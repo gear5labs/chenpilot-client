@@ -26,7 +26,7 @@ export function AgentMarkdown({ children }: AgentMarkdownProps) {
       skipHtml
       urlTransform={markdownUrlTransform}
       components={{
-        a: ({ href, children, ...props }: Record<string, unknown> & { href?: string; children?: React.ReactNode }) => {
+        a: ({ href, children, node: _node, ...props }: any) => {
           const safeHref = sanitizeLinkUrl(href);
           if (!safeHref) {
             // Unsafe or empty URL: keep the text, drop the link
@@ -44,7 +44,7 @@ export function AgentMarkdown({ children }: AgentMarkdownProps) {
             </a>
           );
         },
-        img: ({ src, alt }: { src?: unknown; alt?: string }) => {
+        img: ({ src, alt }: any) => {
           // Images are not loaded automatically; show a link to them instead
           const safeSrc = sanitizeLinkUrl(typeof src === "string" ? src : undefined);
           const label = alt || "image";
@@ -62,22 +62,22 @@ export function AgentMarkdown({ children }: AgentMarkdownProps) {
             </a>
           );
         },
-        p: ({ children, ...props }: Record<string, unknown> & { children?: React.ReactNode }) => (
+        p: ({ children, node: _node, ...props }: any) => (
           <p className="mb-3 last:mb-0" {...props}>
             {children}
           </p>
         ),
-        strong: ({ children, ...props }: Record<string, unknown> & { children?: React.ReactNode }) => (
+        strong: ({ children, node: _node, ...props }: any) => (
           <strong className="font-semibold text-white" {...props}>
             {children}
           </strong>
         ),
-        em: ({ children, ...props }: Record<string, unknown> & { children?: React.ReactNode }) => (
+        em: ({ children, node: _node, ...props }: any) => (
           <em className="italic text-gray-300" {...props}>
             {children}
           </em>
         ),
-        code: ({ inline, className, children }: { inline?: boolean; className?: string; children?: React.ReactNode }) => {
+        code: ({ inline, className, children }: any) => {
           const text = String(children).replace(/\n$/, "");
           // react-markdown v9+ no longer passes `inline`; fenced blocks have a language class or newlines
           const isInline = inline ?? (!className && !text.includes("\n"));
@@ -87,38 +87,38 @@ export function AgentMarkdown({ children }: AgentMarkdownProps) {
             </CodeBlock>
           );
         },
-        pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
-        ul: ({ children, ...props }: Record<string, unknown> & { children?: React.ReactNode }) => (
+        pre: ({ children }: any) => <>{children}</>,
+        ul: ({ children, node: _node, ...props }: any) => (
           <ul className="list-disc list-inside mb-3 space-y-1" {...props}>
             {children}
           </ul>
         ),
-        ol: ({ children, ...props }: Record<string, unknown> & { children?: React.ReactNode }) => (
+        ol: ({ children, node: _node, ...props }: any) => (
           <ol className="list-decimal list-inside mb-3 space-y-1" {...props}>
             {children}
           </ol>
         ),
-        li: ({ children, ...props }: Record<string, unknown> & { children?: React.ReactNode }) => (
+        li: ({ children, node: _node, ...props }: any) => (
           <li className="text-gray-200" {...props}>
             {children}
           </li>
         ),
-        h1: ({ children, ...props }: Record<string, unknown> & { children?: React.ReactNode }) => (
+        h1: ({ children, node: _node, ...props }: any) => (
           <h1 className="text-2xl font-bold text-white mb-4" {...props}>
             {children}
           </h1>
         ),
-        h2: ({ children, ...props }: Record<string, unknown> & { children?: React.ReactNode }) => (
+        h2: ({ children, node: _node, ...props }: any) => (
           <h2 className="text-xl font-bold text-white mb-3" {...props}>
             {children}
           </h2>
         ),
-        h3: ({ children, ...props }: Record<string, unknown> & { children?: React.ReactNode }) => (
+        h3: ({ children, node: _node, ...props }: any) => (
           <h3 className="text-lg font-semibold text-white mb-2" {...props}>
             {children}
           </h3>
         ),
-        blockquote: ({ children, ...props }: Record<string, unknown> & { children?: React.ReactNode }) => (
+        blockquote: ({ children, node: _node, ...props }: any) => (
           <blockquote
             className="border-l-4 border-purple-500 pl-4 italic text-gray-300 my-4"
             {...props}

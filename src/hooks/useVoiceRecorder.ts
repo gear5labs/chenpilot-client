@@ -80,7 +80,7 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
   const transcriptRef = useRef<string>('');
 
   // Speech recognition for live transcript
-  const recognitionRef = useRef<EventTarget | null>(null);
+  const recognitionRef = useRef<any>(null);
 
   const isSupported =
     typeof window !== 'undefined' &&
@@ -88,20 +88,13 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
     typeof MediaRecorder !== 'undefined';
 
   // ── Clean up on unmount ──────────────────────────────────────────────────────
-  const stopRecording = useCallback(() => {
-    stopTimer();
-    stopStream();
-    stopRecognition();
-    setStatus('stopped');
-  }, []);
-
   useEffect(() => {
     return () => {
       stopTimer();
       stopStream();
       stopRecognition();
     };
-  }, [stopRecording]);
+  }, []);
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -126,16 +119,16 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
 
   function startLiveTranscription() {
     if (typeof window === 'undefined') return;
-    const win = window as unknown as Record<string, unknown>;
-    const SpeechRecognition = win.SpeechRecognition || win.webkitSpeechRecognition;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return;
 
-    const recognition = new (SpeechRecognition as new () => { continuous: boolean; interimResults: boolean; lang: string; onresult: ((event: { results: Array<{ [index: number]: { transcript: string }; isFinal: boolean; length: number }> }) => void) | null; onerror: (() => void) | null; start: () => void; stop: () => void })();
+    const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
-    recognition.onresult = (event: { results: Array<{ [index: number]: { transcript: string }; isFinal: boolean; length: number }> }) => {
+    recognition.onresult = (event: any) => {
       let interim = '';
       let final = '';
       for (let i = 0; i < event.results.length; i++) {
@@ -187,7 +180,6 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
           // Live size guard — stop early if we exceed MAX_SIZE_BYTES
           const accumulated = chunksRef.current.reduce((acc, b) => acc + b.size, 0);
           if (accumulated >= VOICE_MESSAGE.MAX_SIZE_BYTES) {
-            // Auto stop when max size is reached
             stopRecording();
           }
         }
@@ -227,25 +219,35 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
       // Request data every 250ms for live size checking
       recorder.start(250);
       startTimeRef.current = Date.now();
-      startTimer();
-      startLiveTranscription();
+      setElapsedSeconds(0);
       setStatus('recording');
-    } catch {
-      setStatus('cancelled');
+
+      // Elapsed timer
+      timerRef.current = setInterval(() => {
+        const secs = Math.round((Date.now() - startTimeRef.current) / 1000);
+        setElapsedSeconds(secs);
+
+        // Auto-stop at max duration
+        if (secs >= VOICE_MESSAGE.MAX_DURATION_SECONDS) {
+          stopRecording();
+        }
+      }, 1000);
+
+      // Start optional live transcription in parallel
+      startLiveTranscription();
+    } catch (err: any) {
+      setStatus('idle');
+      throw err; // caller (ChatEngine) shows the toast
     }
   }, [isSupported]);
 
-  const stopRecord = useCallback(() => {
+  const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current?.state === 'recording') {
       mediaRecorderRef.current.stop();
     }
     stopTimer();
     // onstop handler will finalise the blob and set status → 'stopped'
   }, []);
-
-  const stopRecording = useCallback(() => {
-    stopRecord();
-  }, [stopRecord]);
 
   const cancelRecording = useCallback(() => {
     stopTimer();

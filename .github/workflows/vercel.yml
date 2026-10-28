@@ -56,7 +56,6 @@ jobs:
       # Never print VERCEL_TOKEN or other secrets here — audit output is advisory
       # metadata only and contains no credential values.
       - name: Audit dependencies
-        continue-on-error: true
         run: pnpm audit --audit-level=high --prod
 
       - name: Run lint
@@ -73,7 +72,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: coverage-report
-          path: coverage/
+          path: coverage
 
       - name: Print coverage summary
         if: always()

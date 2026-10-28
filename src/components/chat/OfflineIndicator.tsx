@@ -88,7 +88,7 @@ export const OfflineIndicator: React.FC<OfflineIndicatorProps> = ({
         <>
           <WifiOff className="h-4 w-4" />
           <span>
-You&apos;re offline • network actions are paused{messageQueue.length > 0
+            You are offline • network actions are paused{messageQueue.length > 0
               ? ` • ${messageQueue.length} message${messageQueue.length !== 1 ? 's' : ''} queued`
               : ''}
           </span>

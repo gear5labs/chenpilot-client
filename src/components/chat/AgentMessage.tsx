@@ -9,7 +9,6 @@ import { ChatMessage } from "@/types";
 import { Copy, Check, RefreshCw } from "lucide-react";
 import { AgentMarkdown } from "./AgentMarkdown";
 import ExecutionTrace from "./ExecutionTrace";
-import { CodeBlock } from "./CodeBlock";
 
 type DataRecord = Record<string, unknown>;
 

@@ -23,7 +23,7 @@ describe('Trustlines API Service', () => {
       },
     ];
 
-    vi.spyOn((apiService as unknown as { api: { get: ReturnType<typeof vi.fn> } }).api, 'get').mockResolvedValueOnce({
+    vi.spyOn((apiService as any).api, 'get').mockResolvedValueOnce({
       data: mockData,
     });
 
@@ -41,7 +41,7 @@ describe('Trustlines API Service', () => {
       },
     ];
 
-    vi.spyOn((apiService as unknown as { api: { get: ReturnType<typeof vi.fn> } }).api, 'get').mockResolvedValueOnce({
+    vi.spyOn((apiService as any).api, 'get').mockResolvedValueOnce({
       data: { success: true, data: mockData },
     });
 
@@ -50,7 +50,7 @@ describe('Trustlines API Service', () => {
   });
 
   it('fetchAccountTrustlines falls back to horizonFetch when backend endpoint fails', async () => {
-    vi.spyOn((apiService as unknown as { api: { get: ReturnType<typeof vi.fn> } }).api, 'get').mockRejectedValueOnce(
+    vi.spyOn((apiService as any).api, 'get').mockRejectedValueOnce(
       new Error('Backend endpoint 404')
     );
 
@@ -87,8 +87,8 @@ describe('Trustlines API Service', () => {
   });
 
   it('addTrustline posts to /account/:publicKey/trustlines', async () => {
-    vi
-      .spyOn((apiService as unknown as { api: { post: ReturnType<typeof vi.fn> } }).api, 'post')
+    const postSpy = vi
+      .spyOn((apiService as any).api, 'post')
       .mockResolvedValueOnce({ data: { success: true } });
 
     const payload = {
@@ -98,7 +98,7 @@ describe('Trustlines API Service', () => {
     };
 
     const res = await apiService.addTrustline(mockPublicKey, payload);
-    expect((apiService as unknown as { api: { post: ReturnType<typeof vi.fn> } }).api.post).toHaveBeenCalledWith(
+    expect(postSpy).toHaveBeenCalledWith(
       `/account/${mockPublicKey}/trustlines`,
       payload
     );
@@ -106,8 +106,8 @@ describe('Trustlines API Service', () => {
   });
 
   it('removeTrustline sends DELETE with assetCode and assetIssuer', async () => {
-    vi
-      .spyOn((apiService as unknown as { api: { delete: ReturnType<typeof vi.fn> } }).api, 'delete')
+    const deleteSpy = vi
+      .spyOn((apiService as any).api, 'delete')
       .mockResolvedValueOnce({ data: { success: true } });
 
     const assetCode = 'USDC';
@@ -118,7 +118,7 @@ describe('Trustlines API Service', () => {
       assetCode,
       assetIssuer
     );
-    expect((apiService as unknown as { api: { delete: ReturnType<typeof vi.fn> } }).api.delete).toHaveBeenCalledWith(
+    expect(deleteSpy).toHaveBeenCalledWith(
       `/account/${mockPublicKey}/trustlines`,
       {
         data: { assetCode, assetIssuer },

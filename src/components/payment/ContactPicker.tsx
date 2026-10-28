@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import Image from 'next/image';
 import { ContactPickerProps, ContactSelection } from '@/types';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
@@ -9,6 +8,7 @@ import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import {
   Search,
+  User,
   X,
   Star,
   Clock,
@@ -34,7 +34,7 @@ export const ContactPicker: React.FC<ContactPickerProps> = ({
       id: contact.id,
       name: contact.name,
       address: contact.address,
-      tokenType: contact.tokenType as string,
+      tokenType: contact.tokenType as any,
       avatar: contact.avatar,
       isFavorite: contact.isFavorite,
       lastUsed: contact.lastUsed,
@@ -180,11 +180,9 @@ export const ContactPicker: React.FC<ContactPickerProps> = ({
                       )}
                     >
                       {contact.avatar ? (
-                        <Image
+                        <img
                           src={contact.avatar}
                           alt={contact.name}
-                          width={40}
-                          height={40}
                           className="w-full h-full rounded-full object-cover"
                         />
                       ) : (

@@ -10,6 +10,7 @@ import {
   Sparkles,
   Loader2,
   XCircle,
+  Clock,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
@@ -48,10 +49,11 @@ export const DeploymentStepper: React.FC<DeploymentStepperProps> = ({
     return <IconComponent className="h-5 w-5 text-gray-400" />;
   };
 
-  const getStepStyles = (step: DeploymentStepInfo) => {
+  const getStepStyles = (step: DeploymentStepInfo, index: number) => {
     const isCompleted = step.status === 'completed';
     const isCurrent = step.id === progress.currentStep;
     const isFailed = step.status === 'failed';
+    const isPending = step.status === 'pending';
 
     const baseClasses = 'flex items-center p-4 rounded-lg border transition-all duration-300';
     

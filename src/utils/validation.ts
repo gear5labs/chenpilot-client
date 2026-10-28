@@ -1,5 +1,5 @@
 import { z } from 'zod';
-
+import { VALIDATION_MESSAGES, PAYMENT_LIMITS, SECURITY_VALIDATION } from '@/constants';
 import { SUPPORTED_ASSETS } from '@/types';
 import { VALIDATION_MESSAGES, PAYMENT_LIMITS, SECURITY_VALIDATION, TOKEN_DECIMALS } from '@/constants';
 
@@ -62,6 +62,7 @@ export const createContactSchema = z.object({
   name: nameSchema,
   address: stellarAddressSchema,
   tokenType: z.enum(SUPPORTED_ASSETS, {
+  tokenType: z.enum(['XLM', 'STRK', 'USDC', 'USDT', 'BTC', 'ETH', 'AQUA'], {
     required_error: 'Please select a token type',
     invalid_type_error: `Unsupported token type. Supported tokens are: ${SUPPORTED_ASSETS.join(', ')}`,
   }),
@@ -74,6 +75,7 @@ export const updateContactSchema = z.object({
   tokenType: z.enum(SUPPORTED_ASSETS, {
     invalid_type_error: `Unsupported token type. Supported tokens are: ${SUPPORTED_ASSETS.join(', ')}`,
   }).optional(),
+  tokenType: z.enum(['XLM', 'STRK', 'USDC', 'USDT', 'BTC', 'ETH', 'AQUA']).optional(),
   note: z.string().max(280, 'Contact notes are limited to 280 characters').optional(),
 });
 
@@ -189,7 +191,7 @@ export const validateContactAddress = (raw: string): string | null => {
   const normalized = normalizeContactAddress(raw);
   const result = stellarAddressSchema.safeParse(normalized);
   if (!result.success) {
-    const issues = (result.error as { issues?: Array<{ message?: string }>; errors?: Array<{ message?: string }> }).issues ?? (result.error as { issues?: Array<{ message?: string }>; errors?: Array<{ message?: string }> }).errors ?? [];
+    const issues = (result.error as any).issues ?? (result.error as any).errors ?? [];
     return issues[0]?.message ?? 'Invalid Stellar address';
   }
   return null;
@@ -202,7 +204,7 @@ export const validateContact = (
   const normalized = { ...data, address: normalizeContactAddress(data.address) };
   const result = createContactSchema.safeParse(normalized);
   if (result.success) return { isValid: true, errors: {} };
-  const issues = (result.error as { issues?: Array<{ path: Array<string | number>; message: string }>; errors?: Array<{ path: Array<string | number>; message: string }> }).issues ?? (result.error as { issues?: Array<{ path: Array<string | number>; message: string }>; errors?: Array<{ path: Array<string | number>; message: string }> }).errors ?? [];
+  const issues = (result.error as any).issues ?? (result.error as any).errors ?? [];
   const errors: Record<string, string> = {};
   for (const issue of issues) {
     const key = issue.path[0] as string;
@@ -219,7 +221,7 @@ export const validateUpdateContact = (
     : data;
   const result = updateContactSchema.safeParse(normalized);
   if (result.success) return { isValid: true, errors: {} };
-  const issues = (result.error as unknown as { issues?: Array<{ path: Array<string | number>; message: string }>; errors?: Array<{ path: Array<string | number>; message: string }> }).issues ?? (result.error as unknown as { issues?: Array<{ path: Array<string | number>; message: string }>; errors?: Array<{ path: Array<string | number>; message: string }> }).errors ?? [];
+  const issues = (result.error as any).issues ?? (result.error as any).errors ?? [];
   const errors: Record<string, string> = {};
   for (const issue of issues) {
     const key = issue.path[0] as string;

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useId, useRef } from 'react';
+import React, { useState, useEffect, useId,useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppDispatch, useAppSelector } from '@/store';
 import {
@@ -13,6 +13,7 @@ import {
   paginateContacts,
   filterContacts,
   getContacts,
+  paginateContacts,
   updateContact,
 } from '@/store/slices/contactsSlice';
 import { Button } from '@/components/ui/Button';
@@ -32,130 +33,15 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { formatAddress } from '@/utils/format';
-import { Contact, CreateContactRequest, SUPPORTED_ASSETS, TokenType, ContactExportEnvelope, ContactMemoType } from '@/types';
-import { Download, Loader2, AlertCircle } from 'lucide-react';
+import { Contact, CreateContactRequest, SUPPORTED_ASSETS, TokenType } from '@/types';
+  Download,
+  Loader2,
+  AlertCircle,
+} from 'lucide-react';
+import { formatAddress } from '@/utils/format';
+import { Contact, ContactExportEnvelope, ContactMemoType, CreateContactRequest } from '@/types';
 import toast from 'react-hot-toast';
 
-
-
-export default function ContactsPage() {
-  const router = useRouter();
-  const dispatch = useAppDispatch();
-  const { isAuthenticated } = useAppSelector((state) => state.auth);
-  const { list: contacts, isLoading } = useAppSelector((state) => state.contacts);
-
-  const [searchTerm, setSearchTerm] = useState('');
-  const [contactsPage, setContactsPage] = useState(1);
-
-  // Create modal
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  // Edit modal
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isAddressChangeConfirmationOpen, setIsAddressChangeConfirmationOpen] = useState(false);
-  const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const [formData, setFormData] = useState<CreateContactRequest>({
-    name: '',
-    address: '',
-    tokenType: 'XLM',
-  });
-  const [formData, setFormData] = useState<CreateContactRequest>({
-    name: '',
-    address: '',
-    tokenType: 'XLM',
-  });
-  const [addressError, setAddressError] = useState<string | null>(null);
-
-  // Import state
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [importPreview, setImportPreview] = useState<ContactsImportPreview | null>(null);
-  const [isImportPreviewOpen, setIsImportPreviewOpen] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-
-  /** Timer refs keyed by contact id so multiple undo windows can coexist. */
-  const undoTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-
-  // IDs for accessible live-region and search label
-  const searchId = useId();
-  const resultCountId = useId();
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/auth/login');
-      return;
-    }
-    dispatch(getContacts());
-  }, [dispatch, isAuthenticated, router]);
-
-  const filteredContacts = contacts.filter(
-    (contact) =>
-      contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contact.address.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-export default function ContactsPage() {
-  const router = useRouter();
-  const dispatch = useAppDispatch();
-  const { isAuthenticated } = useAppSelector((state) => state.auth);
-  const { list: contacts, isLoading, mutating, mutationError } = useAppSelector(
-    (state) => state.contacts,
-  );
-  const { list: contacts, isLoading } = useAppSelector((state) => state.contacts);
-
-  const [searchTerm, setSearchTerm] = useState('');
-  const [contactsPage, setContactsPage] = useState(1);
-
-  // Create modal
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  // Edit modal
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isAddressChangeConfirmationOpen, setIsAddressChangeConfirmationOpen] = useState(false);
-  const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const [formData, setFormData] = useState<CreateContactRequest>({
-    name: '',
-    address: '',
-    tokenType: 'XLM',
-  });
-  const [formData, setFormData] = useState<CreateContactRequest>(createEmptyContactForm());
-  const [addressError, setAddressError] = useState<string | null>(null);
-
-  // Import state
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [importPreview, setImportPreview] = useState<ContactsImportPreview | null>(null);
-  const [isImportPreviewOpen, setIsImportPreviewOpen] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-
-  /** Timer refs keyed by contact id so multiple undo windows can coexist. */
-  const undoTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-
-  // IDs for accessible live-region and search label
-  const searchId = useId();
-  const resultCountId = useId();
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/auth/login');
-      return;
-    }
-    dispatch(getContacts());
-  }, [dispatch, isAuthenticated, router]);
-
-  const filteredContacts = contacts.filter(
-    (contact) =>
-      contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contact.address.toLowerCase().includes(searchTerm.toLowerCase()),
-    (c) =>
-      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.address.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
-    void dispatch(getContacts());
-  }, [dispatch, isAuthenticated, router]);
-
-const createEmptyContactForm = (): CreateContactRequest => ({
-  name: '',
-  address: '',
-  tokenType: 'STRK',
-  note: '',
-});
 // ---------------------------------------------------------------------------
 // Token options aligned with backend contract
 // ---------------------------------------------------------------------------
@@ -221,12 +107,10 @@ import { PAGINATION } from '@/constants';
 import { buildClipboardFallbackMessage, copyTextToClipboard } from '@/utils/clipboard';
 import toast from 'react-hot-toast';
 
-const blankForm = (): CreateContactRequest => ({
+const createEmptyContactForm = (): CreateContactRequest => ({
   name: '',
   address: '',
-tokenType: 'XLM',
-  defaultMemo: '',
-  defaultMemoType: 'none',
+  tokenType: 'XLM',
   note: '',
 });
 
@@ -237,9 +121,7 @@ export default function ContactsPage() {
   const { list: contacts, isLoading, mutating, mutationError } = useAppSelector(
     (state) => state.contacts,
   );
-const { list: contacts, isLoading, mutating, mutationError } = useAppSelector(
-    (state) => state.contacts,
-  );
+  const { list: contacts, isLoading } = useAppSelector((state) => state.contacts);
   const [searchTerm, setSearchTerm] = useState('');
   const [contactsPage, setContactsPage] = useState(1);
 
@@ -259,7 +141,7 @@ const { list: contacts, isLoading, mutating, mutationError } = useAppSelector(
     address: '',
     tokenType: 'XLM',
   });
-  const [formData, setFormData] = useState<CreateContactRequest>(blankForm());
+  const [formData, setFormData] = useState<CreateContactRequest>(createEmptyContactForm());
   const [addressError, setAddressError] = useState<string | null>(null);
 
   // Import state
@@ -287,7 +169,12 @@ const { list: contacts, isLoading, mutating, mutationError } = useAppSelector(
     (contact) =>
       contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       contact.address.toLowerCase().includes(searchTerm.toLowerCase()),
+    (c) =>
+      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.address.toLowerCase().includes(searchTerm.toLowerCase()),
   );
+    void dispatch(getContacts());
+  }, [dispatch, isAuthenticated, router]);
 
   const filteredContacts = filterContacts(contacts, searchTerm);
   const pageCount = Math.ceil(filteredContacts.length / PAGINATION.CONTACTS_PAGE_SIZE);

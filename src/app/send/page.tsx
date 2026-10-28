@@ -15,7 +15,8 @@ import { Button } from '@/components/ui/Button';
 
 export default function SendPaymentPage() {
   const router = useRouter();
-  // contactId query param can be used for pre-filling recipient if needed
+  const searchParams = useSearchParams();
+  const initialContactId = searchParams.get('contactId') ?? undefined;
   const dispatch = useAppDispatch();
   const { isAuthenticated, user } = useAppSelector((state) => state.auth);
   const { list: contacts, isLoading: contactsLoading } = useAppSelector(
@@ -29,7 +30,7 @@ export default function SendPaymentPage() {
       return;
     }
     dispatch(getContacts());
-    const isActive = true;
+    let isActive = true;
     void apiService.getBalance().then((response) => {
       const total = response.data?.nativeBalance;
       const reserve = response.data?.required;
@@ -39,23 +40,23 @@ export default function SendPaymentPage() {
     }).catch(() => {
       // Balance guidance is omitted when the backend cannot provide its breakdown.
     });
-  }, [dispatch, isAuthenticated, router]);
 
-  const handleSendPayment = async (data: SendPaymentRequest, idempotencyKey: string): Promise<PaymentSubmissionResult> => {
+
+  const handleSendPayment = async (data: SendPaymentRequest) => {
+    // NOTE: the self-transfer comparison in SendPaymentForm is a UX hint only.
+    // Server-side authorisation and balance checks are the authoritative gate.
     const toastId = toast.loading('Sending payment…');
     try {
-      const response = await apiService.sendPayment(data, idempotencyKey);
+      const response = await apiService.sendPayment(data);
 
       if (response.success) {
         toast.success('Payment sent successfully!', { id: toastId });
         router.push('/transactions');
-        return response;
       } else {
         toast.error(
           (response as { message?: string }).message || 'Payment failed. Please try again.',
           { id: toastId },
         );
-        return response;
       }
     } catch (error: unknown) {
       const message =
@@ -64,10 +65,19 @@ export default function SendPaymentPage() {
         (error as { message?: string })?.message ||
         'Failed to send payment';
       toast.error(message, { id: toastId });
+      await apiService.sendPayment(data);
+      toast.success('Payment sent successfully!');
+      router.push('/transactions');
+    } catch (error: any) {
+      console.error('Payment error:', error);
+      toast.error(getPaymentFailureMessage(error));
       throw error;
+      const message = getPaymentFailureMessage(error);
+      toast.error(message || 'Failed to send payment');
     }
   };
-
+  const handleSendPayment = (data: SendPaymentRequest, idempotencyKey: string): Promise<PaymentSubmissionResult> =>
+    apiService.sendPayment(data, idempotencyKey);
 
   const handleCheckPaymentStatus = (idempotencyKey: string): Promise<PaymentStatusResult> =>
     apiService.getPaymentStatus(idempotencyKey);
@@ -108,6 +118,9 @@ export default function SendPaymentPage() {
                   </p>
                 </div>
               </div>
+              <div className="flex items-center space-x-2 bg-blue-500/10 px-3 py-1.5 rounded-full border border-blue-500/30">
+                <Shield className="h-4 w-4 text-blue-400" aria-hidden="true" />
+                <span className="text-xs font-medium text-blue-300">Secure</span>
               <div className="flex items-center gap-3">
                 <StellarNetworkBadge />
                 <div className="flex items-center space-x-2 bg-blue-500/10 px-3 py-1.5 rounded-full border border-blue-500/30">

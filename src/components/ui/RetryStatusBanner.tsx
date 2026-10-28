@@ -40,6 +40,7 @@ export default function RetryStatusBanner() {
   if (!retryStatus) return null;
 
   const { attempt, maxAttempts, label } = retryStatus;
+  const dots = Array.from({ length: attempt }, (_, i) => i);
 
   return (
     <div
