@@ -3,11 +3,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { X, ChevronDown, ChevronUp, MessageSquare, Send } from 'lucide-react';
+import { X, Send, ChevronDown, ChevronUp, MessageSquare } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { closeThread, addReply, setThreadTyping } from '@/store/slices/chatSlice';
 import { useSocket } from '@/hooks/useSocket';
 import { ChatMessage } from '@/types';
+import toast from 'react-hot-toast';
 import { cn } from '@/utils/cn';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 

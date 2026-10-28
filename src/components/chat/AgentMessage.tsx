@@ -8,7 +8,6 @@ import type { Components } from "react-markdown";
 import { ChatMessage } from "@/types";
 import { Copy, Check, RefreshCw } from "lucide-react";
 import { AgentMarkdown } from "./AgentMarkdown";
-import { CodeBlock } from "./CodeBlock";
 import ExecutionTrace from "./ExecutionTrace";
 
 type DataRecord = Record<string, unknown>;

@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { VALIDATION_MESSAGES, PAYMENT_LIMITS, SECURITY_VALIDATION, TOKEN_DECIMALS } from '@/constants';
+import { VALIDATION_MESSAGES, PAYMENT_LIMITS, SECURITY_VALIDATION } from '@/constants';
 import { SUPPORTED_ASSETS } from '@/types';
+import { VALIDATION_MESSAGES, PAYMENT_LIMITS, SECURITY_VALIDATION, TOKEN_DECIMALS } from '@/constants';
 
 // Email validation schema. Surrounding whitespace is accepted (and trimmed in the parsed
 // value) so an accidental space doesn't block sign-in; see normalizeEmail (#259).
@@ -61,6 +62,7 @@ export const createContactSchema = z.object({
   name: nameSchema,
   address: stellarAddressSchema,
   tokenType: z.enum(SUPPORTED_ASSETS, {
+  tokenType: z.enum(['XLM', 'STRK', 'USDC', 'USDT', 'BTC', 'ETH', 'AQUA'], {
     required_error: 'Please select a token type',
     invalid_type_error: `Unsupported token type. Supported tokens are: ${SUPPORTED_ASSETS.join(', ')}`,
   }),
@@ -73,6 +75,7 @@ export const updateContactSchema = z.object({
   tokenType: z.enum(SUPPORTED_ASSETS, {
     invalid_type_error: `Unsupported token type. Supported tokens are: ${SUPPORTED_ASSETS.join(', ')}`,
   }).optional(),
+  tokenType: z.enum(['XLM', 'STRK', 'USDC', 'USDT', 'BTC', 'ETH', 'AQUA']).optional(),
   note: z.string().max(280, 'Contact notes are limited to 280 characters').optional(),
 });
 

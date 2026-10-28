@@ -58,9 +58,11 @@ class SessionService {
   private triggerWarning() {
     this.warningTriggeredTime = Date.now();
     this.callbacks.onWarning.forEach((cb) => cb());
+    console.log('[SessionService] Session expiration warning triggered');
   }
 
   private triggerExpiration() {
+    console.log('[SessionService] Session expired');
     this.callbacks.onExpiration.forEach((cb) => cb());
     this.clearSession();
   }
@@ -69,6 +71,7 @@ class SessionService {
     // Restart the session
     this.startSession(config);
     this.callbacks.onExtend.forEach((cb) => cb());
+    console.log('[SessionService] Session extended');
   }
 
   clearSession() {

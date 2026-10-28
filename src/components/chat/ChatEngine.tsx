@@ -28,6 +28,41 @@ type AbortableRequest = {
   abort: () => void;
   unwrap: () => Promise<unknown>;
 };
+  clearMessages,
+  updateMessage,
+  saveConversationLocally,
+  queueMessage,
+  addMessage as reduxAddMessage,
+  setMessageDelivery,
+  addPendingMessage,
+  removeMessage,
+} from "@/store/slices/chatSlice";
+import AgentMessage from "@/components/chat/AgentMessage";
+import { AgentRetryAction } from "@/components/chat/AgentRetryAction";
+import { AgentMarkdown } from "@/components/chat/AgentMarkdown";
+import { AgentTimeoutNotice } from "@/components/chat/AgentTimeoutNotice";
+import agentConfig from "@/config/agent";
+import UserMessage from "@/components/chat/UserMessage";
+
+import { OfflineIndicator } from "@/components/chat/OfflineIndicator";
+import { ChatComposerField } from "@/components/chat/ChatComposerField";
+import { useOfflineQueue } from "@/hooks/useOfflineQueue";
+import { useChatResync } from "@/hooks/useChatResync";
+import {
+  Send,
+  Mic,
+  Square,
+  Sun,
+  Clock,
+  Copy,
+} from "lucide-react";
+import toast from "react-hot-toast";
+import { ChatMessage } from "@/types";
+import { usePathname, useRouter } from "next/navigation";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { AgentToolsMenu } from "@/components/chat/AgentToolsMenu";
+import { ChatDraftComposer } from "@/components/chat/ChatDraftComposer";
+import { QueryStopButton } from "@/components/chat/QueryStopButton";
 
 // ─── Speech Recognition ambient types (used by the old transcription path) ────
 

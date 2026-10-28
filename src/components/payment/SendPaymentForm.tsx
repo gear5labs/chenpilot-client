@@ -3,13 +3,20 @@
 import React, { useState, useId } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { sendPaymentSchema } from '@/utils/validation';
-import { Contact, PaymentStatusResult, PaymentSubmissionResult, SendPaymentRequest, ContactSelection, SUPPORTED_ASSETS } from '@/types';
+import { sendPaymentSchema, validateSendPayment, sanitizePaymentInput } from '@/utils/validation';
+import { SendPaymentRequest, ContactSelection, Contact } from '@/types';
+import { SUPPORTED_ASSETS } from '@/types';
+import React, { useRef, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { sendPaymentSchema, validateSendPayment, sanitizePaymentInput } from '@/utils/validation';
+import { Contact, PaymentStatusResult, PaymentSubmissionResult, SendPaymentRequest, ContactSelection } from '@/types';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { StellarNetworkBadge } from '@/components/wallet/StellarNetworkBadge';
+import { createPaymentIdempotencyKey, isPaymentOutcomeUnknown } from '@/utils/paymentOutcome';
 import ContactPicker from './ContactPicker';
 import {
   Send,
@@ -28,20 +35,35 @@ import { calculateSpendableNativeBalance } from '@/utils/nativeBalance';
 import toast from 'react-hot-toast';
 
 interface SendPaymentFormProps {
+  onSubmit: (data: SendPaymentRequest) => Promise<void>;
+  contacts: Contact[];
+  isLoading?: boolean;
+  defaultTokenType?: typeof SUPPORTED_ASSETS[number];
+  /**
+   * The address of the currently signed-in wallet.  When provided the form
+   * will warn the user if they try to send to themselves.  The warning is
+   * advisory only — the user can still submit after acknowledging it.
+   * Server-side authorisation must never rely on this client-side check.
+   */
+  senderAddress?: string;
+}
+
+/**
+ * Normalise a Stellar-style address for comparison:
+ * trim whitespace and convert to upper-case.
+ * Never use this to authorise a transaction; it is a UX hint only.
+ */
+function normalizeAddress(addr: string): string {
+  return addr.trim().toUpperCase();
   onSubmit: (data: SendPaymentRequest, idempotencyKey: string) => Promise<PaymentSubmissionResult>;
   onCheckStatus: (idempotencyKey: string) => Promise<PaymentStatusResult>;
   contacts: Contact[];
   isOnline: boolean;
   isLoading?: boolean;
-  defaultTokenType?: typeof SUPPORTED_ASSETS[number];
+  defaultTokenType?: 'XLM' | 'USDC' | 'USDT' | 'BTC' | 'ETH' | 'AQUA';
   nativeBalance?: string;
   requiredReserve?: string;
   availableBalance?: number | string;
-  senderAddress?: string;
-}
-
-function normalizeAddress(addr: string): string {
-  return addr.trim().toUpperCase();
 }
 
 export const SendPaymentForm: React.FC<SendPaymentFormProps> = ({
@@ -489,6 +511,18 @@ export const SendPaymentForm: React.FC<SendPaymentFormProps> = ({
         <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6" noValidate>
           {/* Recipient Address */}
           <div>
+            <label htmlFor="recipient-address" className="block text-sm font-medium text-gray-300 mb-2">
+              Recipient Address
+            </label>
+            <Input
+              id="recipient-address"
+              {...register('recipientAddress')}
+              placeholder="GABCD1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
+              className={cn(
+                'font-mono text-sm',
+                selectedContact && 'bg-blue-500/5 border-blue-500/30'
+              )}
+              disabled={!!selectedContact}
             <label
               htmlFor={recipientFieldId}
               className="block text-sm font-medium text-gray-300 mb-2"
@@ -599,11 +633,12 @@ export const SendPaymentForm: React.FC<SendPaymentFormProps> = ({
 
           {/* Amount */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label htmlFor="send-amount" className="block text-sm font-medium text-gray-300 mb-2">
               Amount
             </label>
             <div className="flex space-x-2">
               <Input
+                id="send-amount"
                 {...register('amount')}
                 placeholder="0.00"
                 type="number"
@@ -613,6 +648,8 @@ export const SendPaymentForm: React.FC<SendPaymentFormProps> = ({
                 className="flex-1"
               />
               <select
+                id="token-type-select"
+                aria-label="Token Type"
                 {...register('tokenType')}
                 className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 aria-label="Token type"
@@ -644,11 +681,13 @@ export const SendPaymentForm: React.FC<SendPaymentFormProps> = ({
 
           {/* Memo */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label htmlFor="memo-type-select" className="block text-sm font-medium text-gray-300 mb-2">
               Memo (Optional)
             </label>
             <div className="space-y-2">
               <select
+                id="memo-type-select"
+                aria-label="Memo Type"
                 {...register('memoType')}
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 aria-label="Memo type"
@@ -661,6 +700,8 @@ export const SendPaymentForm: React.FC<SendPaymentFormProps> = ({
 
               {watchedMemoType !== 'none' && (
                 <Input
+                  id="memo-value-input"
+                  aria-label="Memo Value"
                   {...register('memo')}
                   placeholder={
                     watchedMemoType === 'text'

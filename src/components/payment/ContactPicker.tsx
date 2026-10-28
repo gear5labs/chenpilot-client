@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import {
   Search,
+  User,
   X,
   Star,
   Clock,
@@ -33,7 +34,7 @@ export const ContactPicker: React.FC<ContactPickerProps> = ({
       id: contact.id,
       name: contact.name,
       address: contact.address,
-      tokenType: contact.tokenType as 'XLM' | 'USDC' | 'AQUA' | 'BTC' | 'ETH',
+      tokenType: contact.tokenType as any,
       avatar: contact.avatar,
       isFavorite: contact.isFavorite,
       lastUsed: contact.lastUsed,

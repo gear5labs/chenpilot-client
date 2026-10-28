@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { addTag, removeTag, setSelectedTags, toggleConversationPin } from '@/store/slices/chatSlice';
 import { Conversation } from '@/types';
-import { X, Plus, Tag, Trash2, Star } from 'lucide-react';
+import { X, Plus, Tag, Trash2 } from 'lucide-react';
 
 interface ConversationManagerProps {
   onSelectConversation?: (conversation: Conversation) => void;

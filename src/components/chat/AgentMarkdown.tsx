@@ -26,7 +26,7 @@ export function AgentMarkdown({ children }: AgentMarkdownProps) {
       skipHtml
       urlTransform={markdownUrlTransform}
       components={{
-        a: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => {
+        a: ({ href, children, node: _node, ...props }: any) => {
           const safeHref = sanitizeLinkUrl(href);
           if (!safeHref) {
             // Unsafe or empty URL: keep the text, drop the link
@@ -44,7 +44,7 @@ export function AgentMarkdown({ children }: AgentMarkdownProps) {
             </a>
           );
         },
-        img: ({ src, alt }: React.ImgHTMLAttributes<HTMLImageElement>) => {
+        img: ({ src, alt }: any) => {
           // Images are not loaded automatically; show a link to them instead
           const safeSrc = sanitizeLinkUrl(typeof src === "string" ? src : undefined);
           const label = alt || "image";
@@ -62,22 +62,22 @@ export function AgentMarkdown({ children }: AgentMarkdownProps) {
             </a>
           );
         },
-        p: ({ children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) => (
+        p: ({ children, node: _node, ...props }: any) => (
           <p className="mb-3 last:mb-0" {...props}>
             {children}
           </p>
         ),
-        strong: ({ children, ...props }: React.HTMLAttributes<HTMLElement>) => (
+        strong: ({ children, node: _node, ...props }: any) => (
           <strong className="font-semibold text-white" {...props}>
             {children}
           </strong>
         ),
-        em: ({ children, ...props }: React.HTMLAttributes<HTMLElement>) => (
+        em: ({ children, node: _node, ...props }: any) => (
           <em className="italic text-gray-300" {...props}>
             {children}
           </em>
         ),
-        code: ({ className, children, ...props }: { inline?: boolean; className?: string; children?: React.ReactNode }) => {
+        code: ({ inline, className, children }: any) => {
           const text = String(children).replace(/\n$/, "");
           // react-markdown v9+ no longer passes `inline`; fenced blocks have a language class or newlines
           const isInline = inline ?? (!className && !text.includes("\n"));
@@ -87,38 +87,38 @@ export function AgentMarkdown({ children }: AgentMarkdownProps) {
             </CodeBlock>
           );
         },
-        pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
-        ul: ({ children, ...props }: React.HTMLAttributes<HTMLUListElement>) => (
+        pre: ({ children }: any) => <>{children}</>,
+        ul: ({ children, node: _node, ...props }: any) => (
           <ul className="list-disc list-inside mb-3 space-y-1" {...props}>
             {children}
           </ul>
         ),
-        ol: ({ children, ...props }: React.HTMLAttributes<HTMLOListElement>) => (
+        ol: ({ children, node: _node, ...props }: any) => (
           <ol className="list-decimal list-inside mb-3 space-y-1" {...props}>
             {children}
           </ol>
         ),
-        li: ({ children, ...props }: React.LiHTMLAttributes<HTMLLIElement>) => (
+        li: ({ children, node: _node, ...props }: any) => (
           <li className="text-gray-200" {...props}>
             {children}
           </li>
         ),
-        h1: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+        h1: ({ children, node: _node, ...props }: any) => (
           <h1 className="text-2xl font-bold text-white mb-4" {...props}>
             {children}
           </h1>
         ),
-        h2: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+        h2: ({ children, node: _node, ...props }: any) => (
           <h2 className="text-xl font-bold text-white mb-3" {...props}>
             {children}
           </h2>
         ),
-        h3: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+        h3: ({ children, node: _node, ...props }: any) => (
           <h3 className="text-lg font-semibold text-white mb-2" {...props}>
             {children}
           </h3>
         ),
-        blockquote: ({ children, ...props }: React.HTMLAttributes<HTMLQuoteElement>) => (
+        blockquote: ({ children, node: _node, ...props }: any) => (
           <blockquote
             className="border-l-4 border-purple-500 pl-4 italic text-gray-300 my-4"
             {...props}
