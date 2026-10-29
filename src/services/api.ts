@@ -117,6 +117,19 @@ export class SingleFlight {
 
 export const singleFlight = new SingleFlight();
 
+export const isOperationQueueable = (kind: string): boolean => {
+  const restricted = ['payment', 'signing', 'send_payment', 'deploy_contract'];
+  return !restricted.includes(kind);
+};
+
+export const validateOfflineReplay = (id: string, replayedIds: Set<string>): boolean => {
+  if (replayedIds.has(id)) {
+    return false;
+  }
+  replayedIds.add(id);
+  return true;
+};
+
 export interface FundingResult {
   success: boolean;
   message: string;
