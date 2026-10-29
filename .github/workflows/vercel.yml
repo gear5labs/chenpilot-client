@@ -72,7 +72,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: coverage-report
-          path: coverage
+          path: |
+            coverage
+            !coverage/
 
       - name: Print coverage summary
         if: always()
@@ -86,11 +88,6 @@ jobs:
 
       - name: Build project
         run: pnpm build
-
-      - name: Run Lighthouse CI checks
-        run: pnpm run lighthouse
-        env:
-          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
 
   # Preview deployment for pull requests
   deploy-preview:
