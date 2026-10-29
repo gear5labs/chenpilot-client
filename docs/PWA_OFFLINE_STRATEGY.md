@@ -1,4 +1,4 @@
-# PWA Offline Caching & Installation Strategy
+# PWA Offline Strategy
 
 ## Overview
 This document outlines the Progressive Web App (PWA) configuration and caching behavior for **Chenpilot Client (`gear5labs/chenpilot-client`)**.
