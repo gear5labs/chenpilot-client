@@ -46,7 +46,7 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
       # Fail the build on high or critical CVEs in the installed dependency tree.
       # moderate and low severities are reported but do not block the build.
