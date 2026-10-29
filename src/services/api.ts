@@ -209,7 +209,6 @@ interface PaymentRequestConfig extends AxiosRequestConfig {
  * error retries, background token refreshes, and backend integrations.
  */
 export class ApiService {
-class ApiService {
   private api: AxiosInstance;
   private token: string | null = null;
 
