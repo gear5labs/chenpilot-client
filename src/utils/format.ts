@@ -517,199 +517,127 @@ export function truncateText(text: string, maxLength: number, suffix: string = '
   return text.slice(0, maxLength - suffix.length) + suffix;
 }
 
-export const CHAT_DRAFTS_STORAGE_KEY = "chat_drafts_v1";
-export const CHAT_DRAFT_LIMIT = 20;
+// ─── Chat message timestamp helpers (Issue #101) ─────────────────────────────
 
-export interface StoredChatDraft {
-  text: string;
-  updatedAt: number;
-}
+/**
+ * Format a chat message timestamp as a relative label with the absolute time
+ * exposed via a `title` attribute string.
+ *
+ * Labels:
+ *   < 1 min  → "just now"
+ *   < 60 min → "Xm ago"
+ *   < 24 h   → "Xh ago"
+ *   < 7 days → weekday name ("Monday")
+ *   otherwise → short date ("Jan 3")
+ *
+ * @returns `{ relative, absolute }` — `absolute` is a locale time string
+ *          suitable for a `title` / `aria-label` attribute.
+ */
+export function formatMessageTimestamp(
+  timestamp: string | Date | null | undefined,
+): { relative: string; absolute: string } {
+  const FALLBACK = { relative: '', absolute: '' };
 
-export type ChatDraftMap = Record<string, StoredChatDraft>;
+  if (!timestamp) return FALLBACK;
 
-function isStoredChatDraft(value: unknown): value is StoredChatDraft {
-  if (!value || typeof value !== "object") return false;
-  const draft = value as { text?: unknown; updatedAt?: unknown };
-  return typeof draft.text === "string" && typeof draft.updatedAt === "number";
-}
-
-export function readChatDrafts(): ChatDraftMap {
-  if (typeof window === "undefined") return {};
+  let dateObj: Date;
   try {
-    const raw = localStorage.getItem(CHAT_DRAFTS_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-    const drafts: ChatDraftMap = {};
-    for (const [id, value] of Object.entries(parsed)) {
-      if (isStoredChatDraft(value)) drafts[id] = value;
-    }
-    return drafts;
+    dateObj = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
+    if (isNaN(dateObj.getTime())) return FALLBACK;
   } catch {
-    return {};
+    return FALLBACK;
   }
-}
 
-export function pruneChatDrafts(
-  drafts: ChatDraftMap,
-  activeId?: string | null,
-  limit: number = CHAT_DRAFT_LIMIT,
-): ChatDraftMap {
-  const recent = Object.entries(drafts)
-    .sort((a, b) => b[1].updatedAt - a[1].updatedAt)
-    .slice(0, limit);
-  const kept = Object.fromEntries(recent) as ChatDraftMap;
-  if (activeId && drafts[activeId] && !kept[activeId]) {
-    kept[activeId] = drafts[activeId];
-  }
-  return kept;
-}
+  const absolute = dateObj.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
 
-export function writeChatDrafts(drafts: ChatDraftMap): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(CHAT_DRAFTS_STORAGE_KEY, JSON.stringify(drafts));
-}
+  const now = new Date();
+  const diffMs = now.getTime() - dateObj.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHour = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHour / 24);
 
-export function getChatDraft(conversationId: string): string {
-  return readChatDrafts()[conversationId]?.text ?? "";
-}
+  let relative: string;
 
-export function setChatDraft(conversationId: string, text: string, now: number = Date.now()): void {
-  const drafts = readChatDrafts();
-  if (!text) {
-    delete drafts[conversationId];
+  if (diffSec < 60) {
+    relative = 'just now';
+  } else if (diffMin < 60) {
+    relative = `${diffMin}m ago`;
+  } else if (diffHour < 24) {
+    relative = `${diffHour}h ago`;
+  } else if (diffDay < 7) {
+    relative = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
   } else {
-    drafts[conversationId] = { text, updatedAt: now };
+    relative = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
-  writeChatDrafts(pruneChatDrafts(drafts, conversationId));
+
+  return { relative, absolute };
 }
 
-export function clearChatDraft(conversationId: string): void {
-  const drafts = readChatDrafts();
-  if (!(conversationId in drafts)) return;
-  delete drafts[conversationId];
-  writeChatDrafts(drafts);
-}
-
-// ── Conversation export (#96) ────────────────────────────────────────────────
-// Pure helpers: they serialise a ChatMessage[] taken from state.chat.messages, so
-// an export cannot drift from the rendered conversation.
-
-export type ConversationExportFormat = 'markdown' | 'json';
-
-const EXPORT_EXTENSIONS: Record<ConversationExportFormat, string> = {
-  markdown: 'md',
-  json: 'json',
-};
-
-export const EXPORT_MIME_TYPES: Record<ConversationExportFormat, string> = {
-  markdown: 'text/markdown;charset=utf-8',
-  json: 'application/json;charset=utf-8',
-};
-
-/** Deterministic name, e.g. `chenpilot-conversation-abc123-2026-10-28.md`. */
-export function conversationExportFileName(
-  conversationId: string,
-  format: ConversationExportFormat,
-  date: string | Date,
+/**
+ * Return a day-separator label for a given date:
+ *   • same calendar day as `now` → "Today"
+ *   • one calendar day before    → "Yesterday"
+ *   • otherwise                  → "Weekday, Mon D" (e.g. "Monday, Oct 19")
+ */
+export function getDaySeparatorLabel(
+  date: Date,
+  now: Date = new Date(),
 ): string {
-  const day = (typeof date === 'string' ? new Date(date) : date).toISOString().slice(0, 10);
-  const safeId = conversationId.replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'conversation';
-  return `chenpilot-conversation-${safeId}-${day}.${EXPORT_EXTENSIONS[format]}`;
+  const startOfDay = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+
+  const dayDiff =
+    Math.round((startOfDay(now) - startOfDay(date)) / 86_400_000);
+
+  if (dayDiff === 0) return 'Today';
+  if (dayDiff === 1) return 'Yesterday';
+
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  });
 }
 
-/** JSON export: the `ChatMessage[]` itself, so `JSON.parse` returns every field unchanged. */
-export function serializeConversationJson(messages: ChatMessage[]): string {
-  return `${JSON.stringify(messages, null, 2)}\n`;
-}
+/**
+ * Group an array of chat messages into day buckets.
+ * Each bucket has a `separatorLabel` (Today / Yesterday / full date) and
+ * the messages that belong to that calendar day, preserving their order.
+ *
+ * Messages with invalid or missing timestamps are placed in an "Unknown"
+ * bucket so they never break rendering.
+ */
+export function groupMessagesByDay<T extends { timestamp?: string | null }>(
+  messages: T[],
+  now: Date = new Date(),
+): Array<{ separatorLabel: string; messages: T[] }> {
+  const buckets = new Map<string, T[]>();
 
-const ROLE_HEADINGS: Record<ChatMessage['type'], string> = {
-  user: 'User',
-  agent: 'Agent',
-  system: 'System',
-};
+  for (const msg of messages) {
+    let label = 'Unknown';
 
-function fenced(language: string, body: string): string {
-  // A fence longer than any backtick run in the body keeps the block intact.
-  const longest = (body.match(/`+/g) ?? []).reduce((max, run) => Math.max(max, run.length), 0);
-  const fence = '`'.repeat(Math.max(3, longest + 1));
-  return `${fence}${language}\n${body}\n${fence}`;
-}
-
-/** Content that is a JSON object or array is structured; everything else is prose. */
-function structuredContent(content: string): string | null {
-  const trimmed = content.trim();
-  if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) return null;
-  try {
-    const parsed: unknown = JSON.parse(trimmed);
-    return typeof parsed === 'object' && parsed !== null ? JSON.stringify(parsed, null, 2) : null;
-  } catch {
-    return null;
-  }
-}
-
-function traceSummary(trace: NonNullable<ChatMessage['metadata']>['executionTrace']): string[] {
-  if (!trace) return [];
-  const lines = [
-    `**Execution trace**: ${trace.steps.length} step${trace.steps.length === 1 ? '' : 's'}, ${trace.totalTime} ms (${trace.startTime} to ${trace.endTime})`,
-    '',
-  ];
-  const walk = (steps: typeof trace.steps, depth: number) => {
-    for (const step of steps) {
-      lines.push(`${'  '.repeat(depth)}- [${step.type}] ${step.name} (${step.duration} ms): ${step.description}`);
-      if (step.substeps?.length) walk(step.substeps, depth + 1);
-    }
-  };
-  walk(trace.steps, 0);
-  return lines;
-}
-
-/** Markdown transcript: role headings, ISO timestamps, fenced structured content and trace summaries. */
-export function serializeConversationMarkdown(
-  messages: ChatMessage[],
-  options: { title?: string } = {},
-): string {
-  const out: string[] = [`# ${options.title?.trim() || 'ChenPilot conversation'}`, ''];
-
-  for (const message of messages) {
-    out.push(`## ${ROLE_HEADINGS[message.type] ?? message.type} · ${message.timestamp}`, '');
-
-    if (message.messageType === 'voice') {
-      const transcript = message.voice?.transcript?.trim();
-      out.push(
-        transcript ? transcript : '_Voice message (no transcript)._',
-        '',
-        `_Voice: ${message.voice?.duration ?? 0}s, ${message.voice?.mimeType ?? 'unknown format'}_`,
-        '',
-      );
-    } else {
-      const structured = structuredContent(message.content);
-      out.push(structured ? fenced('json', structured) : message.content, '');
+    if (msg.timestamp) {
+      try {
+        const d = new Date(msg.timestamp);
+        if (!isNaN(d.getTime())) {
+          label = getDaySeparatorLabel(d, now);
+        }
+      } catch {
+        // leave label as 'Unknown'
+      }
     }
 
-    const meta = message.metadata;
-    if (meta?.transactionHash) out.push(`- Transaction: \`${meta.transactionHash}\``);
-    if (meta?.amount) out.push(`- Amount: ${meta.amount}${meta.tokenType ? ` ${meta.tokenType}` : ''}`);
-    if (meta?.status) out.push(`- Status: ${meta.status}`);
-    if (meta?.error) out.push(`- Error: ${meta.error}`);
-    if (meta?.transactionHash || meta?.amount || meta?.status || meta?.error) out.push('');
-
-    const trace = traceSummary(meta?.executionTrace);
-    if (trace.length > 0) out.push(...trace, '');
+    if (!buckets.has(label)) buckets.set(label, []);
+    buckets.get(label)!.push(msg);
   }
 
-  return `${out.join('\n').trimEnd()}\n`;
-}
-
-/** Triggers a browser download of `content`. Kept separate from the serialisers so they stay pure. */
-export function downloadTextFile(fileName: string, content: string, mimeType: string): void {
-  if (typeof document === 'undefined') return;
-  const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  return Array.from(buckets.entries()).map(([separatorLabel, msgs]) => ({
+    separatorLabel,
+    messages: msgs,
+  }));
 }
