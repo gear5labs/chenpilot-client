@@ -15,7 +15,7 @@
     "test:coverage": "vitest run --coverage",
     "test:a11y": "vitest run src/test/accessibility.test.tsx",
     "test:e2e": "playwright test",
-    "audit": "pnpm audit --audit-level=critical --prod",
+    "audit": "pnpm audit --audit-level=high --prod",
     "audit:full": "pnpm audit --audit-level=moderate",
     "prepare": "husky"
   },
