@@ -22,6 +22,7 @@ This document outlines the Progressive Web App (PWA) configuration and caching b
 - When storage reaches quota, the client catches the quota exception, removes only expired offline data (older queued messages or stale chat history and expired voice entries), and retries the write.
 - If the browser still refuses to persist the data, the UI surfaces a clear message stating that the offline content is unavailable rather than failing silently, including when a stored voice clip has been evicted or cannot be decoded by the browser.
 ## 4. Service worker verification (#283)
+- Vercel deployment preview authentication and authorization are handled externally via the Vercel GitHub integration dashboard.
 - **A service worker is registered.** `OfflineServiceWorker` (mounted in `src/app/layout.tsx`) registers the worker file as a module worker, and only when `NODE_ENV` is `production` and the browser supports service workers. In development no worker runs.
 - **There is no Workbox.** The worker is the hand-written `public/service-worker.js`; the app does not use Workbox or any build-time service-worker generator, and this document makes no Workbox claims.
 - **What it does.** Cache-first for the allowlist in `public/offline-cache-policy.js` into the `chenpilot-public-static-v1` cache, removal of older `chenpilot-public-static-*` caches on activate, and no interception of anything else (navigations, API calls, authenticated or wallet endpoints).
