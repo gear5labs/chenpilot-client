@@ -1,4 +1,5 @@
 import apiService, { singleFlight } from './api';
+import type { ApiResponse } from '@/types';
 
 const REAUTHENTICATION_WINDOW_MS = 5 * 60 * 1000;
 
@@ -358,6 +359,28 @@ class AuthService {
 
   clearRecentAuthentication(): void {
     this.recentAuthenticationAt = null;
+  }
+
+  clearLocalSession(): void {
+    this.clearRecentAuthentication();
+    apiService.clearToken();
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('user_data');
+      localStorage.removeItem('refresh_token');
+      sessionStorage.clear();
+    }
+  }
+
+  async requestPasswordReset(email: string): Promise<ApiResponse<{ message: string }>> {
+    return apiService.forgotPassword(email);
+  }
+
+  async resetPassword(token: string, password: string): Promise<ApiResponse<{ message: string }>> {
+    return apiService.resetPassword(token, password);
+  }
+
+  async signOutAllOtherDevices(): Promise<{ currentSessionRevoked: boolean }> {
+    return apiService.revokeOtherSessions();
   }
 
   /**

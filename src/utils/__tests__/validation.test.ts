@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   emailSchema,
   passwordSchema,
+  resetPasswordSchema,
   nameSchema,
   stellarAddressSchema,
   tokenAmountSchema,
@@ -55,6 +56,17 @@ describe("passwordSchema", () => {
       expect(passwordSchema.safeParse(p).success).toBe(false);
     });
   }
+});
+
+describe("resetPasswordSchema", () => {
+  it("rejects a weak reset password", () => {
+    expect(
+      resetPasswordSchema.safeParse({
+        password: "weak",
+        confirmPassword: "weak",
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe("nameSchema", () => {
@@ -568,7 +580,7 @@ describe('SUPPORTED_ASSETS', () => {
 
 describe('sendPaymentSchema memo rules', () => {
   const payment = {
-    recipientAddress: G56,
+    recipientAddress: 'G' + 'A'.repeat(55),
     amount: '1',
     tokenType: 'XLM' as const,
   };

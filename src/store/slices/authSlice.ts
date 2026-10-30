@@ -30,57 +30,47 @@ const initialState: AuthState = {
 // Async thunks
 export const login = createAsyncThunk(
   "auth/login",
-  async (credentials: LoginRequest, { rejectWithValue }) => {
-    try {
-      // Mock login - always succeed
-      const mockUser: User = {
-        id: "mock-user-id",
-        email: credentials.email,
-        name: "Mock User",
-        address: "0x1234567890abcdef",
-        publicKey: "0xabcdef1234567890",
-        isDeployed: true,
-        isFunded: true,
-        tokenType: "STRK",
-        authProvider: "email",
-        isEmailVerified: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      const mockToken = "mock-jwt-token";
-      return { user: mockUser, token: mockToken };
-    } catch (error) {
-      // Reject with field-level errors; the password is masked out of every message (#258)
-      return rejectWithValue(normalizeAuthError(error, LOGIN_FIELDS, [credentials.password]));
-    }
+  async (credentials: LoginRequest) => {
+    // Mock login - always succeed
+    const mockUser: User = {
+      id: "mock-user-id",
+      email: credentials.email,
+      name: "Mock User",
+      address: "0x1234567890abcdef",
+      publicKey: "0xabcdef1234567890",
+      isDeployed: true,
+      isFunded: true,
+      tokenType: "XLM",
+      authProvider: "email",
+      isEmailVerified: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const mockToken = "mock-jwt-token";
+    return { user: mockUser, token: mockToken };
   },
 );
 
 export const register = createAsyncThunk(
   "auth/register",
-  async (userData: RegisterRequest, { rejectWithValue }) => {
-    try {
-      // Mock register - always succeed
-      const mockUser: User = {
-        id: "mock-user-id",
-        email: userData.email,
-        name: userData.name || "Mock User",
-        address: "0x1234567890abcdef",
-        publicKey: "0xabcdef1234567890",
-        isDeployed: true,
-        isFunded: true,
-        tokenType: "STRK",
-        authProvider: "email",
-        isEmailVerified: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      const mockToken = "mock-jwt-token";
-      return { user: mockUser, token: mockToken };
-    } catch (error) {
-      // Reject with field-level errors; the password is masked out of every message (#258)
-      return rejectWithValue(normalizeAuthError(error, REGISTER_FIELDS, [userData.password]));
-    }
+  async (userData: RegisterRequest) => {
+    // Mock register - always succeed
+    const mockUser: User = {
+      id: "mock-user-id",
+      email: userData.email,
+      name: userData.name || "Mock User",
+      address: "0x1234567890abcdef",
+      publicKey: "0xabcdef1234567890",
+      isDeployed: true,
+      isFunded: true,
+      tokenType: "XLM",
+      authProvider: "email",
+      isEmailVerified: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const mockToken = "mock-jwt-token";
+    return { user: mockUser, token: mockToken };
   },
 );
 
@@ -103,7 +93,7 @@ export const loadUser = createAsyncThunk("auth/loadUser", async () => {
     publicKey: "0xabcdef1234567890",
     isDeployed: true,
     isFunded: true,
-    tokenType: "STRK",
+    tokenType: "XLM",
     authProvider: "email",
     isEmailVerified: true,
     createdAt: new Date().toISOString(),
@@ -124,7 +114,7 @@ export const updateProfile = createAsyncThunk(
       publicKey: "0xabcdef1234567890",
       isDeployed: true,
       isFunded: true,
-      tokenType: "STRK",
+      tokenType: "XLM",
       authProvider: "email",
       isEmailVerified: true,
       createdAt: new Date().toISOString(),
@@ -142,25 +132,26 @@ export const changePassword = createAsyncThunk(
   },
 );
 
-export const googleAuth = createAsyncThunk("auth/googleAuth", async () => {
-  // Mock google auth - always succeed
-  const mockUser: User = {
-    id: "mock-google-user-id",
-    email: "mockgoogle@example.com",
-    name: "Mock Google User",
-    address: "0x1234567890abcdef",
-    publicKey: "0xabcdef1234567890",
-    isDeployed: true,
-    isFunded: true,
-    tokenType: "STRK",
-    authProvider: "google",
-    isEmailVerified: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  const mockToken = "mock-google-jwt-token";
-  return { user: mockUser, token: mockToken };
-});
+export const googleAuth = createAsyncThunk(
+  "auth/googleAuth",
+  async (credential: string) => {
+    const mockUser: User = {
+      id: "mock-google-user-id",
+      email: "mockgoogle@example.com",
+      name: "Mock Google User",
+      address: "0x1234567890abcdef",
+      publicKey: "0xabcdef1234567890",
+      isDeployed: true,
+      isFunded: true,
+      tokenType: "XLM",
+      authProvider: "google",
+      isEmailVerified: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    return { user: mockUser, token: credential };
+  },
+);
 
 export const refreshToken = createAsyncThunk(
   "auth/refreshToken",
@@ -225,43 +216,42 @@ const authSlice = createSlice({
       // If no real token exists we leave the state as unauthenticated so the
       // app routes the user to the login page — mock data is only used when
       // the env variable NEXT_PUBLIC_USE_MOCK_AUTH is explicitly set to 'true'.
-      if (typeof window === 'undefined') return;
+      if (typeof window === "undefined") return;
 
-      const useMock = process.env.NEXT_PUBLIC_USE_MOCK_AUTH === 'true';
+      const useMock = process.env.NEXT_PUBLIC_USE_MOCK_AUTH === "true";
 
-      const storedToken = localStorage.getItem('auth_token');
-      const storedUser  = localStorage.getItem('user_data');
+      const storedToken = localStorage.getItem("auth_token");
+      const storedUser = localStorage.getItem("user_data");
 
       if (storedToken && storedUser) {
         // Real credentials from a previous session.
         try {
-          state.token           = storedToken;
-          state.user            = fromPersistedUser(JSON.parse(storedUser));
+          state.token = storedToken;
+          state.user = JSON.parse(storedUser) as User;
           state.isAuthenticated = true;
         } catch {
-          // Corrupt data — clear only the affected keys and log a redacted diagnostic.
-          logger.warn('[initializeAuth] Malformed payload in localStorage key "user_data"; clearing auth keys and recovering to unauthenticated state.');
-          localStorage.removeItem('auth_token');
-          localStorage.removeItem('user_data');
+          // Corrupt data — fall through to the unauthenticated default.
+          localStorage.removeItem("auth_token");
+          localStorage.removeItem("user_data");
         }
       } else if (useMock) {
         // Development convenience: no backend needed when the flag is set.
         const mockUser: User = {
-          id: 'mock-user-id',
-          email: 'mock@example.com',
-          name: 'Mock User',
-          address: '0x1234567890abcdef',
-          publicKey: '0xabcdef1234567890',
+          id: "mock-user-id",
+          email: "mock@example.com",
+          name: "Mock User",
+          address: "0x1234567890abcdef",
+          publicKey: "0xabcdef1234567890",
           isDeployed: true,
           isFunded: true,
-          tokenType: 'STRK',
-          authProvider: 'email',
+          tokenType: "XLM",
+          authProvider: "email",
           isEmailVerified: true,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
-        state.user            = mockUser;
-        state.token           = 'mock-jwt-token';
+        state.user = mockUser;
+        state.token = "mock-jwt-token";
         state.isAuthenticated = true;
       }
       // else: leave state.isAuthenticated = false → app will redirect to /auth/login
@@ -440,5 +430,4 @@ export const {
   setSessionExpirationTime,
   setSessionWarningActive,
 } = authSlice.actions;
-
 export default authSlice.reducer;

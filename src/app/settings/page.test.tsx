@@ -22,6 +22,10 @@ import toast from "react-hot-toast";
 
 const mockAuth = vi.hoisted(() => ({ authProvider: "email" }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn() }),
+}));
+
 vi.mock("@/store", () => ({
   useAppDispatch: () => vi.fn(),
   useAppSelector: (

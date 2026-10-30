@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useContext } from 'react';
+import React, { useContext, useRef, useState } from 'react';
 import { ReactReduxContext } from 'react-redux';
 import {
   StellarTransaction,
@@ -35,6 +35,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import TransactionDetailsDrawer, { getTransactionExplorerUrl } from './TransactionDetailsDrawer';
 
 export interface TransactionTableProps {
   transactions: StellarTransaction[];
@@ -427,10 +428,9 @@ export default function TransactionTable({
   activeAccountAddress,
   accountAddress,
 }: TransactionTableProps) {
-  const reduxLanguage = useAppSelector(
-    (state) => state.ui?.language
-  ) as Language | undefined;
-
+  const [selectedTransaction, setSelectedTransaction] = useState<StellarTransaction | null>(null);
+  const selectedRowRef = useRef<HTMLTableRowElement | null>(null);
+  const reduxLanguage = useAppSelector((state) => state.ui?.language) as Language | undefined;
   const currentLanguage = language || reduxLanguage || 'en';
 
   const reduxContext = useContext(ReactReduxContext);
@@ -470,7 +470,7 @@ export default function TransactionTable({
       await navigator.clipboard.writeText(hash);
       toast.success('Transaction hash copied');
     } catch {
-      toast.error('Unable to copy transaction hash');
+      toast.error('Could not copy transaction hash');
     }
   };
 
@@ -650,6 +650,21 @@ export default function TransactionTable({
                 return (
                   <tr
                     key={tx.id}
+                    ref={selectedTransaction?.id === tx.id ? selectedRowRef : undefined}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`View details for transaction ${formatAddress(tx.hash)}`}
+                    onClick={(event) => {
+                      selectedRowRef.current = event.currentTarget;
+                      setSelectedTransaction(tx);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        selectedRowRef.current = event.currentTarget;
+                        setSelectedTransaction(tx);
+                      }
+                    }}
                     className="border-b border-gray-800/50 hover:bg-gray-900/50 transition-colors"
                   >
                     <td className="py-3 px-4">
@@ -696,9 +711,13 @@ export default function TransactionTable({
 
                     <td className="py-3 px-4">
                       <button
-                        type="button"
-                        onClick={() => handleCopyHash(tx.hash)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleCopyHash(tx.hash);
+                        }}
+                        onKeyDown={(event) => event.stopPropagation()}
                         className="font-mono text-xs text-blue-400 hover:text-blue-300 truncate max-w-xs"
+                        type="button"
                         title={tx.hash}
                       >
                         {formatAddress(tx.hash)}
@@ -792,7 +811,8 @@ export default function TransactionTable({
 
                     <td className="py-3 px-4 text-right">
                       <a
-                        href={`https://stellar.expert/explorer/public/tx/${tx.hash}`}
+                        href={getTransactionExplorerUrl(tx.hash)}
+                        onClick={(event) => event.stopPropagation()}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center space-x-1 px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 transition-colors text-xs text-blue-400 hover:text-blue-300"
@@ -912,6 +932,13 @@ export default function TransactionTable({
           </div>
         </div>
       </div>
+      {selectedTransaction && (
+        <TransactionDetailsDrawer
+          transaction={selectedTransaction}
+          onClose={() => setSelectedTransaction(null)}
+          returnFocusRef={selectedRowRef}
+        />
+      )}
     </Card>
   );
 }

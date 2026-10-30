@@ -2,7 +2,7 @@
 
 import React, { useEffect } from "react";
 import { Provider } from "react-redux";
-import toast, { Toaster } from "react-hot-toast";
+import { Toaster } from "react-hot-toast";
 import { store } from "@/store";
 import { initializeAuth } from "@/store/slices/authSlice";
 import { initializeUI } from "@/store/slices/uiSlice";
@@ -13,6 +13,9 @@ import { SocketProvider } from "./SocketProvider";
 import { CHAT_MESSAGE_EVENT } from "@/hooks/useChatResync";
 import { TransactionToastListener } from "@/components/TransactionToastListener";
 import { ToastOverflowManager } from "@/components/providers/ToastOverflowManager";
+import { SessionManagementProvider } from "./SessionManagementProvider";
+import { PresenceProvider } from "./PresenceProvider";
+import { SessionExpirationWarning } from "@/components/auth/SessionExpirationWarning";
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -72,6 +75,7 @@ export function Providers({ children }: ProvidersProps) {
                 {children}
                 <SessionExpirationWarning />
                 <TransactionToastListener />
+                <ToastOverflowManager />
                 <Toaster
                   position="top-right"
                   toastOptions={{

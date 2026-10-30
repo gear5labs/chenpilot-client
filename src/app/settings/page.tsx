@@ -16,6 +16,7 @@ import { t, LANGUAGES } from "@/lib/i18n/i18n";
 import { TrustlinesPanel } from "@/components/dashboard/TrustlinesPanel";
 import { MfaSettingsSection } from "@/components/settings/MfaSettingsSection";
 import { DangerZone } from "@/components/settings/DangerZone";
+import SignOutOtherDevices from "@/components/auth/SignOutOtherDevices";
 import apiService from "@/services/api";
 import authService from "@/services/auth.service";
 import { StellarNetworkBadge } from "@/components/wallet/StellarNetworkBadge";
@@ -29,6 +30,8 @@ export default function SettingsPage() {
   const { isAuthenticated, user, isLoading } = useAppSelector(
     (state) => state.auth
   );
+  const { mode: themeMode, language } = useAppSelector((state) => state.ui) || {
+    mode: "dark",
   const { theme, language } = useAppSelector((state) => state.ui) || {
     theme: { mode: "dark" },
     language: "en",
@@ -298,14 +301,14 @@ export default function SettingsPage() {
 
                     <div className="flex space-x-4">
                       <Button
-                        variant={theme?.mode === "light" ? "primary" : "ghost"}
+                        variant={themeMode === "light" ? "primary" : "ghost"}
                         size="sm"
                       >
                         {t(language, "settings.light")}
                       </Button>
 
                       <Button
-                        variant={theme?.mode === "dark" ? "primary" : "ghost"}
+                        variant={themeMode === "dark" ? "primary" : "ghost"}
                         size="sm"
                       >
                         {t(language, "settings.dark")}
@@ -405,6 +408,7 @@ export default function SettingsPage() {
                       email={user?.email}
                       language={language}
                     />
+                    <SignOutOtherDevices />
                     {user?.authProvider === "google" ? (
                       <div>
                         <Button

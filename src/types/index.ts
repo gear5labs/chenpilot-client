@@ -311,6 +311,7 @@ export interface StellarTransaction {
    */
   memo_type?: "text" | "id" | "hash" | "return";
   direction?: TransactionDirection;
+  memo?: string;
 }
 
 /**
@@ -393,6 +394,13 @@ export interface ExecutionStep {
 
 /** Discriminates between plain text and voice messages. */
 export type MessageType = "text" | "voice";
+export type FeedbackRating = "up" | "down";
+
+export interface MessageFeedback {
+  rating: FeedbackRating;
+  comment?: string;
+  submittedAt: string;
+}
 
 /** Identifies who sent a chat message. */
 export type ChatMessageRole = "user" | "agent" | "system";
@@ -426,6 +434,7 @@ export interface ChatMessage {
     asset?: string;
     requiresConfirmation?: boolean;
     executionTrace?: ExecutionTrace;
+    feedback?: MessageFeedback;
     rawData?: Record<string, unknown>;
     serverTimestamp?: number | string;
     clientTimestamp?: number | string;

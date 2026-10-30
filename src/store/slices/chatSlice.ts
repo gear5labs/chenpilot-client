@@ -1,250 +1,9 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { logger } from "../../utils/logger";
-import { ChatMessage, AgentQueryRequest, Conversation, ChatHistoryStatus } from "@/types";
+import { ChatMessage, AgentQueryRequest, Conversation, MessageFeedback } from "@/types";
 import { AgentQueryResponse } from "@/types/agent";
 import apiService from "@/services/api";
-import { canTransition, getDeliveryState, DeliveryState } from "@/store/messageDelivery";
-import { logout } from "./authSlice";
-import { classifyAgentError, isRetryableErrorKind, isStateChangingQuery } from "@/services/agentService";
-import {
-  CONVERSATION_DELETED,
-  cancelConversationRequests,
-  isConversationDeleted,
-  trackConversationRequest,
-} from "@/store/conversationRequests";
-
-const OFFLINE_STORAGE_TTL = {
-  queueMs: 7 * 24 * 60 * 60 * 1000,
-  chatHistoryMs: 30 * 24 * 60 * 60 * 1000,
-  conversationsMs: 30 * 24 * 60 * 60 * 1000,
-};
-
-interface ChatThunkState {
-  auth: {
-    user: { id?: string } | null;
-  };
-  chat: Pick<ChatState, 'currentConversation' | 'isLoading' | 'isTyping'>;
-}
-
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (error instanceof Error) return error.message;
-  if (typeof error !== 'object' || error === null) return fallback;
-
-  const response = (error as { response?: unknown }).response;
-  if (typeof response === 'object' && response !== null) {
-    const data = (response as { data?: unknown }).data;
-    if (typeof data === 'object' && data !== null) {
-      const message = (data as { message?: unknown }).message;
-      if (typeof message === 'string') return message;
-    }
-  }
-
-  return fallback;
-};
-
-const getTimestampMs = (value: unknown): number | null => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === 'string') {
-    const numeric = Number(value);
-    if (!Number.isNaN(numeric)) return numeric;
-    const parsed = Date.parse(value);
-    if (!Number.isNaN(parsed)) return parsed;
-  }
-
-  if (value instanceof Date) {
-    const parsed = value.getTime();
-    if (!Number.isNaN(parsed)) return parsed;
-  }
-
-  return null;
-};
-
-const isStorageQuotaError = (error: unknown): boolean => {
-  if (!error) return false;
-
-  if (typeof error === 'object') {
-    const candidate = error as { name?: string; code?: number };
-    if (
-      candidate.name === 'QuotaExceededError' ||
-      candidate.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
-      candidate.code === 22 ||
-      candidate.code === 1014
-    ) {
-      return true;
-    }
-  }
-
-  if (error instanceof DOMException) {
-    return (
-      error.name === 'QuotaExceededError' ||
-      error.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
-      error.code === 22 ||
-      error.code === 1014
-    );
-  }
-
-  return false;
-};
-
-const getSafeTimestamp = (value: unknown): number | null => {
-  if (!value || typeof value !== 'object') {
-    return getTimestampMs(value);
-  }
-
-  const record = value as Record<string, unknown>;
-  const candidates = [
-    record.timestamp,
-    record.serverTimestamp,
-    record.updatedAt,
-    record.createdAt,
-    record.metadata,
-  ];
-
-  for (const candidate of candidates) {
-    const ts = getTimestampMs(candidate);
-    if (ts !== null) {
-      return ts;
-    }
-
-    if (candidate && typeof candidate === 'object') {
-      const nested = candidate as Record<string, unknown>;
-      const nestedTs = getTimestampMs(nested.clientTimestamp) ?? getTimestampMs(nested.serverTimestamp);
-      if (nestedTs !== null) {
-        return nestedTs;
-      }
-    }
-  }
-
-  return null;
-};
-
-const getPrunedOfflineValue = (key: string, value: unknown): unknown => {
-  if (typeof window === 'undefined') return value;
-
-  const now = Date.now();
-
-  if (key === 'messageQueue') {
-    if (!Array.isArray(value)) return value;
-    return value.filter((item) => {
-      if (!item || typeof item !== 'object') return false;
-      const ts = getSafeTimestamp(item);
-      if (ts === null) return true;
-      return ts >= now - OFFLINE_STORAGE_TTL.queueMs;
-    });
-  }
-
-  if (key === 'chat_history') {
-    if (!value || typeof value !== 'object') return value;
-
-    const prunedHistory: Record<string, unknown> = {};
-    for (const [conversationId, messages] of Object.entries(value as Record<string, unknown>)) {
-      if (!Array.isArray(messages)) {
-        prunedHistory[conversationId] = messages;
-        continue;
-      }
-
-      const filteredMessages = messages.filter((message) => {
-        const ts = getSafeTimestamp(message);
-        if (ts === null) return true;
-        return ts >= now - OFFLINE_STORAGE_TTL.chatHistoryMs;
-      });
-
-      if (filteredMessages.length > 0) {
-        prunedHistory[conversationId] = filteredMessages;
-      }
-    }
-
-    return prunedHistory;
-  }
-
-  if (key === 'conversations') {
-    if (!Array.isArray(value)) return value;
-    return value.filter((conversation) => {
-      if (!conversation || typeof conversation !== 'object') return false;
-      const updatedAt = getSafeTimestamp(conversation);
-      if (updatedAt === null) return true;
-      return updatedAt >= now - OFFLINE_STORAGE_TTL.conversationsMs;
-    });
-  }
-
-  return value;
-};
-
-const pruneExpiredOfflineData = () => {
-  if (typeof window === 'undefined') return;
-
-  const saveValue = (key: string, value: unknown) => {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch {
-      // Ignore cascade failures; keep the first failure as the user-facing signal.
-    }
-  };
-
-  try {
-    const rawQueue = localStorage.getItem('messageQueue');
-    if (rawQueue) {
-      const parsedQueue = JSON.parse(rawQueue);
-      saveValue('messageQueue', getPrunedOfflineValue('messageQueue', parsedQueue));
-    }
-  } catch {
-    // Ignore malformed queue data and continue with the rest of the cleanup.
-  }
-
-  try {
-    const rawHistory = localStorage.getItem('chat_history');
-    if (rawHistory) {
-      const parsedHistory = JSON.parse(rawHistory);
-      saveValue('chat_history', getPrunedOfflineValue('chat_history', parsedHistory));
-    }
-  } catch {
-    // Ignore malformed chat history and continue.
-  }
-
-  try {
-    const rawConversations = localStorage.getItem('conversations');
-    if (rawConversations) {
-      const parsedConversations = JSON.parse(rawConversations);
-      saveValue('conversations', getPrunedOfflineValue('conversations', parsedConversations));
-    }
-  } catch {
-    // Ignore malformed conversations data and continue.
-  }
-};
-
-export const persistOfflineStorage = <T>(key: string, value: T, context: string): string | null => {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-    return null;
-  } catch (error) {
-    if (!isStorageQuotaError(error)) {
-      return `Offline ${context} is unavailable because storage could not be saved.`;
-    }
-
-    pruneExpiredOfflineData();
-
-    const sanitizedValue = getPrunedOfflineValue(key, value);
-
-    try {
-      localStorage.setItem(key, JSON.stringify(sanitizedValue));
-      return null;
-    } catch (retryError) {
-      if (isStorageQuotaError(retryError)) {
-        return `Offline ${context} is unavailable because browser storage is full. Old expired offline data was cleared to make space.`;
-      }
-      return `Offline ${context} is unavailable because the browser refused to save it.`;
-    }
-  }
-};
-
-export const isStorageQuotaFailure = (error: unknown): boolean => isStorageQuotaError(error);
+import { VOICE_MESSAGE } from "@/constants";
 
 // ─── Voice message payload ────────────────────────────────────────────────────
 export interface SendVoiceMessagePayload {
@@ -976,6 +735,21 @@ const chatSlice = createSlice({
         };
         state.messages = sortMessagesChronologically(state.messages);
       }
+    },
+    setMessageFeedback: (
+      state,
+      action: PayloadAction<{ messageId: string; feedback: MessageFeedback | null }>,
+    ) => {
+      const message = state.messages.find((item) => item.id === action.payload.messageId);
+      if (!message) return;
+
+      const metadata = { ...message.metadata };
+      if (action.payload.feedback) {
+        metadata.feedback = action.payload.feedback;
+      } else {
+        delete metadata.feedback;
+      }
+      message.metadata = metadata;
     },
     removeMessage: (state, action: PayloadAction<string>) => {
       state.messages = state.messages.filter(
@@ -1815,6 +1589,7 @@ export const {
   setCurrentConversation,
   setTyping,
   updateMessage,
+  setMessageFeedback,
   removeMessage,
   updateAgentStatus,
   setAgentConnected,

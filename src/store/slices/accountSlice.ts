@@ -180,6 +180,7 @@ function mapHorizonTransaction(
     created_at: record.created_at as string,
     source_account: record.source_account as string,
     fee_charged: record.fee_charged as string,
+    memo: record.memo as string | undefined,
     operation_count: record.operation_count as number,
     successful: record.successful as boolean,
     operations:

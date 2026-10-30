@@ -538,6 +538,37 @@ class ApiService {
     return response.data;
   }
 
+  async revokeOtherSessions(): Promise<{ currentSessionRevoked: boolean }> {
+    const token = this.token;
+    const response = await axios.post<
+      ApiResponse<{ currentSessionRevoked?: boolean }> | { currentSessionRevoked?: boolean }
+    >(
+      `${this.api.defaults.baseURL}/auth/sessions/revoke-others`,
+      {},
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        withCredentials: true,
+      },
+    );
+    const payload = response.data;
+    const currentSessionRevoked =
+      'data' in payload && payload.data
+        ? payload.data.currentSessionRevoked
+        : 'currentSessionRevoked' in payload
+          ? payload.currentSessionRevoked
+          : false;
+    return { currentSessionRevoked: currentSessionRevoked === true };
+  }
+
+  /**
+   * Logout user by invalidating backend session and purging all local auth state.
+   * Never throws errors; catches backend failures and ensures local token/storage cleanup.
+   *
+   * @returns Promise resolving when logout cleanup completes.
+   */
   async logout(): Promise<void> {
     try {
       await this.api.post(
@@ -658,47 +689,12 @@ class ApiService {
   }
 
   /**
-   * Request account deletion. Local token, conversations and drafts are cleared
-   * even when the API call fails so the client does not keep private copies.
-   * On-chain history cannot be deleted from this client.
+   * Export all user data as a binary file Blob.
+   * Iterates through candidate endpoints (`/data-export`, `/data/export`, `/api/data-export`).
+   *
+   * @returns Promise resolving to downloadable `Blob`.
+   * @throws {Error} Throws Error if user data export endpoint is not found or fails.
    */
-  async deleteAccount(): Promise<{
-    api: boolean;
-    token: boolean;
-    conversations: boolean;
-    drafts: boolean;
-    removed: string[];
-    remaining: string[];
-    onChainHistoryDeleted: false;
-  }> {
-    const { clearAccountLocalStorage } = await import(
-      "@/lib/accountDeletion"
-    );
-
-    let api = false;
-
-    try {
-      await this.api.delete("/account");
-      api = true;
-    } catch (error) {
-      // Server asks for recent authentication (#255): stop before touching local data or the
-      // token, so the caller can prompt, re-authenticate and retry the deletion.
-      if ((error as { response?: { data?: { code?: string } } })?.response?.data?.code === "REAUTH_REQUIRED") {
-        throw error;
-      }
-      api = false;
-    }
-
-    const local = clearAccountLocalStorage();
-    this.clearToken();
-
-    return {
-      api,
-      ...local,
-      onChainHistoryDeleted: false,
-    };
-  }
-
   async exportUserData(): Promise<Blob> {
     const endpoints = [
       "/data-export",

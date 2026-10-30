@@ -63,8 +63,7 @@ export const createContactSchema = z.object({
   address: stellarAddressSchema,
   tokenType: z.enum(SUPPORTED_ASSETS, {
   tokenType: z.enum(['XLM', 'STRK', 'USDC', 'USDT', 'BTC', 'ETH', 'AQUA'], {
-    required_error: 'Please select a token type',
-    invalid_type_error: `Unsupported token type. Supported tokens are: ${SUPPORTED_ASSETS.join(', ')}`,
+    error: 'Please select a token type',
   }),
   note: z.string().max(280, 'Contact notes are limited to 280 characters').optional(),
 });
@@ -118,6 +117,17 @@ export const resetPasswordSchema = z.object({
   path: ["confirmPassword"],
 });
 
+const MAX_STELLAR_MEMO_ID = "18446744073709551615";
+
+function isWithinStellarMemoIdRange(value: string): boolean {
+  const normalized = value.replace(/^0+(?=\d)/, "");
+  return (
+    normalized.length < MAX_STELLAR_MEMO_ID.length ||
+    (normalized.length === MAX_STELLAR_MEMO_ID.length &&
+      normalized <= MAX_STELLAR_MEMO_ID)
+  );
+}
+
 // Agent query validation
 export const agentQuerySchema = z.object({
   query: z.string().min(1, 'Please enter a message').max(1000, 'Message is too long'),
@@ -133,9 +143,8 @@ export const sendPaymentSchema = z.object({
     .refine((val) => parseFloat(val) > 0, VALIDATION_MESSAGES.AMOUNT_MUST_BE_POSITIVE)
     .refine((val) => parseFloat(val) >= PAYMENT_LIMITS.MIN_AMOUNT, VALIDATION_MESSAGES.AMOUNT_EXCEEDS_MIN)
     .refine((val) => parseFloat(val) <= PAYMENT_LIMITS.MAX_AMOUNT, VALIDATION_MESSAGES.AMOUNT_EXCEEDS_MAX),
-  tokenType: z.enum(SUPPORTED_ASSETS, {
-    required_error: VALIDATION_MESSAGES.TOKEN_TYPE_REQUIRED,
-    invalid_type_error: `Unsupported token type. Supported tokens are: ${SUPPORTED_ASSETS.join(', ')}`,
+  tokenType: z.enum(PAYMENT_LIMITS.SUPPORTED_TOKENS, {
+    error: VALIDATION_MESSAGES.TOKEN_TYPE_REQUIRED,
   }),
   memo: z.string().optional(),
   memoType: z.enum(PAYMENT_LIMITS.MEMO_TYPES).optional(),
@@ -152,8 +161,20 @@ export const sendPaymentSchema = z.object({
     });
   }
 
-  if (data.memo && data.memo.length > 0) {
-    if (!data.memoType || data.memoType === 'none') {
+  if (data.memo && data.memo.length > 0 && !data.memoType) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: VALIDATION_MESSAGES.MEMO_TYPE_REQUIRED,
+      path: ['memoType'],
+    });
+    return;
+  }
+
+  if (data.memo && data.memoType === 'id') {
+    if (
+      !SECURITY_VALIDATION.MEMO_ID_REGEX.test(data.memo) ||
+      !isWithinStellarMemoIdRange(data.memo)
+    ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: VALIDATION_MESSAGES.MEMO_TYPE_REQUIRED,
@@ -162,37 +183,25 @@ export const sendPaymentSchema = z.object({
       return;
     }
 
-    if (data.memoType === 'text') {
-      if (new TextEncoder().encode(data.memo).length > PAYMENT_LIMITS.MAX_MEMO_LENGTH) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: VALIDATION_MESSAGES.MEMO_TOO_LONG,
-          path: ['memo'],
-        });
-      }
-    }
+  if (
+    data.memo &&
+    data.memoType === 'text' &&
+    new TextEncoder().encode(data.memo).length > PAYMENT_LIMITS.MAX_MEMO_LENGTH
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Text memo must be at most ${PAYMENT_LIMITS.MAX_MEMO_LENGTH} UTF-8 bytes.`,
+      path: ['memo'],
+    });
+  }
 
-    if (data.memoType === 'id') {
-      if (
-        !SECURITY_VALIDATION.MEMO_ID_REGEX.test(data.memo) ||
-        BigInt(data.memo) > 18446744073709551615n
-      ) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: VALIDATION_MESSAGES.MEMO_ID_INVALID,
-          path: ['memo'],
-        });
-      }
-    }
-
-    if (data.memoType === 'hash') {
-      if (!SECURITY_VALIDATION.MEMO_HASH_REGEX.test(data.memo)) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: VALIDATION_MESSAGES.MEMO_HASH_INVALID,
-          path: ['memo'],
-        });
-      }
+  if (data.memo && data.memoType === 'hash') {
+    if (!SECURITY_VALIDATION.MEMO_HASH_REGEX.test(data.memo)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: VALIDATION_MESSAGES.MEMO_HASH_INVALID,
+        path: ['memo'],
+      });
     }
   }
 });
@@ -300,8 +309,7 @@ export const validateSendPayment = (data: {
     return { isValid: true, errors: [] };
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
-      const issues = error.issues ?? error.errors ?? [];
-      const errors = issues.map((err: z.ZodIssue) => `${err.path.join('.')}: ${err.message}`);
+      const errors = error.issues.map((err: z.ZodIssue) => `${err.path.join('.')}: ${err.message}`);
       return { isValid: false, errors };
     }
     return { isValid: false, errors: ['Validation failed'] };
@@ -340,7 +348,7 @@ export const validateMemo = (memo: string, memoType: string): boolean => {
   if (!memo || memo.trim().length === 0) return false;
   
   if (memoType === 'id') {
-    return SECURITY_VALIDATION.MEMO_ID_REGEX.test(memo) && BigInt(memo) <= 18446744073709551615n;
+    return SECURITY_VALIDATION.MEMO_ID_REGEX.test(memo) && isWithinStellarMemoIdRange(memo);
   }
   if (memoType === 'hash') {
     return SECURITY_VALIDATION.MEMO_HASH_REGEX.test(memo);
