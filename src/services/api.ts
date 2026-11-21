@@ -6,7 +6,6 @@ import {
   logger,
   setCorrelationIdHeader,
 } from "../utils/logger";
-import { env } from '@/config/env';
 import {
   RegisterRequest,
   LoginRequest,
@@ -471,8 +470,8 @@ export class ApiService {
    * Verify current credentials without changing the active session token.
    */
   async reauthenticate(email: string, password: string): Promise<void> {
-    const response = await axios.post<LoginResponse>(
-      this.api.getUri({ url: "/auth/login" }),
+    const response = await this.api.post<LoginResponse>(
+      "/auth/login",
       { email, password },
       { headers: { "Content-Type": "application/json" } },
     );
@@ -571,17 +570,12 @@ export class ApiService {
   }
 
   async revokeOtherSessions(): Promise<{ currentSessionRevoked: boolean }> {
-    const token = this.token;
-    const response = await axios.post<
+    const response = await this.api.post<
       ApiResponse<{ currentSessionRevoked?: boolean }> | { currentSessionRevoked?: boolean }
     >(
-      `${this.api.defaults.baseURL}/auth/sessions/revoke-others`,
+      "/auth/sessions/revoke-others",
       {},
       {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
         withCredentials: true,
       },
     );
@@ -622,8 +616,8 @@ export class ApiService {
   }
 
   async refreshToken(): Promise<{ token: string }> {
-    const response = await axios.post<{ token: string }>(
-      `${this.api.defaults.baseURL}/auth/refresh`,
+    const response = await this.api.post<{ token: string }>(
+      "/auth/refresh",
       {},
       {
         headers: { "Content-Type": "application/json" },
@@ -1153,30 +1147,6 @@ export class ApiService {
   // Payment endpoints
 
   /**
-   * Submit a payment to the backend. The backend is expected to create and
-   * broadcast the Stellar transaction and return the confirmed result.
-   *
-   * The client must NOT treat a successful response here as the only
-   * authorisation gate — the backend enforces its own authorisation and
-   * balance checks independently.
-   *
-   * @param data - Validated and sanitized `SendPaymentRequest` payload.
-   * @returns Promise resolving to `ApiResponse` containing the transaction hash
-   *          and the ledger-confirmed status of the payment.
-   * @throws {AxiosError} Throws for network or server errors.
-   *
-   * @see docs/API_CONTRACT.md — "Payment Endpoint" section.
-   */
-  async sendPayment(
-    data: SendPaymentRequest,
-  ): Promise<ApiResponse<{ transactionHash: string; status: 'success' | 'failed' }>> {
-    const response = await this.api.post<
-      ApiResponse<{ transactionHash: string; status: 'success' | 'failed' }>
-    >('/payments/send', data);
-    return response.data;
-  }
-
-  // Agent query - Optimized for backend integration  /**
    * Send a query to the AI agent. Attempts connected experimental agent service first, falling back to backend `/query`.
    * Does NOT throw on backend/execution error; catches exceptions and returns a resolved `AgentQueryResponse` object with `success: false` and friendly message.
    *
@@ -1195,10 +1165,6 @@ export class ApiService {
    * }
    * ```
    */
-  async queryAgent(data: AgentQueryRequest): Promise<AgentQueryResponse> {
-    // First try the experimental agent service
-  // Agent query
-
   async queryAgent(
     data: AgentQueryRequest,
     options?: { onDelta?: (text: string) => void; signal?: AbortSignal },

@@ -28,7 +28,7 @@ const { mockAxiosInstance, mockBareAxios } = vi.hoisted(() => {
       request: { use: vi.fn() },
       response: { use: vi.fn() },
     },
-    isAxiosError: vi.fn((err: unknown) => !!(err && typeof err === 'object' && 'isAxiosError' in err)),
+    isAxiosError: vi.fn((err: unknown) => !!(err && typeof err === 'object' && ('isAxiosError' in err || 'response' in err))),
   };
 
   return { mockAxiosInstance, mockBareAxios };
@@ -299,8 +299,8 @@ describe('ApiService - Contact & Transaction API Contracts', () => {
         const result = await apiService.getAccountTransactions('usr-42');
 
         expect(mockAxiosInstance.get).toHaveBeenCalledTimes(1);
-        expect(mockAxiosInstance.get).toHaveBeenCalledWith('/account/usr-42/transactions', {
-          params: { page: 1, limit: 10 },
+        expect(mockAxiosInstance.get).toHaveBeenCalledWith('/account/transactions', {
+          params: { userId: 'usr-42', page: 1, limit: 10 },
         });
         expect(result).toEqual(responseData);
       });
@@ -319,8 +319,8 @@ describe('ApiService - Contact & Transaction API Contracts', () => {
 
         const result = await apiService.getAccountTransactions('usr-42', 3, 25);
 
-        expect(mockAxiosInstance.get).toHaveBeenCalledWith('/account/usr-42/transactions', {
-          params: { page: 3, limit: 25 },
+        expect(mockAxiosInstance.get).toHaveBeenCalledWith('/account/transactions', {
+          params: { userId: 'usr-42', page: 3, limit: 25 },
         });
         expect(result.data.page).toBe(3);
         expect(result.data.limit).toBe(25);
@@ -351,7 +351,7 @@ describe('ApiService - Contact & Transaction API Contracts', () => {
             data: { success: false, status: 404, message: 'User account not found' },
           },
         };
-        mockAxiosInstance.get.mockRejectedValueOnce(notFoundError);
+        mockAxiosInstance.get.mockRejectedValue(notFoundError);
 
         await expect(apiService.getAccountTransactions('usr-unknown')).rejects.toEqual(notFoundError);
       });
@@ -433,6 +433,77 @@ describe('ApiService - Contact & Transaction API Contracts', () => {
         await expect(requestAccountFunding(sampleAddress, 10, 0, true)).rejects.toThrow(
           'Funding failed: Backend service unavailable and Friendbot fallback failed. Required: 10 XLM, Current: 0 XLM.'
         );
+      });
+    });
+
+    describe('Configured Axios Instance Endpoints Contract', () => {
+      describe('reauthenticate()', () => {
+        it('uses configured Axios instance for /auth/login request', async () => {
+          mockAxiosInstance.post.mockResolvedValueOnce({
+            data: { success: true },
+          });
+
+          await apiService.reauthenticate('user@example.com', 'secret123');
+
+          expect(mockAxiosInstance.post).toHaveBeenCalledTimes(1);
+          expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+            '/auth/login',
+            { email: 'user@example.com', password: 'secret123' },
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+          expect(mockBareAxios.post).not.toHaveBeenCalled();
+        });
+
+        it('throws when re-authentication is unsuccessful', async () => {
+          mockAxiosInstance.post.mockResolvedValueOnce({
+            data: { success: false, message: 'Invalid credentials' },
+          });
+
+          await expect(
+            apiService.reauthenticate('user@example.com', 'wrong')
+          ).rejects.toThrow('Invalid credentials');
+        });
+      });
+
+      describe('revokeOtherSessions()', () => {
+        it('uses configured Axios instance for /auth/sessions/revoke-others', async () => {
+          mockAxiosInstance.post.mockResolvedValueOnce({
+            data: { success: true, data: { currentSessionRevoked: false } },
+          });
+
+          const result = await apiService.revokeOtherSessions();
+
+          expect(mockAxiosInstance.post).toHaveBeenCalledTimes(1);
+          expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+            '/auth/sessions/revoke-others',
+            {},
+            { withCredentials: true },
+          );
+          expect(mockBareAxios.post).not.toHaveBeenCalled();
+          expect(result).toEqual({ currentSessionRevoked: false });
+        });
+      });
+
+      describe('refreshToken()', () => {
+        it('uses configured Axios instance for /auth/refresh', async () => {
+          mockAxiosInstance.post.mockResolvedValueOnce({
+            data: { token: 'new-jwt-token' },
+          });
+
+          const result = await apiService.refreshToken();
+
+          expect(mockAxiosInstance.post).toHaveBeenCalledTimes(1);
+          expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+            '/auth/refresh',
+            {},
+            {
+              headers: { 'Content-Type': 'application/json' },
+              withCredentials: true,
+            },
+          );
+          expect(mockBareAxios.post).not.toHaveBeenCalled();
+          expect(result).toEqual({ token: 'new-jwt-token' });
+        });
       });
     });
   });
