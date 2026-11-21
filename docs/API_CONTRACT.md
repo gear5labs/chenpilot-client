@@ -14,6 +14,21 @@ Environment variables beginning with `NEXT_PUBLIC_` are browser-visible configur
 - `AgentService` uses `NEXT_PUBLIC_AGENT_API_URL`, also defaulting to `http://localhost:2333`. These clients are separate even when configured to the same host.
 - Public API, agent, and socket origins are parsed at startup. Production requires HTTPS; credentials, fragments, malformed URLs, and non-HTTP(S) schemes are rejected. HTTP is permitted only in development/test for local backend origins.
 - `ApiService` attaches `Authorization: Bearer <access-token>` when a token is present. Its explicit refresh call and the 401 interceptor send `POST /auth/refresh` with cookies (`withCredentials: true`).
+
+### Modular Domain Architecture and Single Configured Client (#322)
+
+To keep service interactions cohesive and maintainable, API interactions are partitioned into domain-specific modules located under `src/services/api/`:
+- **AuthApi (`src/services/api/auth.ts`)**: Authentication, user profile, session management, and MFA.
+- **WalletApi (`src/services/api/wallet.ts`)**: Starknet/Stellar wallet, account status, deployment, funding, transactions, payments, and trustlines.
+- **ChatApi (`src/services/api/chat.ts`)**: AI agent queries, tool execution, memory, chat history, and prompt versions.
+- **ContactsApi (`src/services/api/contacts.ts`)**: Contact list management and CRUD operations.
+- **LiquidityApi (`src/services/api/liquidity.ts`)**: Liquidity pool statistics.
+- **AuditApi (`src/services/api/audit.ts`)**: Audit log querying and exports.
+
+All domain modules share a single configured `ApiClient` instance (`src/services/api/client.ts`), ensuring:
+1. **Single Client Ownership**: One configured Axios client instance owns request and response interceptors, base URL configuration, correlation IDs (`X-Correlation-ID`), and retry backoff.
+2. **Unified Session & Token Refresh**: Authentication tokens and 401 token refresh state are centralized in the single client. When a token is refreshed or updated, it immediately propagates across all domain requests without duplicate network configurations or split authentication states.
+3. **Backward Compatibility**: `ApiService` (`src/services/api.ts`) and the `apiService` singleton compose these domain modules and preserve all existing method signatures and exports for backwards compatibility.
 - Next.js rewrites `/horizon/:path*` to `${NEXT_PUBLIC_API_BASE_URL || 'http://localhost:2333'}/proxy/:path*`. `horizonFetch` calls the local `/horizon` path; keep the backend `/proxy/:path*` handler available. Stellar Horizon reads made through `horizonFetch` are in `src/store/slices/accountSlice.ts`, not these service endpoint lists.
 - `NEXT_PUBLIC_STELLAR_NETWORK` must be explicitly set to `mainnet` or `testnet` for the UI to identify the active network. Missing or unsupported values display `Network unknown`; do not infer it from `NODE_ENV`. The backend Horizon proxy and payment execution service must be configured for the same network. This frontend configuration does not itself switch backend networks.
 - `ApiResponse<T>` is the declared envelope for many methods:
