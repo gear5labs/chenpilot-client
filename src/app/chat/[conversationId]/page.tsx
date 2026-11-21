@@ -42,16 +42,21 @@ export default function ConversationPage() {
     dispatch(loadChatHistory(conversationId));
   }, [conversation, conversationId, dispatch, storageLoaded]);
 
+  const breadcrumbs = [
+    { label: "Chat", href: "/chat" },
+    { label: conversation?.title || conversationId || "Conversation", current: true },
+  ];
+
   if (!isAuthenticated) {
     return (
-      <ClientOnlyChatLayout>
+      <ClientOnlyChatLayout breadcrumbs={breadcrumbs}>
         <div className="flex h-full items-center justify-center text-gray-300">Redirecting to login...</div>
       </ClientOnlyChatLayout>
     );
   }
 
   return (
-    <ClientOnlyChatLayout>
+    <ClientOnlyChatLayout breadcrumbs={breadcrumbs}>
       {notFound ? (
         <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
           <h1 className="text-xl font-semibold text-white">Conversation not found</h1>

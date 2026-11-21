@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { useAppDispatch, useAppSelector } from "@/store";
 import { logout } from "@/store/slices/authSlice";
 import {
@@ -16,6 +16,8 @@ import { ConversationExportMenu } from "@/components/chat/ConversationExportMenu
 import { DeleteConversationDialog } from "@/components/chat/DeleteConversationDialog";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Button } from "@/components/ui/Button";
+import { Breadcrumbs, BreadcrumbItem, getRouteBreadcrumbs } from "@/components/layout/Breadcrumbs";
+import { useChatSearch } from "@/hooks/useChatSearch";
 import toast from "react-hot-toast";
 import { X, Menu, PanelLeft, Plus } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -23,10 +25,12 @@ import Image from "next/image";
 
 interface ChatLayoutProps {
   children: React.ReactNode;
+  breadcrumbs?: BreadcrumbItem[];
 }
 
-export function ChatLayout({ children }: ChatLayoutProps) {
+export function ChatLayout({ children, breadcrumbs }: ChatLayoutProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -66,6 +70,8 @@ export function ChatLayout({ children }: ChatLayoutProps) {
   const { chatHistory, currentConversation, conversations, messages } = useAppSelector(
     (state) => state.chat,
   );
+
+  const resolvedBreadcrumbs = breadcrumbs ?? getRouteBreadcrumbs(pathname, currentConversation?.title);
 
   // Convert chat history object to array for display
   const chatHistoryList = React.useMemo(() => {
@@ -411,27 +417,19 @@ export function ChatLayout({ children }: ChatLayoutProps) {
                       );
                     })}
                     <div className="border-t border-gray-700">
+                      <div className="flex items-center justify-between px-4 py-3">
+                        <span className="text-sm text-gray-200">Theme</span>
+                        <ThemeToggle />
+                      </div>
+                    </div>
+                    <div className="border-t border-gray-700">
                       <button
                         onClick={handleLogout}
                         className="w-full flex items-center space-x-3 px-4 py-3 text-sm text-red-400 hover:bg-red-900/20 transition-all duration-200"
                       >
                         <span>Sign Out</span>
                       </button>
-                    );
-                  })}
-                  <div className="border-t border-gray-700">
-                    <div className="flex items-center justify-between px-4 py-3">
-                      <span className="text-sm text-gray-200">Theme</span>
-                      <ThemeToggle />
                     </div>
-                  </div>
-                  <div className="border-t border-gray-700">
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center space-x-3 px-4 py-3 text-sm text-red-400 hover:bg-red-900/20 transition-all duration-200"
-                    >
-                      <span>Sign Out</span>
-                    </button>
                   </div>
                 )}
               </div>
@@ -442,6 +440,7 @@ export function ChatLayout({ children }: ChatLayoutProps) {
 
       {/* Main content */}
       <div className="min-h-0 flex-1 flex flex-col overflow-hidden">
+        <Breadcrumbs items={resolvedBreadcrumbs} />
         {/* Page content */}
         <main
           id="main-content"

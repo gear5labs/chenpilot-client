@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAppSelector } from '@/store';
+import { useAppDispatch, useAppSelector } from '@/store';
 import { ChatLayout } from '@/components/layout/ChatLayout';
 import { ConversationHistoryView } from '@/components/chat/ConversationHistoryView';
 import { fetchChatHistory, loadOlderHistory } from '@/store/slices/chatSlice';
@@ -54,7 +54,12 @@ export default function ChatHistoryPage() {
   }
 
   return (
-    <ChatLayout>
+    <ChatLayout
+      breadcrumbs={[
+        { label: "Chat", href: "/chat" },
+        { label: "Chat History", current: true },
+      ]}
+    >
       <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
         <div ref={scrollRef} className="flex-1 overflow-auto">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">

@@ -618,3 +618,12 @@ For every `localStorage` key the client reads and parses:
 ### Backend integration note
 
 These recovery paths are entirely client-side and require no backend changes. The backend is not notified when a key is cleared. On the next successful login or registration the keys are rewritten with fresh values.
+
+## Nested Route Breadcrumb Navigation (#320)
+
+Authenticated layouts include lightweight breadcrumbs for nested routes (such as direct links into conversation threads under `/chat/[conversationId]`, chat history at `/chat/history`, settings, and transaction details).
+
+### Backend integration note
+
+Breadcrumb hierarchy resolution and parent path tracking are purely client-side UI concerns. No backend route metadata endpoints or API contract modifications are required.
+

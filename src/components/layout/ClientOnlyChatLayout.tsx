@@ -2,12 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { ChatLayout } from './ChatLayout';
+import type { BreadcrumbItem } from './Breadcrumbs';
 
 interface ClientOnlyChatLayoutProps {
   children: React.ReactNode;
+  breadcrumbs?: BreadcrumbItem[];
 }
 
-export function ClientOnlyChatLayout({ children }: ClientOnlyChatLayoutProps) {
+export function ClientOnlyChatLayout({ children, breadcrumbs }: ClientOnlyChatLayoutProps) {
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -37,5 +39,5 @@ export function ClientOnlyChatLayout({ children }: ClientOnlyChatLayoutProps) {
     );
   }
 
-  return <ChatLayout>{children}</ChatLayout>;
+  return <ChatLayout breadcrumbs={breadcrumbs}>{children}</ChatLayout>;
 }

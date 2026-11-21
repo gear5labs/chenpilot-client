@@ -30,12 +30,11 @@ export default function SettingsPage() {
   const { isAuthenticated, user, isLoading } = useAppSelector(
     (state) => state.auth
   );
-  const { mode: themeMode, language } = useAppSelector((state) => state.ui) || {
-    mode: "dark",
-  const { theme, language } = useAppSelector((state) => state.ui) || {
-    theme: { mode: "dark" },
-    language: "en",
-  };
+  const uiState = useAppSelector((state) => state.ui);
+  const themeMode = (uiState as { mode?: "light" | "dark"; theme?: { mode?: "light" | "dark" } })?.mode ??
+    (uiState as { theme?: { mode?: "light" | "dark" } })?.theme?.mode ??
+    "dark";
+  const language = uiState?.language ?? "en";
   const [passwordChangeStage, setPasswordChangeStage] = useState<
     "reauthenticate" | "change-password" | null
   >(null);
@@ -196,7 +195,12 @@ export default function SettingsPage() {
   }
 
   return (
-    <ChatLayout>
+    <ChatLayout
+      breadcrumbs={[
+        { label: "Dashboard", href: "/dashboard" },
+        { label: t(language, "settings.title") || "Settings", current: true },
+      ]}
+    >
       <div className="relative flex h-full flex-col overflow-hidden bg-black text-white">
         <div className="absolute inset-0">
           <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:50px_50px]" />
