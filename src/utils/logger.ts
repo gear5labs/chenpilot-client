@@ -183,6 +183,69 @@ export function sanitizeLogValue(val: unknown, depth = 0): unknown {
   return val;
 }
 
+/**
+ * Patterns matching server internals, stack traces, database engines, or system socket errors.
+ */
+export const SERVER_INTERNAL_PATTERNS: RegExp[] = [
+  // Stack traces
+  /(?:^|\n)\s*at\s+(?:[A-Za-z0-9_$.<>]+\s+\()?.*:\d+:\d+\)?/,
+  /\bTraceback\s+\(most recent call last\):/i,
+  /\bat\s+[A-Za-z0-9_$./\\-]+\.(?:js|ts|jsx|tsx|py|rb|php|java|go|rs):\d+/i,
+  // Filesystem paths & system errors
+  /(?:\/home\/|\/var\/|\/app\/|[A-Za-z]:\\Users\\|[A-Za-z]:\\[\w-]+\\)/i,
+  /\bnode_modules[\\/]/i,
+  /\b(ENOENT|EACCES|EPERM|ENOSPC|EEXIST)\b/i,
+  // Database internals
+  /\b(syntax error at or near|duplicate key value violates unique constraint|relation ".*" does not exist|column ".*" does not exist|deadlock detected|foreign key constraint|table ".*" doesn't exist)\b/i,
+  /\b(PostgresError|MongoError|SequelizeDatabaseError|QueryFailedError|TypeORMError|PrismaClientKnownRequestError)\b/i,
+  /\bSQLSTATE\[\w+\]/i,
+  /\b(?:SELECT|INSERT|UPDATE|DELETE)\s+.*\s+FROM\s+/i,
+  // Network / socket internals
+  /\b(ECONNREFUSED|ENOTFOUND|ECONNRESET|ETIMEDOUT|EADDRINUSE|EPIPE|EHOSTUNREACH)\b/i,
+  /\b(?:127\.0\.0\.1|localhost:\d+|0\.0\.0\.0)\b/i,
+  // Unhandled runtime dumps
+  /\b(NullPointerException|Segmentation fault|SIGSEGV|panic:|fatal error:)\b/i,
+  /\b(?:TypeError|ReferenceError|RangeError): [^\n]+\n\s+at/i,
+  // Secrets and tokens
+  /\b(sk_live_[A-Za-z0-9]{16,}|Bearer\s+[A-Za-z0-9._-]{20,})\b/i,
+];
+
+/**
+ * Checks if a string contains server internal error traces, stack paths, or database errors.
+ */
+export function isServerInternalMessage(message: unknown): boolean {
+  if (typeof message !== 'string') return false;
+  return SERVER_INTERNAL_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+/**
+ * Sanitizes and redacts raw error strings, stripping stack traces, internal paths,
+ * and database internals to prevent leaking server details to the client UI.
+ */
+export function redactServerInternals(
+  message: string,
+  fallback = 'An internal server error occurred. Please try again later.'
+): string {
+  if (!message || typeof message !== 'string') {
+    return fallback;
+  }
+
+  // If the message contains server internals, return the safe fallback
+  if (isServerInternalMessage(message)) {
+    return fallback;
+  }
+
+  // Strip bearer tokens or private key patterns if present in message
+  if (/Bearer\s+[A-Za-z0-9._~+/-]+=*/i.test(message)) {
+    message = message.replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED]');
+  }
+  if (/S[A-Z0-9]{55}/.test(message)) {
+    message = message.replace(/S[A-Z0-9]{55}/g, '[REDACTED_SECRET]');
+  }
+
+  return message;
+}
+
 export function sanitizeLogArgs(args: unknown[]): unknown[] {
   return args.map((arg) => sanitizeLogValue(arg));
 }

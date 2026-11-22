@@ -15,6 +15,10 @@ import contactsReducer, {
   clearCreateError,
   clearUpdateError,
   clearDeleteError,
+  setSelectedContact,
+  clearSelectedContact,
+  clearError,
+  searchContacts,
 } from '../contactsSlice';
 import type { ContactsState } from '@/types';
 
@@ -315,18 +319,8 @@ describe('deleteContact', () => {
     const s = store.getState().contacts as ContactsState;
     expect(s.mutationError.delete['1']).toBeUndefined();
     expect(s.mutationError.delete['2']).toBe('Err B');
-import { describe, it, expect } from 'vitest';
-import contactsReducer, {
-  clearError,
-  setSelectedContact,
-  clearSelectedContact,
-  searchContacts,
-  getContacts,
-  createContact,
-  updateContact,
-  deleteContact,
-} from '../contactsSlice';
-import { Contact } from '@/types';
+  });
+});
 
 describe('#343 — contactsSlice reducers and extraReducers', () => {
   const initial = {

@@ -28,6 +28,14 @@ Environment variables beginning with `NEXT_PUBLIC_` are browser-visible configur
 
 ## Error Handling And User Messages
 
+- **Normalized API Error Boundary (#323)**: At service boundaries, errors are normalized into typed `NormalizedApiError` instances via `normalizeApiError`:
+  - **Preserves Transport Metadata**: Retains HTTP `status` code (e.g. 400, 401, 404, 429, 503), `code`, `fieldErrors`, and diagnostic `correlationId` (from `X-Correlation-ID` or `X-Request-ID`).
+  - **Retryability Flag**: Explicit `retryable: boolean` property marks rate limits (429), temporary outages (503), and transport network errors as retryable, while permanent client errors (400, 401, 404, 422) are marked non-retryable.
+  - **Server Internals Redaction**: Redacts technical internal messages—including stack traces, database/SQL errors, server filesystem paths, socket dumps, and unhandled exceptions—replacing them with safe user-friendly fallbacks so technical internals never leak to the client UI.
+  - **Representative Migrations**:
+    - *Auth*: `authService.reauthenticate` catches re-authentication failures and surfaces a `NormalizedApiError` with status and correlation ID preserved.
+    - *Contacts*: `contactsSlice.getContacts` and `contactsSlice.createContact` reject with normalized user-facing messages.
+    - *Wallet*: `SendPaymentPage.handleSendPayment` uses `normalizeApiError` to show toast notifications with safe messages while retaining transport diagnostics.
 - Axios HTTP failures normally reject with an Axios error; the client does not normalize every backend error body into `ApiError`. `ApiError.status` is a number, not a closed set of application error codes. The backend error envelope beyond that type is not specified here.
 - A 401 on an `ApiService` request triggers one queued refresh attempt and then retries the original request once. If refresh fails, local auth is cleared and the browser is sent to `/auth/login`. The auth UI may show the rejected thunk/error message.
 - Requests may include `X-Correlation-ID`. This is a safe diagnostic identifier, not authentication or a payload field. The backend MAY echo `X-Correlation-ID` or `X-Request-ID` in the response. The client keeps the value in structured diagnostic details and logs only status, method/code, and correlation metadata; prompts, tokens, private keys, wallet secrets, and response payloads are excluded. Backend log correlation support is not currently guaranteed by this contract.

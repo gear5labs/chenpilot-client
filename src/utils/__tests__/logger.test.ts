@@ -11,6 +11,8 @@ import {
   extractCorrelationId,
   setCorrelationIdHeader,
   correlationIdForError,
+  isServerInternalMessage,
+  redactServerInternals,
 } from "../logger";
 
 describe("logger & high-cardinality log protection (#924)", () => {
@@ -162,6 +164,26 @@ describe("logger & high-cardinality log protection (#924)", () => {
       logger.error("[AgentService] Query failed:", { correlationId: "c1", query: prompt });
       expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(prompt);
       expect(JSON.stringify(errorSpy.mock.calls)).toContain("c1");
+    });
+  });
+
+  describe("server internals redaction (#323)", () => {
+    it("detects stack traces, SQL traces, and internal filesystem paths", () => {
+      expect(isServerInternalMessage("Error: boom\n    at Object.<anonymous> (/app/server.ts:12:4)")).toBe(true);
+      expect(isServerInternalMessage('error: syntax error at or near "SELECT"')).toBe(true);
+      expect(isServerInternalMessage("connect ECONNREFUSED 127.0.0.1:5432")).toBe(true);
+      expect(isServerInternalMessage("NullPointerException in com.chenpilot.core")).toBe(true);
+      expect(isServerInternalMessage("/var/secrets/stellar.key not found")).toBe(true);
+      expect(isServerInternalMessage("sk_live_1234567890abcdef invalid")).toBe(true);
+      expect(isServerInternalMessage("Insufficient funds for payment")).toBe(false);
+      expect(isServerInternalMessage("Recipient address is required")).toBe(false);
+    });
+
+    it("redacts internal server messages to safe fallback", () => {
+      const sqlErr = 'PostgresError: syntax error at or near "DROP TABLE"';
+      expect(redactServerInternals(sqlErr)).toBe("An internal server error occurred. Please try again later.");
+      expect(redactServerInternals(sqlErr, "Operation failed.")).toBe("Operation failed.");
+      expect(redactServerInternals("Invalid recipient address")).toBe("Invalid recipient address");
     });
   });
 });

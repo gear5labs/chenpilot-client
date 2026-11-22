@@ -6,7 +6,10 @@ import {
   logger,
   setCorrelationIdHeader,
 } from "../utils/logger";
-import { env } from '@/config/env';
+export * from './apiErrors';
+
+const isAxiosLike = (error: unknown): error is { response?: { status?: number; data?: unknown } } =>
+  axios.isAxiosError(error) || (typeof error === 'object' && error !== null && 'response' in error);
 import {
   RegisterRequest,
   LoginRequest,
@@ -174,7 +177,7 @@ export const requestAccountFunding = async (
       }
     }
 
-    const statusCode = axios.isAxiosError(backendError)
+    const statusCode = isAxiosLike(backendError)
       ? backendError.response?.status
       : undefined;
 
@@ -905,34 +908,33 @@ export class ApiService {
           page: number;
           limit: number;
         }>
-      >("/account/transactions", {
-        params: { userId, page, limit },
-      });
-
-      return response.data;
-    } catch (error: unknown) {
-      // Try the alternative route used by older backend implementations
-      // only when the primary route is not found.
-      if (
-        !axios.isAxiosError(error) ||
-        error.response?.status !== 404
-      ) {
-        throw error;
-      }
-
-      const response = await this.api.get<
-        ApiResponse<{
-          transactions: StellarTransaction[];
-          total: number;
-          page: number;
-          limit: number;
-        }>
       >(
         `/account/${encodeURIComponent(userId)}/transactions`,
         { params: { page, limit } },
       );
 
       return response.data;
+    } catch (error: unknown) {
+      if (!isAxiosLike(error) || error.response?.status !== 404) {
+        throw error;
+      }
+
+      try {
+        const fallbackResponse = await this.api.get<
+          ApiResponse<{
+            transactions: StellarTransaction[];
+            total: number;
+            page: number;
+            limit: number;
+          }>
+        >("/account/transactions", {
+          params: { userId, page, limit },
+        });
+
+        return fallbackResponse.data;
+      } catch {
+        throw error;
+      }
     }
   }
 
@@ -1054,7 +1056,7 @@ export class ApiService {
       return response.data;
     } catch (error: unknown) {
       if (
-        axios.isAxiosError(error) &&
+        isAxiosLike(error) &&
         error.response?.status === 404
       ) {
         return {
@@ -1081,7 +1083,7 @@ export class ApiService {
       return response.data;
     } catch (error: unknown) {
       if (
-        axios.isAxiosError(error) &&
+        isAxiosLike(error) &&
         error.response?.status === 404
       ) {
         return {
@@ -1109,7 +1111,7 @@ export class ApiService {
       return response.data;
     } catch (error: unknown) {
       if (
-        axios.isAxiosError(error) &&
+        isAxiosLike(error) &&
         error.response?.status === 404
       ) {
         return {
@@ -1135,7 +1137,7 @@ export class ApiService {
       return response.data;
     } catch (error: unknown) {
       if (
-        axios.isAxiosError(error) &&
+        isAxiosLike(error) &&
         error.response?.status === 404
       ) {
         return {
@@ -1150,37 +1152,12 @@ export class ApiService {
     }
   }
 
-  // Payment endpoints
-
   /**
-   * Submit a payment to the backend. The backend is expected to create and
-   * broadcast the Stellar transaction and return the confirmed result.
-   *
-   * The client must NOT treat a successful response here as the only
-   * authorisation gate — the backend enforces its own authorisation and
-   * balance checks independently.
-   *
-   * @param data - Validated and sanitized `SendPaymentRequest` payload.
-   * @returns Promise resolving to `ApiResponse` containing the transaction hash
-   *          and the ledger-confirmed status of the payment.
-   * @throws {AxiosError} Throws for network or server errors.
-   *
-   * @see docs/API_CONTRACT.md — "Payment Endpoint" section.
-   */
-  async sendPayment(
-    data: SendPaymentRequest,
-  ): Promise<ApiResponse<{ transactionHash: string; status: 'success' | 'failed' }>> {
-    const response = await this.api.post<
-      ApiResponse<{ transactionHash: string; status: 'success' | 'failed' }>
-    >('/payments/send', data);
-    return response.data;
-  }
-
-  // Agent query - Optimized for backend integration  /**
    * Send a query to the AI agent. Attempts connected experimental agent service first, falling back to backend `/query`.
    * Does NOT throw on backend/execution error; catches exceptions and returns a resolved `AgentQueryResponse` object with `success: false` and friendly message.
    *
    * @param data - Request payload containing user query string.
+   * @param options - Optional streaming callback and abort signal.
    * @returns Promise resolving to `AgentQueryResponse` containing result envelope.
    *
    * @example
@@ -1195,10 +1172,6 @@ export class ApiService {
    * }
    * ```
    */
-  async queryAgent(data: AgentQueryRequest): Promise<AgentQueryResponse> {
-    // First try the experimental agent service
-  // Agent query
-
   async queryAgent(
     data: AgentQueryRequest,
     options?: { onDelta?: (text: string) => void; signal?: AbortSignal },
@@ -1659,7 +1632,7 @@ export class ApiService {
       return response.data;
     } catch (error: unknown) {
       if (
-        axios.isAxiosError(error) &&
+        isAxiosLike(error) &&
         error.response?.status === 404
       ) {
         return {
@@ -1685,7 +1658,7 @@ export class ApiService {
       return response.data;
     } catch (error: unknown) {
       if (
-        axios.isAxiosError(error) &&
+        isAxiosLike(error) &&
         error.response?.status === 404
       ) {
         return {
@@ -1711,7 +1684,7 @@ export class ApiService {
       return response.data;
     } catch (error: unknown) {
       if (
-        axios.isAxiosError(error) &&
+        isAxiosLike(error) &&
         error.response?.status === 404
       ) {
         return {

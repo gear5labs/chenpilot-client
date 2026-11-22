@@ -1,17 +1,24 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import toast from 'react-hot-toast';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { getContacts } from '@/store/slices/contactsSlice';
 import { ChatLayout } from '@/components/layout/ChatLayout';
 import { OfflineIndicator } from '@/components/chat/OfflineIndicator';
 import SendPaymentForm from '@/components/payment/SendPaymentForm';
-import { PaymentStatusResult, PaymentSubmissionResult, SendPaymentRequest } from '@/types';
+import { PaymentStatusResult, SendPaymentRequest } from '@/types';
 import apiService from '@/services/api';
+import { normalizeApiError } from '@/services/apiErrors';
 import { StellarNetworkBadge } from '@/components/wallet/StellarNetworkBadge';
 import { ArrowLeft, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+
+interface NativeBalanceBreakdown {
+  total: string;
+  reserve: string;
+}
 
 export default function SendPaymentPage() {
   const router = useRouter();
@@ -22,7 +29,7 @@ export default function SendPaymentPage() {
   const { list: contacts, isLoading: contactsLoading } = useAppSelector(
     (state) => state.contacts,
   );
-  const nativeBalance = useAppSelector((state) => state.wallet?.nativeBalance ?? 0);
+  const [nativeBalance, setNativeBalance] = useState<NativeBalanceBreakdown | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -41,6 +48,10 @@ export default function SendPaymentPage() {
       // Balance guidance is omitted when the backend cannot provide its breakdown.
     });
 
+    return () => {
+      isActive = false;
+    };
+  }, [dispatch, isAuthenticated, router]);
 
   const handleSendPayment = async (data: SendPaymentRequest) => {
     // NOTE: the self-transfer comparison in SendPaymentForm is a UX hint only.
@@ -59,25 +70,10 @@ export default function SendPaymentPage() {
         );
       }
     } catch (error: unknown) {
-      const message =
-        (error as { response?: { data?: { message?: string } }; message?: string })
-          ?.response?.data?.message ||
-        (error as { message?: string })?.message ||
-        'Failed to send payment';
-      toast.error(message, { id: toastId });
-      await apiService.sendPayment(data);
-      toast.success('Payment sent successfully!');
-      router.push('/transactions');
-    } catch (error: any) {
-      console.error('Payment error:', error);
-      toast.error(getPaymentFailureMessage(error));
-      throw error;
-      const message = getPaymentFailureMessage(error);
-      toast.error(message || 'Failed to send payment');
+      const normalized = normalizeApiError(error, 'Failed to send payment');
+      toast.error(normalized.message, { id: toastId });
     }
   };
-  const handleSendPayment = (data: SendPaymentRequest, idempotencyKey: string): Promise<PaymentSubmissionResult> =>
-    apiService.sendPayment(data, idempotencyKey);
 
   const handleCheckPaymentStatus = (idempotencyKey: string): Promise<PaymentStatusResult> =>
     apiService.getPaymentStatus(idempotencyKey);
@@ -118,13 +114,10 @@ export default function SendPaymentPage() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center space-x-2 bg-blue-500/10 px-3 py-1.5 rounded-full border border-blue-500/30">
-                <Shield className="h-4 w-4 text-blue-400" aria-hidden="true" />
-                <span className="text-xs font-medium text-blue-300">Secure</span>
               <div className="flex items-center gap-3">
                 <StellarNetworkBadge />
                 <div className="flex items-center space-x-2 bg-blue-500/10 px-3 py-1.5 rounded-full border border-blue-500/30">
-                  <Shield className="h-4 w-4 text-blue-400" />
+                  <Shield className="h-4 w-4 text-blue-400" aria-hidden="true" />
                   <span className="text-xs font-medium text-blue-300">Secure</span>
                 </div>
               </div>
@@ -139,6 +132,7 @@ export default function SendPaymentPage() {
               onSubmit={handleSendPayment}
               onCheckStatus={handleCheckPaymentStatus}
               contacts={contacts}
+              initialContactId={initialContactId}
               isLoading={contactsLoading}
               // Pass the sender's address so the form can warn about
               // accidental self-transfers.  This is a UX guard only.

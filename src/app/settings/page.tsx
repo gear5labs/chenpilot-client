@@ -19,6 +19,7 @@ import { DangerZone } from "@/components/settings/DangerZone";
 import SignOutOtherDevices from "@/components/auth/SignOutOtherDevices";
 import apiService from "@/services/api";
 import authService from "@/services/auth.service";
+import { normalizeApiError } from "@/services/apiErrors";
 import { StellarNetworkBadge } from "@/components/wallet/StellarNetworkBadge";
 import toast from "react-hot-toast";
 import { PasswordStrengthMeter } from "@/components/auth/(register)/passwordStrengthMeter";
@@ -32,8 +33,6 @@ export default function SettingsPage() {
   );
   const { mode: themeMode, language } = useAppSelector((state) => state.ui) || {
     mode: "dark",
-  const { theme, language } = useAppSelector((state) => state.ui) || {
-    theme: { mode: "dark" },
     language: "en",
   };
   const [passwordChangeStage, setPasswordChangeStage] = useState<
@@ -91,9 +90,8 @@ export default function SettingsPage() {
       await authService.reauthenticate(user?.email ?? "", currentPassword);
       setPasswordChangeStage("change-password");
     } catch (error) {
-      setSecurityError(
-        error instanceof Error ? error.message : "Re-authentication failed",
-      );
+      const normalized = normalizeApiError(error, "Re-authentication failed");
+      setSecurityError(normalized.message);
     } finally {
       setIsSecurityActionLoading(false);
     }

@@ -1,5 +1,7 @@
 import apiService, { singleFlight } from './api';
 import type { ApiResponse } from '@/types';
+import { redactServerInternals, extractCorrelationId } from '@/utils/logger';
+import { normalizeApiError } from './apiErrors';
 
 const REAUTHENTICATION_WINDOW_MS = 5 * 60 * 1000;
 
@@ -40,6 +42,9 @@ export interface NormalizedAuthError {
   message: string;
   fieldErrors: Record<string, string>;
   status?: number;
+  retryable?: boolean;
+  correlationId?: string;
+  code?: string;
 }
 
 // Fallback for the #258 field-error normalizer; distinct from the privacy-safe GENERIC_AUTH_ERROR
@@ -88,21 +93,32 @@ export function normalizeAuthError(
 ): NormalizedAuthError {
   const e = error as {
     message?: string;
-    response?: { status?: number; data?: unknown };
+    code?: string;
+    response?: { status?: number; data?: unknown; headers?: unknown };
   } | null | undefined;
   const data = (e?.response?.data ?? undefined) as
-    | { message?: unknown; error?: unknown; errors?: unknown; details?: unknown }
+    | { message?: unknown; error?: unknown; errors?: unknown; details?: unknown; code?: unknown }
     | undefined;
   const status = e?.response?.status;
+  const correlationId = extractCorrelationId(error);
+  const code = (typeof data?.code === 'string' ? data.code : undefined) ?? e?.code;
+  const retryable =
+    status === 429 ||
+    status === 503 ||
+    (status === undefined && Boolean(e?.message && /network|econnrefused|timeout|failed to fetch/i.test(e.message)))
+      ? true
+      : status !== undefined && status >= 400 && status < 500
+        ? false
+        : undefined;
 
   const fieldErrors: Record<string, string> = {};
   const unmatched: string[] = [];
   const add = (rawField: unknown, rawMessage: unknown) => {
-    const message = firstMessage(rawMessage);
-    if (!message) return;
+    const raw = firstMessage(rawMessage);
+    if (!raw) return;
     const name = typeof rawField === 'string' ? rawField.split('.').pop() ?? rawField : '';
     const field = FIELD_ALIASES[name] ?? name;
-    const safe = redact(message, secrets);
+    const safe = redactServerInternals(redact(raw, secrets));
     if (field && fields.includes(field)) {
       fieldErrors[field] ??= safe;
     } else {
@@ -123,16 +139,21 @@ export function normalizeAuthError(
 
   const serverMessage = firstMessage(data?.message) ?? firstMessage(data?.error);
   let message: string;
-  if (serverMessage) message = redact(serverMessage, secrets);
+  if (serverMessage) message = redactServerInternals(redact(serverMessage, secrets));
   else if (unmatched.length) message = unmatched[0];
   else if (Object.keys(fieldErrors).length) message = 'Please correct the highlighted fields.';
   else if (status === undefined && e?.message && /network/i.test(e.message)) {
     message = "Can't reach the server. Check your connection and try again.";
   } else if (typeof (error as { message?: unknown })?.message === 'string' && !e?.response) {
-    message = redact((error as { message: string }).message, secrets) || GENERIC_FORM_ERROR;
+    message = redactServerInternals(redact((error as { message: string }).message, secrets)) || GENERIC_FORM_ERROR;
   } else message = GENERIC_FORM_ERROR;
 
-  return { message, fieldErrors, status };
+  const ret: NormalizedAuthError = { message, fieldErrors };
+  if (status !== undefined) ret.status = status;
+  if (retryable === true) ret.retryable = true;
+  if (correlationId !== undefined) ret.correlationId = correlationId;
+  if (code !== undefined) ret.code = code;
+  return ret;
 }
 
 /** Type guard for an already-normalized error (e.g. a thunk's `rejectWithValue` payload). */
@@ -338,8 +359,12 @@ class AuthService {
     }
 
     this.clearRecentAuthentication();
-    await apiService.reauthenticate(email, password);
-    this.recentAuthenticationAt = Date.now();
+    try {
+      await apiService.reauthenticate(email, password);
+      this.recentAuthenticationAt = Date.now();
+    } catch (error) {
+      throw normalizeApiError(error, 'Re-authentication failed');
+    }
   }
 
   /**
