@@ -25,7 +25,7 @@ jobs:
       # To request an exception, open a new issue with the label
       # "dependency-exception" and get sign-off from a maintainer before merging.
       - name: Run dependency review
-        uses: actions/dependency-review-action@ce3cf9537a52e8119d91fd484ab5b8a807627bf8 # v4.6.0
+        uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1
         with:
           fail-on-severity: high
           deny-licenses: >-
