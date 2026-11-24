@@ -64,6 +64,7 @@ vi.mock('../agentService', () => ({
 
 import { ApiService, requestAccountFunding } from '../api';
 import { CreateContactRequest, UpdateContactRequest, Contact, StellarTransaction } from '@/types';
+import { RETRY_POLICY } from '@/utils/retryUtils';
 
 describe('ApiService - Contact & Transaction API Contracts', () => {
   let apiService: ApiService;
@@ -73,6 +74,24 @@ describe('ApiService - Contact & Transaction API Contracts', () => {
     vi.clearAllMocks();
     mockBareAxios.create.mockReturnValue(mockAxiosInstance);
     apiService = new ApiService();
+  });
+
+  describe('Retry Policy Configuration', () => {
+    it('initializes with default RETRY_POLICY', () => {
+      expect(apiService.getRetryPolicy()).toEqual(RETRY_POLICY);
+    });
+
+    it('allows overriding retry policy via constructor', () => {
+      const custom = new ApiService({ maxAttempts: 5 });
+      expect(custom.getRetryPolicy().maxAttempts).toBe(5);
+      expect(custom.getRetryPolicy().baseDelayMs).toBe(RETRY_POLICY.baseDelayMs);
+    });
+
+    it('allows mutating retry policy via setRetryPolicy', () => {
+      apiService.setRetryPolicy({ maxAttempts: 4, baseDelayMs: 2000 });
+      expect(apiService.getRetryPolicy().maxAttempts).toBe(4);
+      expect(apiService.getRetryPolicy().baseDelayMs).toBe(2000);
+    });
   });
 
   describe('Authentication response validation', () => {

@@ -1,6 +1,7 @@
 import { createSlice, PayloadAction, createAction } from "@reduxjs/toolkit";
 import { readSavedTheme, saveTheme } from "@/lib/theme";
 import { readTranslationLanguage, saveTranslationLanguage, TranslationLanguage } from "@/lib/translation";
+import { RETRY_POLICY } from "@/utils/retryUtils";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface RetryStatus {
@@ -84,9 +85,16 @@ export const uiSlice = createSlice({
     /**
      * Called by the retry interceptor before each retry attempt.
      * Overwrites any previous status with the latest attempt info.
+     * Defaults maxAttempts to RETRY_POLICY.maxAttempts when omitted.
      */
-    setRetryStatus: (state, action: PayloadAction<RetryStatus>) => {
-      state.retryStatus = action.payload;
+    setRetryStatus: (
+      state,
+      action: PayloadAction<Omit<RetryStatus, "maxAttempts"> & { maxAttempts?: number }>
+    ) => {
+      state.retryStatus = {
+        ...action.payload,
+        maxAttempts: action.payload.maxAttempts ?? RETRY_POLICY.maxAttempts,
+      };
     },
     /**
      * Called by the retry interceptor when the request finally succeeds,

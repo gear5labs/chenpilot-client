@@ -1,5 +1,39 @@
 import { AxiosError } from 'axios';
-import { RETRY_CONFIG } from '@/constants';
+
+// ─── Policy ───────────────────────────────────────────────────────────────────
+
+export interface RetryPolicy {
+  maxAttempts: number;
+  retryableStatusCodes: readonly number[];
+  idempotentMethods: readonly string[];
+  baseDelayMs: number;
+  maxDelayMs: number;
+  jitterMs: number;
+}
+
+export const RETRY_POLICY: RetryPolicy = {
+  maxAttempts: 3,
+  retryableStatusCodes: [408, 429, ...Array.from({ length: 100 }, (_, index) => 500 + index)],
+  idempotentMethods: ['get', 'head', 'options'],
+  baseDelayMs: 1000,
+  maxDelayMs: 30000,
+  jitterMs: 1000,
+};
+
+export const DEFAULT_RETRY_POLICY = RETRY_POLICY;
+
+/** Merges a partial policy with RETRY_POLICY defaults. */
+export function resolveRetryPolicy(policy?: Partial<RetryPolicy>): RetryPolicy {
+  if (!policy) return RETRY_POLICY;
+  return {
+    maxAttempts: policy.maxAttempts ?? RETRY_POLICY.maxAttempts,
+    retryableStatusCodes: policy.retryableStatusCodes ?? RETRY_POLICY.retryableStatusCodes,
+    idempotentMethods: policy.idempotentMethods ?? RETRY_POLICY.idempotentMethods,
+    baseDelayMs: policy.baseDelayMs ?? RETRY_POLICY.baseDelayMs,
+    maxDelayMs: policy.maxDelayMs ?? RETRY_POLICY.maxDelayMs,
+    jitterMs: policy.jitterMs ?? RETRY_POLICY.jitterMs,
+  };
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -17,7 +51,7 @@ interface RetryableConfig {
  * Returns true for errors that are safe and sensible to retry:
  *
  * - Pure network failures (no HTTP response at all — ECONNRESET, ETIMEDOUT …)
- * - HTTP status codes in RETRY_CONFIG.RETRYABLE_STATUS_CODES (408, 429, 5xx)
+ * - HTTP status codes in policy.retryableStatusCodes (408, 429, 5xx)
  * - Only on idempotent HTTP methods OR on any method if the server sent a 503
  *   (service unavailable) which is always safe to retry.
  *
@@ -26,16 +60,21 @@ interface RetryableConfig {
  * - 4xx client errors not in the retryable list (bad request, not found, etc.)
  * - Requests that have already exhausted their retry budget
  */
-export function isRetryableError(error: AxiosError): boolean {
+export function isRetryableError(
+  error: AxiosError,
+  policy: Partial<RetryPolicy> = RETRY_POLICY,
+): boolean {
   const config = error.config as RetryableConfig | undefined;
   if (!config) return false;
 
   // Payment outcomes can be ambiguous after transport errors; never replay them.
   if (config.paymentOperation) return false;
 
+  const effectivePolicy = resolveRetryPolicy(policy);
+
   // Already consumed the full retry budget.
   const attempt = config._retryCount ?? 0;
-  if (attempt >= RETRY_CONFIG.MAX_ATTEMPTS) return false;
+  if (attempt >= effectivePolicy.maxAttempts) return false;
 
   const method = (config.method ?? 'get').toLowerCase();
   const status = error.response?.status;
@@ -44,14 +83,14 @@ export function isRetryableError(error: AxiosError): boolean {
   if (!error.response) {
     // Retry network errors on idempotent methods only to avoid duplicate
     // side-effects (e.g. duplicate payments on a POST).
-    return (RETRY_CONFIG.IDEMPOTENT_METHODS as readonly string[]).includes(method);
+    return (effectivePolicy.idempotentMethods as readonly string[]).includes(method);
   }
 
   // 401 is owned by the token-refresh interceptor — do not retry here.
   if (status === 401) return false;
 
   // Status must be in the allow-list.
-  if (!(RETRY_CONFIG.RETRYABLE_STATUS_CODES as readonly number[]).includes(status!)) {
+  if (!(effectivePolicy.retryableStatusCodes as readonly number[]).includes(status!)) {
     return false;
   }
 
@@ -59,7 +98,7 @@ export function isRetryableError(error: AxiosError): boolean {
   if (status === 503) return true;
 
   // For all other retryable codes, require an idempotent method.
-  return (RETRY_CONFIG.IDEMPOTENT_METHODS as readonly string[]).includes(method);
+  return (effectivePolicy.idempotentMethods as readonly string[]).includes(method);
 }
 
 /**
@@ -69,31 +108,46 @@ export function isRetryableError(error: AxiosError): boolean {
  *   delay = min(BASE * 2^attempt, MAX) + random(0, JITTER)
  *
  * If the server returned a `Retry-After` header (seconds or HTTP-date) we
- * honour that instead, capped at MAX_DELAY_MS.
+ * honour that instead, capped at maxDelayMs.
  *
  * @param attempt  0-based index of the attempt that just failed
  * @param error    The Axios error (used to read Retry-After)
+ * @param policy   Configurable retry policy (defaults to RETRY_POLICY)
+ * @param random   Injectable random generator for testable jitter bounds
  */
-export function computeBackoffMs(attempt: number, error: AxiosError): number {
-  // Honour server-supplied Retry-After if present.
-  const retryAfterHeader = error.response?.headers?.['retry-after'];
-  if (retryAfterHeader) {
-    const parsed = Number(retryAfterHeader);
-    if (!Number.isNaN(parsed) && parsed > 0) {
-      // Value is seconds → convert to ms, capped at MAX_DELAY_MS.
-      return Math.min(parsed * 1000, RETRY_CONFIG.MAX_DELAY_MS);
+export function computeBackoffMs(
+  attempt: number,
+  error: AxiosError,
+  policy: Partial<RetryPolicy> = RETRY_POLICY,
+  random: () => number = Math.random,
+): number {
+  const effectivePolicy = resolveRetryPolicy(policy);
+
+  // Honour server-supplied Retry-After if present (case-insensitive & AxiosHeaders compatible).
+  const rawHeader =
+    error.response?.headers &&
+    (typeof (error.response.headers as { get?: (name: string) => string }).get === 'function'
+      ? (error.response.headers as { get: (name: string) => string }).get('retry-after')
+      : (error.response.headers['retry-after'] ?? error.response.headers['Retry-After']));
+
+  if (rawHeader !== undefined && rawHeader !== null) {
+    const parsed = Number(rawHeader);
+    if (!Number.isNaN(parsed) && parsed >= 0) {
+      // Value is seconds → convert to ms, capped at maxDelayMs.
+      return Math.min(parsed * 1000, effectivePolicy.maxDelayMs);
     }
     // Might be an HTTP-date string.
-    const date = Date.parse(retryAfterHeader);
+    const date = Date.parse(String(rawHeader));
     if (!Number.isNaN(date)) {
       const diff = date - Date.now();
-      if (diff > 0) return Math.min(diff, RETRY_CONFIG.MAX_DELAY_MS);
+      if (diff > 0) return Math.min(diff, effectivePolicy.maxDelayMs);
+      return 0;
     }
   }
 
-  const exponential = RETRY_CONFIG.BASE_DELAY_MS * Math.pow(2, attempt);
-  const capped = Math.min(exponential, RETRY_CONFIG.MAX_DELAY_MS);
-  const jitter = Math.random() * RETRY_CONFIG.JITTER_MS;
+  const exponential = effectivePolicy.baseDelayMs * Math.pow(2, attempt);
+  const capped = Math.min(exponential, effectivePolicy.maxDelayMs);
+  const jitter = random() * effectivePolicy.jitterMs;
   return Math.round(capped + jitter);
 }
 

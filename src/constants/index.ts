@@ -1,20 +1,25 @@
+import { RETRY_POLICY } from '@/utils/retryUtils';
+
+export { RETRY_POLICY, DEFAULT_RETRY_POLICY } from '@/utils/retryUtils';
+export type { RetryPolicy } from '@/utils/retryUtils';
+
 // Application constants for ChenPilot client
 
 // API Configuration
 export const API_CONFIG = {
   BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:2333',
   TIMEOUT: 30000,
-  RETRY_ATTEMPTS: 3,
-  RETRY_DELAY: 1000,
+  RETRY_ATTEMPTS: RETRY_POLICY.maxAttempts,
+  RETRY_DELAY: RETRY_POLICY.baseDelayMs,
 } as const;
 
 export const RETRY_CONFIG = {
-  MAX_ATTEMPTS: 3,
-  RETRYABLE_STATUS_CODES: [408, 429, ...Array.from({ length: 100 }, (_, index) => 500 + index)],
-  IDEMPOTENT_METHODS: ['get', 'head', 'options'],
-  BASE_DELAY_MS: 1000,
-  MAX_DELAY_MS: 30000,
-  JITTER_MS: 1000,
+  MAX_ATTEMPTS: RETRY_POLICY.maxAttempts,
+  RETRYABLE_STATUS_CODES: RETRY_POLICY.retryableStatusCodes,
+  IDEMPOTENT_METHODS: RETRY_POLICY.idempotentMethods,
+  BASE_DELAY_MS: RETRY_POLICY.baseDelayMs,
+  MAX_DELAY_MS: RETRY_POLICY.maxDelayMs,
+  JITTER_MS: RETRY_POLICY.jitterMs,
 } as const;
 
 // Application Information

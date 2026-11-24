@@ -55,6 +55,8 @@ import {
   sleep,
   incrementRetryCount,
   retryLabel,
+  RETRY_POLICY,
+  RetryPolicy,
 } from "@/utils/retryUtils";
 import { horizonFetch } from "@/utils/horizonFetch";
 import { buildPaymentIdempotencyKey } from "@/utils/paymentIdempotency";
@@ -231,8 +233,10 @@ interface PaymentRequestConfig extends AxiosRequestConfig {
 export class ApiService {
   private api: AxiosInstance;
   private token: string | null = null;
+  private retryPolicy: RetryPolicy;
 
-  constructor() {
+  constructor(retryPolicy?: Partial<RetryPolicy>) {
+    this.retryPolicy = retryPolicy ? { ...RETRY_POLICY, ...retryPolicy } : { ...RETRY_POLICY };
     this.loadTokenFromStorage();
 
     this.api = axios.create({
@@ -285,7 +289,7 @@ export class ApiService {
             })
           | undefined;
 
-        if (!originalRequest || !isRetryableError(error)) {
+        if (!originalRequest || !isRetryableError(error, this.retryPolicy)) {
           return Promise.reject(error);
         }
 
@@ -297,7 +301,7 @@ export class ApiService {
         }
 
         const attempt = incrementRetryCount(originalRequest);
-        const delayMs = computeBackoffMs(attempt - 1, error);
+        const delayMs = computeBackoffMs(attempt - 1, error, this.retryPolicy);
         const label = retryLabel(error);
 
         if (_store) {
@@ -306,7 +310,7 @@ export class ApiService {
             payload: {
               label,
               attempt,
-              maxAttempts: 3,
+              maxAttempts: this.retryPolicy.maxAttempts,
               nextRetryAt: Date.now() + delayMs,
             },
           });
@@ -416,6 +420,14 @@ export class ApiService {
 
   getStore(): MinimalStore | null {
     return _store;
+  }
+
+  getRetryPolicy(): RetryPolicy {
+    return { ...this.retryPolicy };
+  }
+
+  setRetryPolicy(policy: Partial<RetryPolicy>): void {
+    this.retryPolicy = { ...this.retryPolicy, ...policy };
   }
 
   setToken(token: string): void {

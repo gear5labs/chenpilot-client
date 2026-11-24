@@ -21,6 +21,7 @@ We standardize on **Axios** (`axios`) wrapped in an `ApiService` class (`src/ser
 - Centralized request logic ensures consistent error handling, auth headers, and base URLs across all features.
 - Transparent token refresh prevents request failures when access tokens expire during active user sessions.
 - Built-in exponential backoff handles transient network instability gracefully.
+- Bounded retry limits, backoff delay parameters, jitter, and UI status updates are unified under a single exported `RETRY_POLICY` (`src/utils/retryUtils.ts`), eliminating duplicated inline limits and keeping user feedback in sync with network execution.
 
 ### Negative / Trade-offs
 - Complex interceptor chains require careful ordering to prevent infinite retry loops.
