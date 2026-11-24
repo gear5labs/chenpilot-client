@@ -579,6 +579,40 @@ The client normalises and validates the payload using `sendPaymentSchema` (Zod) 
 
 Self-transfer behaviour: the client compares `recipientAddress` (normalised) against `state.auth.user.address` and surfaces a field-level warning with an acknowledgement checkbox. This is a UX guard only. The backend must independently decide whether to allow or reject self-transfers.
 
+## Admin And Audit Endpoints (#317)
+
+The admin audit screen (`/admin/audit`) is a privileged management surface for reviewing user activities and security audit logs.
+
+### Authorization Contract
+
+- **Required Authentication:** All `/audit` endpoints require Bearer token authentication via `Authorization: Bearer <access-token>`.
+- **Required Claims:**
+  - Role claim: `role: "admin"` (or `roles` array containing `"admin"`)
+  - Permission claim: `permissions` array containing `"admin:audit"` or `"admin.*"`
+- **Client-Side Role Checks Are Never Authorization:**
+  Client-side state (such as `user.role` or Redux auth state) is advisory and used exclusively for UI feedback (e.g. navigation labels, role indicators). The backend authorization middleware is the sole authoritative gate. The frontend must always coordinate with the backend authorization contract by requesting `/audit` and evaluating server status codes. A client-side claim of admin status must never bypass server-side authorization.
+
+### Endpoints
+
+| Endpoint | Request example | Success response example | UI surface / behavior |
+| --- | --- | --- | --- |
+| `GET /audit` | `GET /audit?page=1&limit=25&sortBy=timestamp&sortOrder=desc` | `{"success":true,"data":{"logs":[...],"total":42,"page":1,"limit":25,"totalPages":2}}` | Admin audit screen (`/admin/audit`). Renders paginated audit events with filters and detail views. |
+| `GET /audit/:id` | `GET /audit/log-123` | `{"success":true,"data":{"id":"log-123","action":"user.login",...}}` | Detailed audit record inspection modal. |
+| `GET /audit/stats` | `GET /audit/stats` | `{"success":true,"data":{"totalLogs":100,"uniqueUsers":12,...}}` | Aggregate audit metrics dashboard. |
+| `GET /audit/export` | `GET /audit/export?action=admin.access` | CSV stream (`text/csv` Blob) | Audit log export download. |
+
+### Status Codes And Client State Behavior
+
+1. **`200 OK`**: Authorized. The client transitions to the `authorized` state and displays the audit log table, filters, and export controls.
+2. **`401 Unauthorized`**: Unauthenticated or expired token. The client initiates token refresh or redirects to `/auth/login`.
+3. **`403 Forbidden`**: Authenticated caller lacks the required role (`admin`) or permission (`admin:audit`).
+   - The backend MUST return `403 Forbidden` (e.g. `{ "success": false, "status": 403, "message": "Forbidden: Requires admin privileges" }`).
+   - The client MUST NOT display sample/mock data or the audit table.
+   - The client renders a dedicated `forbidden` state presenting role-aware access feedback (current user identity/role vs. required admin claim), an explanation of backend authorization boundaries, and navigation back to `/chat`.
+4. **`5xx / Network Errors`**: Service failure.
+   - The client renders a distinct `service-error` state with error feedback and a retry mechanism.
+   - The client MUST NOT fall back to sample or mock audit logs.
+
 ## Browser Security And CSP Reports
 
 Next.js applies the security headers defined in [`src/security/securityHeaders.ts`](../src/security/securityHeaders.ts) to every route. The content security policy allows Google OAuth and font endpoints, Stellar Horizon, and API/socket origins configured by `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_SOCKET_URL`.

@@ -1580,6 +1580,17 @@ export class ApiService {
 
   // Audit log endpoints
 
+  /**
+   * Fetch paginated audit logs (#317).
+   *
+   * Backend authorization contract:
+   * Requires Bearer authentication. Caller must hold the `admin` role or
+   * `admin:audit` permission claim.
+   *
+   * @throws {AxiosError} 401 if unauthenticated.
+   * @throws {AxiosError} 403 if authenticated user lacks required admin role/permission.
+   * @throws {AxiosError} 5xx / Network error on service failure.
+   */
   async getAuditLogs(
     params: AuditLogsQueryParams = {},
   ): Promise<AuditLogsResponse> {
@@ -1591,6 +1602,10 @@ export class ApiService {
     return response.data;
   }
 
+  /**
+   * Fetch single audit log entry by ID (#317).
+   * Requires admin role or admin:audit permission claim.
+   */
   async getAuditLogById(
     id: string,
   ): Promise<ApiResponse<AuditLogEntry>> {
@@ -1601,6 +1616,10 @@ export class ApiService {
     return response.data;
   }
 
+  /**
+   * Fetch aggregated audit log metrics (#317).
+   * Requires admin role or admin:audit permission claim.
+   */
   async getAuditLogStats(): Promise<
     ApiResponse<AuditLogStats>
   > {
@@ -1611,6 +1630,10 @@ export class ApiService {
     return response.data;
   }
 
+  /**
+   * Export audit logs to CSV stream (#317).
+   * Requires admin role or admin:audit permission claim.
+   */
   async exportAuditLogs(
     params: AuditLogsQueryParams = {},
   ): Promise<Blob> {
@@ -1620,6 +1643,13 @@ export class ApiService {
     });
 
     return response.data;
+  }
+
+  /**
+   * Check if an error represents a 403 Forbidden failure (#317).
+   */
+  isForbiddenError(error: unknown): boolean {
+    return isForbiddenError(error);
   }
 
 
@@ -1838,3 +1868,25 @@ export const getAccountTransactions = (
   page = 1,
   limit = 10,
 ) => apiService.getAccountTransactions(userId, page, limit);
+
+/**
+ * Check if an error represents a 403 Forbidden authorization failure (#317).
+ *
+ * Backend returns HTTP 403 when the authenticated caller lacks the required
+ * admin role or permission claim (`role: "admin"`, `permissions: ["admin:audit"]`).
+ * Client-side role checks are strictly for UI feedback; authorization is always
+ * evaluated authoritatively by the backend.
+ */
+export function isForbiddenError(error: unknown): boolean {
+  if (axios.isAxiosError(error)) {
+    return error.response?.status === 403;
+  }
+  if (error && typeof error === "object") {
+    const status =
+      (error as { status?: unknown }).status ??
+      (error as { response?: { status?: unknown } }).response?.status ??
+      (error as { statusCode?: unknown }).statusCode;
+    if (status === 403) return true;
+  }
+  return false;
+}

@@ -13,6 +13,9 @@ export interface User {
   tokenType: "XLM";
   authProvider: "email" | "google";
   isEmailVerified: boolean;
+  role?: string;
+  roles?: string[];
+  permissions?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -870,6 +873,7 @@ export interface AuditLogsResponse {
     totalPages: number;
   };
   message?: string;
+  status?: number;
 }
 
 export interface AuditLogStats {

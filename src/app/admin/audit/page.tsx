@@ -6,7 +6,7 @@ import { useAppSelector } from '@/store';
 import { ChatLayout } from '@/components/layout/ChatLayout';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import apiService from '@/services/api';
+import apiService, { isForbiddenError } from '@/services/api';
 import { formatRelativeTime, formatAddress } from '@/utils/format';
 import {
   AuditLogEntry,
@@ -254,9 +254,16 @@ function AuditDetailModal({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+export type AuditAccessState = 'loading' | 'authorized' | 'forbidden' | 'service_error';
+
 export default function AdminAuditLogsPage() {
   const router = useRouter();
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
+
+  // Access and authorization state
+  const [accessState, setAccessState] = useState<AuditAccessState>('loading');
+  const [forbiddenMessage, setForbiddenMessage] = useState<string | null>(null);
+  const [serviceErrorMessage, setServiceErrorMessage] = useState<string | null>(null);
 
   // Data state
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
@@ -314,7 +321,7 @@ export default function AdminAuditLogsPage() {
     return params;
   }, [page, limit, debouncedSearch, filterAction, filterSeverity, filterStatus, sortBy, sortOrder]);
 
-  // Fetch audit logs
+  // Fetch audit logs - coordinates with backend authorization contract (#317)
   const fetchLogs = useCallback(async () => {
     if (!isAuthenticated) return;
     setIsLoading(true);
@@ -326,16 +333,35 @@ export default function AdminAuditLogsPage() {
         setLogs(response.data.logs);
         setTotal(response.data.total);
         setTotalPages(response.data.totalPages);
+        setAccessState('authorized');
+        setForbiddenMessage(null);
+        setServiceErrorMessage(null);
+      } else if (response.status === 403 || isForbiddenError(response)) {
+        setAccessState('forbidden');
+        setForbiddenMessage(response.message || 'Forbidden: Administrator privileges required.');
       } else {
-        setError(response.message || 'Failed to fetch audit logs');
+        const msg = response.message || 'Failed to fetch audit logs';
+        setError(msg);
+        setServiceErrorMessage(msg);
+        setAccessState((prev) => (prev === 'authorized' ? 'authorized' : 'service_error'));
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('[AdminAuditLogs] Failed to fetch logs:', err);
-      // Fall back to mock data for development
-      setLogs(generateMockLogs());
-      setTotal(100);
-      setTotalPages(4);
-      toast.error('Could not connect to server. Showing sample data.');
+      if (isForbiddenError(err)) {
+        setAccessState('forbidden');
+        const msg =
+          (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+          'Forbidden: You do not have the required administrator role or permissions to view audit logs.';
+        setForbiddenMessage(msg);
+      } else {
+        const msg =
+          (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+          (err instanceof Error ? err.message : 'Could not connect to the audit service.');
+        setError(msg);
+        setServiceErrorMessage(msg);
+        setAccessState((prev) => (prev === 'authorized' ? 'authorized' : 'service_error'));
+        toast.error('Could not connect to server.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -393,6 +419,150 @@ export default function AdminAuditLogsPage() {
           <p className="mt-4 text-gray-400">Authenticating...</p>
         </div>
       </div>
+    );
+  }
+
+  // Distinct loading state (#317)
+  if (accessState === 'loading') {
+    return (
+      <ChatLayout>
+        <div className="h-full flex flex-col items-center justify-center bg-black text-white p-6 relative">
+          <div className="text-center max-w-md" role="status" aria-live="polite">
+            <div className="relative mx-auto mb-4 w-16 h-16 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-2 border-blue-500/20 animate-ping" />
+              <div className="h-12 w-12 rounded-full border-2 border-blue-500 border-t-transparent animate-spin flex items-center justify-center" />
+              <ShieldAlert className="h-6 w-6 text-blue-400 absolute" />
+            </div>
+            <h2 className="text-xl font-bold text-white mb-2">Verifying Admin Access</h2>
+            <p className="text-sm text-gray-400">
+              Coordinating with backend authorization service and verifying administrative credentials...
+            </p>
+          </div>
+        </div>
+      </ChatLayout>
+    );
+  }
+
+  // Distinct forbidden state with role-aware access feedback (#317)
+  if (accessState === 'forbidden') {
+    const userRoleDisplay = user?.role || (user?.roles?.length ? user.roles.join(', ') : 'Standard User');
+    return (
+      <ChatLayout>
+        <div
+          className="h-full flex flex-col items-center justify-center bg-black text-white p-6 relative overflow-y-auto"
+          role="alert"
+          data-testid="audit-forbidden-state"
+        >
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:50px_50px]" />
+          <div className="relative z-10 max-w-lg w-full bg-gray-900/90 border border-red-500/40 rounded-2xl p-8 shadow-2xl space-y-6 backdrop-blur">
+            <div className="mx-auto w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400">
+              <ShieldAlert className="h-8 w-8" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h2 className="text-2xl font-bold text-white">Access Denied</h2>
+              <p className="text-sm text-red-400 font-medium">Administrator Privileges Required</p>
+            </div>
+
+            <p className="text-sm text-gray-400 text-center">
+              {forbiddenMessage ||
+                'The Admin Audit Log is a privileged security surface. Your account lacks the required role or permission claim to access this resource.'}
+            </p>
+
+            {/* Role-aware feedback panel */}
+            <div className="p-4 bg-gray-800/60 rounded-xl border border-gray-700/60 space-y-2.5 text-xs">
+              <div className="flex justify-between items-center py-1 border-b border-gray-700/40">
+                <span className="text-gray-400">Authenticated User</span>
+                <span className="text-white font-mono truncate max-w-[220px]" title={user?.email}>
+                  {user?.email || 'Authenticated User'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-gray-700/40">
+                <span className="text-gray-400">Detected Role</span>
+                <span className="text-yellow-400 font-semibold uppercase tracking-wider">{userRoleDisplay}</span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-gray-700/40">
+                <span className="text-gray-400">Required Role Claim</span>
+                <span className="text-red-300 font-mono">admin</span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-gray-700/40">
+                <span className="text-gray-400">Required Permission</span>
+                <span className="text-red-300 font-mono">admin:audit</span>
+              </div>
+              <div className="pt-2 text-gray-500 text-[11px] leading-relaxed">
+                <strong className="text-gray-400 font-medium">Authorization Boundary: </strong>
+                Client-side role checks are advisory only and never substitute for server authorization. Access is verified authoritatively by the backend API (HTTP 403 Forbidden).
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <Button
+                variant="primary"
+                className="flex-1"
+                onClick={() => router.push('/chat')}
+              >
+                Return to Chat
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => fetchLogs()}
+                disabled={isLoading}
+              >
+                <RefreshCw className={`h-4 w-4 mr-1.5 ${isLoading ? 'animate-spin' : ''}`} />
+                Re-check Access
+              </Button>
+            </div>
+          </div>
+        </div>
+      </ChatLayout>
+    );
+  }
+
+  // Distinct service-error state (#317)
+  if (accessState === 'service_error') {
+    return (
+      <ChatLayout>
+        <div
+          className="h-full flex flex-col items-center justify-center bg-black text-white p-6 relative overflow-y-auto"
+          role="alert"
+          data-testid="audit-service-error-state"
+        >
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:50px_50px]" />
+          <div className="relative z-10 max-w-lg w-full bg-gray-900/90 border border-gray-800 rounded-2xl p-8 shadow-2xl space-y-6 backdrop-blur">
+            <div className="mx-auto w-16 h-16 rounded-full bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-yellow-400">
+              <AlertCircle className="h-8 w-8" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h2 className="text-2xl font-bold text-white">Service Error</h2>
+              <p className="text-sm text-yellow-400/90 font-medium">Unable to Load Audit Logs</p>
+            </div>
+
+            <p className="text-sm text-gray-400 text-center">
+              {serviceErrorMessage ||
+                'An unexpected error occurred while communicating with the audit log service. Please check your connection and try again.'}
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <Button
+                variant="primary"
+                className="flex-1"
+                onClick={() => fetchLogs()}
+                disabled={isLoading}
+              >
+                <RefreshCw className={`h-4 w-4 mr-1.5 ${isLoading ? 'animate-spin' : ''}`} />
+                Retry Request
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => router.push('/chat')}
+              >
+                Return to Chat
+              </Button>
+            </div>
+          </div>
+        </div>
+      </ChatLayout>
     );
   }
 
