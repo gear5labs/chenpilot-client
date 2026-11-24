@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { useAppDispatch, useAppSelector } from "@/store";
 import { logout } from "@/store/slices/authSlice";
 import {
@@ -20,6 +20,7 @@ import toast from "react-hot-toast";
 import { X, Menu, PanelLeft, Plus } from "lucide-react";
 import { cn } from "@/utils/cn";
 import Image from "next/image";
+import { useChatSearch } from "@/hooks/useChatSearch";
 
 interface ChatLayoutProps {
   children: React.ReactNode;
@@ -27,6 +28,7 @@ interface ChatLayoutProps {
 
 export function ChatLayout({ children }: ChatLayoutProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -35,9 +37,37 @@ export function ChatLayout({ children }: ChatLayoutProps) {
   // Conversation awaiting delete confirmation (#269)
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
 
+  // Prevent background scroll and horizontal overflow when mobile sidebar drawer is open
+  useEffect(() => {
+    if (sidebarOpen) {
+      document.body.classList.add("sidebar-open");
+    } else {
+      document.body.classList.remove("sidebar-open");
+    }
+    return () => {
+      document.body.classList.remove("sidebar-open");
+    };
+  }, [sidebarOpen]);
+
+  // Close mobile drawer on route changes
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
+
+  // Close mobile drawer on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && sidebarOpen) {
+        setSidebarOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [sidebarOpen]);
+
   // ── Search ──
   const search = useChatSearch();
-  const { isSearchOpen, openSearch, closeSearch, setQuery, goToNext, goToPrev, searchState, searchInputRef } = search;
+  const { isSearchOpen, openSearch, closeSearch, searchInputRef } = search;
 
   // Ctrl/Cmd+F – intercept only when focus is inside the chat route.
   useEffect(() => {
@@ -163,14 +193,19 @@ export function ChatLayout({ children }: ChatLayoutProps) {
     setSidebarCollapsed(!sidebarCollapsed);
   };
 
-  const isChatRoute = pathname?.startsWith('/chat');
-
   return (
-    <div className="h-screen flex flex-col lg:flex-row bg-gray-50 dark:bg-gray-900">
+    <div
+      data-testid="chat-layout-root"
+      className="h-screen flex flex-col lg:flex-row bg-gray-50 dark:bg-gray-900 overflow-x-hidden"
+    >
       {/* Mobile header with menu button */}
-      <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+      <div
+        data-testid="mobile-header"
+        className="lg:hidden shrink-0 flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+      >
         <button
           id="mobile-menu-button"
+          data-testid="mobile-menu-button"
           onClick={() => setSidebarOpen(true)}
           aria-label="Open navigation menu"
           className="p-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-800 transition-colors"
@@ -200,6 +235,7 @@ export function ChatLayout({ children }: ChatLayoutProps) {
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
+          data-testid="sidebar-overlay"
           className="fixed inset-0 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         >
@@ -209,24 +245,27 @@ export function ChatLayout({ children }: ChatLayoutProps) {
 
       {/* Sidebar */}
       <nav
+        data-testid="sidebar-navigation"
         aria-label="Sidebar navigation"
         className={cn(
-          "fixed inset-y-0 left-0 z-50 bg-[#2D1B69] shadow-lg transform transition-all duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
+          "fixed inset-y-0 left-0 z-50 bg-[#2D1B69] shadow-lg transform transition-all duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 max-w-[85vw] sm:max-w-none",
           sidebarOpen
             ? "visible translate-x-0"
             : "invisible -translate-x-full lg:visible",
           sidebarCollapsed ? "w-16" : "w-72",
         )}
       >
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between h-16 px-4 border-b border-gray-700">
+          <div className="shrink-0 flex items-center justify-between h-16 px-4 border-b border-gray-700">
             <div className="flex items-center space-x-2">
               {sidebarCollapsed ? (
                 <button
+                  data-testid="expand-sidebar-button"
                   onClick={toggleSidebar}
                   className="flex items-center hover:opacity-80 transition-opacity"
                   title="Expand sidebar"
+                  aria-label="Expand sidebar"
                 >
                   <Menu className="h-6 w-6 text-[#C4B5FD]" />
                 </button>
@@ -249,54 +288,56 @@ export function ChatLayout({ children }: ChatLayoutProps) {
                   </span>
                 </div>
               )}
+            </div>
 
-              <div className="flex items-center space-x-2">
+            {!sidebarCollapsed && (
+              <div className="flex items-center space-x-1">
+                <button
+                  data-testid="collapse-sidebar-button"
+                  onClick={toggleSidebar}
+                  className="hidden lg:flex p-2 text-[#C4B5FD] hover:bg-gray-800/50 rounded transition-colors"
+                  title="Collapse sidebar"
+                  aria-label="Collapse sidebar"
+                >
+                  <PanelLeft className="h-6 w-6" />
+                </button>
                 <Button
+                  data-testid="close-sidebar-button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setSidebarOpen(false)}
+                  onClick={() => {
+                    setSidebarOpen(false);
+                    document.getElementById("mobile-menu-button")?.focus();
+                  }}
                   className="lg:hidden text-gray-400 hover:text-white"
+                  aria-label="Close navigation menu"
                 >
                   <X className="h-5 w-5" />
                 </Button>
               </div>
-            </div>
-
-            {!sidebarCollapsed && (
-              <div className="absolute top-4 right-4">
-                <button
-                  onClick={toggleSidebar}
-                  className="p-2 text-[#C4B5FD] hover:bg-gray-800/50 rounded transition-colors"
-                  title="Collapse sidebar"
+            )}
+            {sidebarCollapsed && (
+              <div className="lg:hidden">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSidebarOpen(false);
+                    document.getElementById("mobile-menu-button")?.focus();
+                  }}
+                  className="text-gray-400 hover:text-white"
+                  aria-label="Close navigation menu"
                 >
-                  <PanelLeft className="h-6 w-6" />
-                </button>
+                  <X className="h-5 w-5" />
+                </Button>
               </div>
             )}
-
-            {/* New Chat Button */}
-            <div className="px-4 py-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSidebarOpen(false);
-                  document.getElementById("mobile-menu-button")?.focus();
-                }}
-                className="lg:hidden text-gray-400 hover:text-white"
-              >
-                {sidebarCollapsed ? (
-                  <Plus className="h-5 w-5" />
-                ) : (
-                  <span>New Chat</span>
-                )}
-              </Button>
-            </div>
           </div>
 
           {/* New Chat Button */}
-          <div className="px-4 py-4">
+          <div className="shrink-0 px-4 py-4">
             <Button
+              data-testid="new-chat-button"
               onClick={handleNewChat}
               className={cn(
                 "w-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-medium py-3 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl",
@@ -313,7 +354,7 @@ export function ChatLayout({ children }: ChatLayoutProps) {
 
           {/* Export the active conversation (#96) */}
           {!sidebarCollapsed && (
-            <div className="px-4 pb-3">
+            <div className="shrink-0 px-4 pb-3">
               <ConversationExportMenu
                 messages={messages}
                 conversationId={currentConversation?.id}
@@ -323,7 +364,7 @@ export function ChatLayout({ children }: ChatLayoutProps) {
           )}
 
           {/* Chat History */}
-          <div className="flex-1 overflow-y-auto px-4">
+          <div className="flex-1 min-h-0 overflow-y-auto px-4">
             {!sidebarCollapsed && (
               <ConversationManager
                 onDeleteConversation={(conv) => handleDeleteChat(conv.id)}
@@ -357,9 +398,10 @@ export function ChatLayout({ children }: ChatLayoutProps) {
           </div>
 
           {/* Profile Section */}
-          <div className="border-t border-gray-700 p-4">
+          <div className="shrink-0 border-t border-gray-700 p-4">
             <div className="relative">
               <button
+                data-testid="profile-menu-button"
                 onClick={() => setProfileMenuOpen(!profileMenuOpen)}
                 className={cn(
                   "w-full flex items-center rounded-xl hover:bg-gray-800/50 transition-all duration-200",
@@ -368,6 +410,8 @@ export function ChatLayout({ children }: ChatLayoutProps) {
                     : "justify-between p-3",
                 )}
                 title={sidebarCollapsed ? user?.name || user?.email : undefined}
+                aria-expanded={profileMenuOpen}
+                aria-label="User profile menu"
               >
                 <div className="flex items-center space-x-3">
                   <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
@@ -396,29 +440,21 @@ export function ChatLayout({ children }: ChatLayoutProps) {
                   ))}
               </button>
 
-                {/* Profile Menu Dropdown */}
-                {profileMenuOpen && !sidebarCollapsed && (
-                  <div className="absolute bottom-full left-0 right-0 mb-2 bg-gray-800/95 backdrop-blur-sm rounded-xl shadow-2xl border border-gray-700 overflow-hidden">
-                    {profileMenuItems.map((item) => {
-                      return (
-                        <button
-                          key={item.name}
-                          onClick={() => handleNavigation(item.href)}
-                          className="w-full flex items-center space-x-3 px-4 py-3 text-sm text-gray-200 hover:bg-gray-700/50 transition-all duration-200"
-                        >
-                          <span>{item.name}</span>
-                        </button>
-                      );
-                    })}
-                    <div className="border-t border-gray-700">
-                      <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center space-x-3 px-4 py-3 text-sm text-red-400 hover:bg-red-900/20 transition-all duration-200"
-                      >
-                        <span>Sign Out</span>
-                      </button>
-                    );
-                  })}
+              {/* Profile Menu Dropdown */}
+              {profileMenuOpen && !sidebarCollapsed && (
+                <div
+                  data-testid="profile-menu-dropdown"
+                  className="absolute bottom-full left-0 right-0 mb-2 bg-gray-800/95 backdrop-blur-sm rounded-xl shadow-2xl border border-gray-700 overflow-hidden z-50 max-h-60 overflow-y-auto"
+                >
+                  {profileMenuItems.map((item) => (
+                    <button
+                      key={item.name}
+                      onClick={() => handleNavigation(item.href)}
+                      className="w-full flex items-center space-x-3 px-4 py-3 text-sm text-gray-200 hover:bg-gray-700/50 transition-all duration-200"
+                    >
+                      <span>{item.name}</span>
+                    </button>
+                  ))}
                   <div className="border-t border-gray-700">
                     <div className="flex items-center justify-between px-4 py-3">
                       <span className="text-sm text-gray-200">Theme</span>
@@ -433,8 +469,8 @@ export function ChatLayout({ children }: ChatLayoutProps) {
                       <span>Sign Out</span>
                     </button>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
