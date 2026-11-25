@@ -1,4 +1,7 @@
 import React, { useEffect, useRef, useId } from "react";
+import { pushFocus, popFocus } from "@/lib/focusManager";
+
+export type ModalSize = "sm" | "md" | "lg" | "xl";
 
 export interface ModalProps {
   isOpen: boolean;
@@ -7,8 +10,17 @@ export interface ModalProps {
   ariaLabel?: string;
   className?: string;
   titleClassName?: string;
+  /** Panel width preset; defaults to "md" (max-w-lg). */
+  size?: ModalSize;
   children: React.ReactNode;
 }
+
+const SIZE_CLASSES: Record<ModalSize, string> = {
+  sm: "max-w-sm",
+  md: "max-w-lg",
+  lg: "max-w-2xl",
+  xl: "max-w-4xl",
+};
 
 export const Modal: React.FC<ModalProps> = ({
   isOpen,
@@ -17,28 +29,36 @@ export const Modal: React.FC<ModalProps> = ({
   ariaLabel,
   className,
   titleClassName,
+  size = "md",
   children,
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
-  const previousActiveElement = useRef<HTMLElement | null>(null);
   const titleId = useId();
 
-  // Handle Focus Management & Restoration
+  // Focus Management & Restoration.
+  //
+  // `pushFocus` records the element that had focus when this dialog opened —
+  // for a nested dialog that is the exact trigger inside the parent dialog.
+  // The effect cleanup pops the stack both when `isOpen` flips to false AND
+  // when the component unmounts while still open (conditional rendering), so
+  // focus always returns to the trigger instead of being dropped on <body>.
   useEffect(() => {
-    if (isOpen) {
-      previousActiveElement.current = document.activeElement as HTMLElement;
+    if (!isOpen) return;
 
-      // Focus first focusable element inside modal, or the container itself
-      const focusableElements = getFocusableElements();
-      if (focusableElements.length > 0) {
-        focusableElements[0].focus();
-      } else {
-        modalRef.current?.focus();
-      }
-    } else if (previousActiveElement.current) {
-      previousActiveElement.current.focus();
-      previousActiveElement.current = null;
+    pushFocus();
+
+    // Focus first focusable element inside modal, or the container itself
+    const focusableElements = getFocusableElements();
+    if (focusableElements.length > 0) {
+      focusableElements[0].focus();
+    } else {
+      modalRef.current?.focus();
     }
+
+    return () => {
+      popFocus();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   // Helper to query focusable elements inside modal
@@ -53,6 +73,10 @@ export const Modal: React.FC<ModalProps> = ({
 
   // Keyboard Navigation: Focus Trapping & Escape Key Handling
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    // A nested dialog already handled this keystroke (it called preventDefault);
+    // ancestor dialogs must not also close or re-trap on the same event.
+    if (event.defaultPrevented) return;
+
     if (event.key === "Escape") {
       event.preventDefault();
       onClose();
@@ -108,10 +132,10 @@ export const Modal: React.FC<ModalProps> = ({
         aria-label={!title ? ariaLabel : undefined}
         tabIndex={-1}
         onKeyDown={handleKeyDown}
-        className={`relative w-full max-w-lg rounded-lg bg-white p-6 shadow-xl focus:outline-none ${className ?? ''}`}
+        className={`relative w-full ${SIZE_CLASSES[size]} rounded-lg border border-gray-200 bg-white p-6 text-gray-900 shadow-xl focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 ${className ?? ''}`}
       >
         {title && (
-          <h2 id={titleId} className={`text-xl font-semibold text-gray-900 mb-4 ${titleClassName ?? ''}`}>
+          <h2 id={titleId} className={`text-xl font-semibold text-gray-900 mb-4 dark:text-white ${titleClassName ?? ''}`}>
             {title}
           </h2>
         )}

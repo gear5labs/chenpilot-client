@@ -7,7 +7,8 @@ import { SignInActivity } from "@/components/settings/SignInActivity";
 import { useReauthPrompt } from "@/components/auth/ReauthDialog";
 import { withRecentAuth } from "@/services/auth.service";
 import { describeSensitiveActionError } from "@/utils/sensitiveActionErrors";
-import { setLanguage, setTheme, setTranslationLanguage } from "@/store/slices/uiSlice";
+import { setLanguage, setTheme, setTranslationLanguage, setLocalePreferences } from "@/store/slices/uiSlice";
+import { SUPPORTED_FORMAT_LOCALES, type LocaleKind, type LocalePreferences } from "@/lib/i18n/localePreference";
 import { SettingsSectionNav } from "@/components/settings/SettingsSectionNav";
 import { TRANSLATION_LANGUAGE_NAMES, TranslationLanguage } from "@/lib/translation";
 import { ChatLayout } from "@/components/layout/ChatLayout";
@@ -34,10 +35,11 @@ export default function SettingsPage() {
   const { isAuthenticated, user, isLoading } = useAppSelector(
     (state) => state.auth
   );
-  const { mode: themeMode, language, translationLanguage } = useAppSelector((state) => state.ui) || {
+  const { mode: themeMode, language, translationLanguage, localePreferences } = useAppSelector((state) => state.ui) || {
     mode: "dark",
     language: "en",
     translationLanguage: null,
+    localePreferences: { date: "en-US", time: "en-US", number: "en-US" },
   };
   const [passwordChangeStage, setPasswordChangeStage] = useState<
     "reauthenticate" | "change-password" | null
@@ -381,6 +383,53 @@ export default function SettingsPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+              </Card>
+
+              {/* Regional format preferences: date, time, and number locale */}
+              <Card>
+                <div className="p-6">
+                  <h3 className="mb-4 text-lg font-medium text-white">
+                    Regional preferences
+                  </h3>
+                  <p className="mb-4 text-sm text-gray-400">
+                    Choose the locale used to format dates, times, and numbers. Each category can differ from the app language.
+                  </p>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    {(
+                      [
+                        ["date", "Date format", "e.g. 15 May 2026 vs 05/15/2026"],
+                        ["time", "Time format", "e.g. 14:30 vs 2:30 PM"],
+                        ["number", "Number format", "e.g. 1,234.5 vs 1.234,5"],
+                      ] as Array<[LocaleKind, string, string]>
+                    ).map(([kind, label, hint]) => (
+                      <div key={kind}>
+                        <label
+                          htmlFor={`locale-pref-${kind}`}
+                          className="mb-1 block text-sm font-medium text-gray-300"
+                        >
+                          {label}
+                        </label>
+                        <select
+                          id={`locale-pref-${kind}`}
+                          value={localePreferences?.[kind] ?? "en-US"}
+                          onChange={(e) =>
+                            dispatch(
+                              setLocalePreferences({ [kind]: e.target.value } as Partial<LocalePreferences>),
+                            )
+                          }
+                          className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          {SUPPORTED_FORMAT_LOCALES.map((loc) => (
+                            <option key={loc.code} value={loc.code}>
+                              {loc.name}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="mt-1 text-xs text-gray-500">{hint}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </Card>
 

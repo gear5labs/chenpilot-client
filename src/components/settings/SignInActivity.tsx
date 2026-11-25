@@ -11,6 +11,7 @@ import {
   reportSignInEvent,
   revokeSession,
 } from "@/services/sessionService";
+import { getFormattingLocale } from "@/lib/i18n/localePreference";
 
 const EVENT_LABELS: Record<SignInActivityEvent["type"], string> = {
   sign_in: "Sign-in",
@@ -27,7 +28,7 @@ type ViewState =
   | { kind: "ready"; page: SignInActivityPage };
 
 const formatDate = (iso: string) =>
-  new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
+  new Intl.DateTimeFormat(getFormattingLocale('date'), { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
 
 /**
  * Recent sign-in activity (#257): date, approximate device/browser and outcome. IP-level

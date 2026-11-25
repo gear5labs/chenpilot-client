@@ -3,6 +3,7 @@
 import React from 'react';
 import { PresenceIndicator } from './PresenceIndicator';
 import { UserPresence } from '@/services/presenceService';
+import { getFormattingLocale } from '@/lib/i18n/localePreference';
 
 interface UserCardProps {
   presence: UserPresence;
@@ -35,7 +36,7 @@ export function UserCard({
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
 
-    return date.toLocaleDateString();
+    return date.toLocaleDateString(getFormattingLocale('date'));
   };
 
   return (

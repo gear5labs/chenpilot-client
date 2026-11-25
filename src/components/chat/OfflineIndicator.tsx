@@ -7,6 +7,7 @@ import { WifiOff, Wifi } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useOptionalSocket } from '@/components/providers/SocketProvider';
 import { isSocketStatusVisible, type SocketConnectionState } from '@/types/socket';
+import { getFormattingLocale } from '@/lib/i18n/localePreference';
 
 /** Status-line copy for each visible socket state (#279). */
 export function describeSocketState(
@@ -36,8 +37,8 @@ export function describeLastSynced(lastSyncedAt: string | null, now: Date = new 
   const then = new Date(lastSyncedAt);
   if (Number.isNaN(then.getTime())) return 'not synced yet';
   const sameDay = then.toDateString() === now.toDateString();
-  const time = then.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return sameDay ? `last synced ${time}` : `last synced ${then.toLocaleDateString()} ${time}`;
+  const time = then.toLocaleTimeString(getFormattingLocale('time'), { hour: '2-digit', minute: '2-digit' });
+  return sameDay ? `last synced ${time}` : `last synced ${then.toLocaleDateString(getFormattingLocale('date'))} ${time}`;
 }
 
 interface OfflineIndicatorProps {

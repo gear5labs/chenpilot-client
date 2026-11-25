@@ -59,10 +59,10 @@ import {
 import { horizonFetch } from "@/utils/horizonFetch";
 import { buildPaymentIdempotencyKey } from "@/utils/paymentIdempotency";
 import {
-import type { NotificationPreferences } from "@/types/notificationPreferences";
   PaymentOutcomeUnknownError,
   isPaymentOutcomeUnknown,
 } from "@/utils/paymentOutcome";
+import type { NotificationPreferences } from "@/types/notificationPreferences";
 import {
   apiResponseSchema,
   balanceResponseSchema,

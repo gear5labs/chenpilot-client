@@ -18,6 +18,7 @@ import {
 import { formatAddress } from '@/utils/format';
 import { cn } from '@/utils/cn';
 import { LtrText } from '@/components/ui/LtrText';
+import { getFormattingLocale } from '@/lib/i18n/localePreference';
 
 export const ContactPicker: React.FC<ContactPickerProps> = ({
   contacts,
@@ -211,7 +212,7 @@ export const ContactPicker: React.FC<ContactPickerProps> = ({
                         <div className="flex items-center gap-1 mt-1">
                           <Clock className="h-3 w-3 text-gray-500" />
                           <span className="text-xs text-gray-500">
-                            Used {new Date(contact.lastUsed).toLocaleDateString()}
+                            Used {new Date(contact.lastUsed).toLocaleDateString(getFormattingLocale('date'))}
                           </span>
                         </div>
                       )}

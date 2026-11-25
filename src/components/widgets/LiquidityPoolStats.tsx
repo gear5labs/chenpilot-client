@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { LiquidityStats, LiquidityPool } from '@/types';
 import { apiService } from '@/services/api';
+import { getFormattingLocale } from '@/lib/i18n/localePreference';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { 
@@ -220,18 +221,18 @@ export default function LiquidityPoolStats({ className = '' }: LiquidityPoolStat
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-gray-400">{selectedPool.token1.symbol} Reserve</p>
-                <p className="font-medium text-white">{parseFloat(selectedPool.reserve1).toLocaleString()}</p>
+                <p className="font-medium text-white">{parseFloat(selectedPool.reserve1).toLocaleString(getFormattingLocale('number'))}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-400">{selectedPool.token2.symbol} Reserve</p>
-                <p className="font-medium text-white">{parseFloat(selectedPool.reserve2).toLocaleString()}</p>
+                <p className="font-medium text-white">{parseFloat(selectedPool.reserve2).toLocaleString(getFormattingLocale('number'))}</p>
               </div>
             </div>
             
             <div>
               <p className="text-sm text-gray-400">Created</p>
               <p className="font-medium text-white">
-                {new Date(selectedPool.created_at).toLocaleDateString()}
+                {new Date(selectedPool.created_at).toLocaleDateString(getFormattingLocale('date'))}
               </p>
             </div>
           </div>
@@ -352,12 +353,12 @@ export default function LiquidityPoolStats({ className = '' }: LiquidityPoolStat
               </div>
               <div>
                 <p className="text-sm text-gray-400">Block Number</p>
-                <p className="font-medium text-white">{stats.networkMetrics.blockNumber.toLocaleString()}</p>
+                <p className="font-medium text-white">{stats.networkMetrics.blockNumber.toLocaleString(getFormattingLocale('number'))}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-400">Last Updated</p>
                 <p className="font-medium text-white">
-                  {new Date(stats.networkMetrics.timestamp).toLocaleTimeString()}
+                  {new Date(stats.networkMetrics.timestamp).toLocaleTimeString(getFormattingLocale('time'))}
                 </p>
               </div>
             </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { getContacts } from '@/store/slices/contactsSlice';
 import { ChatLayout } from '@/components/layout/ChatLayout';
@@ -22,62 +22,23 @@ export default function SendPaymentPage() {
   const { list: contacts, isLoading: contactsLoading } = useAppSelector(
     (state) => state.contacts,
   );
-  const nativeBalance = useAppSelector((state) => state.wallet?.nativeBalance ?? 0);
+  const isOnline = useAppSelector((state) => state.chat.isOnline);
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.push('/auth/login');
       return;
     }
+
     dispatch(getContacts());
-    let isActive = true;
-    void apiService.getBalance().then((response) => {
-      const total = response.data?.nativeBalance;
-      const reserve = response.data?.required;
-      if (isActive && response.success && total && reserve && Number.isFinite(Number(total)) && Number.isFinite(Number(reserve))) {
-        setNativeBalance({ total, reserve });
-      }
-    }).catch(() => {
-      // Balance guidance is omitted when the backend cannot provide its breakdown.
-    });
+  }, [dispatch, isAuthenticated, router]);
 
-
-  const handleSendPayment = async (data: SendPaymentRequest) => {
-    // NOTE: the self-transfer comparison in SendPaymentForm is a UX hint only.
-    // Server-side authorisation and balance checks are the authoritative gate.
-    const toastId = toast.loading('Sending payment…');
-    try {
-      const response = await apiService.sendPayment(data);
-
-      if (response.success) {
-        toast.success('Payment sent successfully!', { id: toastId });
-        router.push('/transactions');
-      } else {
-        toast.error(
-          (response as { message?: string }).message || 'Payment failed. Please try again.',
-          { id: toastId },
-        );
-      }
-    } catch (error: unknown) {
-      const message =
-        (error as { response?: { data?: { message?: string } }; message?: string })
-          ?.response?.data?.message ||
-        (error as { message?: string })?.message ||
-        'Failed to send payment';
-      toast.error(message, { id: toastId });
-      await apiService.sendPayment(data);
-      toast.success('Payment sent successfully!');
-      router.push('/transactions');
-    } catch (error: any) {
-      console.error('Payment error:', error);
-      toast.error(getPaymentFailureMessage(error));
-      throw error;
-      const message = getPaymentFailureMessage(error);
-      toast.error(message || 'Failed to send payment');
-    }
-  };
-  const handleSendPayment = (data: SendPaymentRequest, idempotencyKey: string): Promise<PaymentSubmissionResult> =>
-    apiService.sendPayment(data, idempotencyKey);
+  // Idempotency key is generated per reviewed payment inside the form, so a
+  // retry of the same logical payment cannot create a duplicate transfer.
+  const handleSendPayment = (
+    data: SendPaymentRequest,
+    idempotencyKey: string,
+  ): Promise<PaymentSubmissionResult> => apiService.sendPayment(data, idempotencyKey);
 
   const handleCheckPaymentStatus = (idempotencyKey: string): Promise<PaymentStatusResult> =>
     apiService.getPaymentStatus(idempotencyKey);
@@ -118,13 +79,10 @@ export default function SendPaymentPage() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center space-x-2 bg-blue-500/10 px-3 py-1.5 rounded-full border border-blue-500/30">
-                <Shield className="h-4 w-4 text-blue-400" aria-hidden="true" />
-                <span className="text-xs font-medium text-blue-300">Secure</span>
               <div className="flex items-center gap-3">
                 <StellarNetworkBadge />
                 <div className="flex items-center space-x-2 bg-blue-500/10 px-3 py-1.5 rounded-full border border-blue-500/30">
-                  <Shield className="h-4 w-4 text-blue-400" />
+                  <Shield className="h-4 w-4 text-blue-400" aria-hidden="true" />
                   <span className="text-xs font-medium text-blue-300">Secure</span>
                 </div>
               </div>
@@ -140,12 +98,11 @@ export default function SendPaymentPage() {
               onCheckStatus={handleCheckPaymentStatus}
               contacts={contacts}
               isLoading={contactsLoading}
+              isOnline={isOnline}
+              initialContactId={initialContactId}
               // Pass the sender's address so the form can warn about
               // accidental self-transfers.  This is a UX guard only.
               senderAddress={user?.address}
-              nativeBalance={nativeBalance?.total}
-              requiredReserve={nativeBalance?.reserve}
-              availableBalance={nativeBalance}
             />
           </div>
         </div>

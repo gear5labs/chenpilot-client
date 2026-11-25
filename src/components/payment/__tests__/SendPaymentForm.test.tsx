@@ -174,6 +174,11 @@ describe('SendPaymentForm — unified asset list', () => {
 
     expect(options).not.toContain('STRK');
     expect(options).not.toContain('DAI');
+  });
+});
+
+// The following suite was merged into this file; it keeps its own imports below.
+const __secondSuiteMarker = true;
 'use client';
 
 import React from 'react';

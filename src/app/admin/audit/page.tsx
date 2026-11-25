@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import apiService from '@/services/api';
 import { formatRelativeTime, formatAddress } from '@/utils/format';
+import { getFormattingLocale } from '@/lib/i18n/localePreference';
 import {
   AuditLogEntry,
   AuditLogsQueryParams,
@@ -210,11 +211,11 @@ function AuditDetailModal({
             <p className="text-xs text-gray-400 mb-1">Timestamp</p>
             <div className="flex items-center space-x-2">
               <Clock className="h-4 w-4 text-gray-500" />
-              <span className="text-sm text-white">{new Date(entry.timestamp).toLocaleString()}</span>
+              <span className="text-sm text-white">{new Date(entry.timestamp).toLocaleString(getFormattingLocale('date'))}</span>
             </div>
             {entry.createdAt !== entry.timestamp && (
               <p className="text-xs text-gray-500 mt-1">
-                Created: {new Date(entry.createdAt).toLocaleString()}
+                Created: {new Date(entry.createdAt).toLocaleString(getFormattingLocale('date'))}
               </p>
             )}
           </div>
@@ -677,7 +678,7 @@ export default function AdminAuditLogsPage() {
                                   <td className="px-4 py-3 whitespace-nowrap">
                                     <div className="flex items-center space-x-2">
                                       <Clock className="h-3.5 w-3.5 text-gray-500 flex-shrink-0" />
-                                      <span className="text-sm text-gray-300" title={new Date(entry.timestamp).toLocaleString()}>
+                                      <span className="text-sm text-gray-300" title={new Date(entry.timestamp).toLocaleString(getFormattingLocale('date'))}>
                                         {formatRelativeTime(entry.timestamp)}
                                       </span>
                                     </div>

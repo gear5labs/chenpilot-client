@@ -2,6 +2,7 @@ import { createSlice, PayloadAction, createAction } from "@reduxjs/toolkit";
 import { readActiveUserId, readLanguagePreference, saveLanguagePreference } from "@/lib/i18n/languagePreference";
 import { readSavedTheme, saveTheme } from "@/lib/theme";
 import { readTranslationLanguage, saveTranslationLanguage, TranslationLanguage } from "@/lib/translation";
+import { readLocalePreference, saveLocalePreference } from "@/lib/i18n/localePreference";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface RetryStatus {
@@ -11,11 +12,19 @@ export interface RetryStatus {
   nextRetryAt: number;
 }
 
+export interface LocalePreferences {
+  date: string;
+  time: string;
+  number: string;
+}
+
 export interface ThemeState {
   mode: "light" | "dark";
   language: "en" | "ar" | "es" | "fr";
   /** Language messages are translated into (#83); null follows `language`. */
   translationLanguage: TranslationLanguage | null;
+  /** Account locale preferences for date, time, and number formatting. */
+  localePreferences: LocalePreferences;
   retryStatus: RetryStatus | null;
   sidebarOpen: boolean;
   notifications: unknown[];
@@ -27,6 +36,11 @@ const initialState: ThemeState = {
   // Stored preference, applied before render (#291)
   language: typeof window !== "undefined" ? readLanguagePreference(readActiveUserId()) : "en",
   translationLanguage: typeof window !== "undefined" ? readTranslationLanguage() : null,
+  localePreferences: typeof window !== "undefined" ? readLocalePreference(readActiveUserId()) : {
+    date: "en-US",
+    time: "en-US",
+    number: "en-US",
+  },
   retryStatus: null,
   sidebarOpen: false,
   notifications: [],
@@ -86,6 +100,14 @@ export const uiSlice = createSlice({
       state.language = action.payload;
     },
     /**
+     * Set account locale preferences for date, time, and number formatting.
+     * Persists to localStorage for the signed-in user / device.
+     */
+    setLocalePreferences: (state, action: PayloadAction<Partial<LocalePreferences>>) => {
+      state.localePreferences = { ...state.localePreferences, ...action.payload };
+      if (typeof window !== "undefined") saveLocalePreference(action.payload, readActiveUserId());
+    },
+    /**
      * Called by the retry interceptor before each retry attempt.
      * Overwrites any previous status with the latest attempt info.
      */
@@ -115,6 +137,7 @@ export const {
   setLanguage,
   applyLanguage,
   setTranslationLanguage,
+  setLocalePreferences,
   setRetryStatus,
   clearRetryStatus,
 } =

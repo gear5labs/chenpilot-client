@@ -1,5 +1,21 @@
 import { Language, getLocaleForLanguage } from '@/lib/i18n/i18n';
+import { readExplicitLocalePreference, getFormattingLocale } from '@/lib/i18n/localePreference';
 import type { ChatMessage } from '@/types';
+
+/**
+ * Resolve the BCP 47 locale for a formatting category. An explicit `locale`
+ * option wins, then the account's saved regional preference, then the locale
+ * derived from `language` (or 'en-US').
+ */
+function resolveFormatLocale(
+  kind: 'date' | 'time' | 'number',
+  options?: { locale?: string; language?: Language | string }
+): string {
+  if (options?.locale) return options.locale;
+  const saved = readExplicitLocalePreference()[kind];
+  if (saved) return saved;
+  return getLocaleForLanguage(options?.language);
+}
 
 /**
  * Standard asset decimal precisions on Stellar and supported networks.
@@ -175,7 +191,7 @@ export function formatTransactionAmount(
     }
   }
 
-  const locale = getLocaleForLanguage(options?.language || options?.locale);
+  const locale = resolveFormatLocale('number', options);
 
   // Determine target precision
   let targetDecimals = options?.decimals;
@@ -251,7 +267,7 @@ export function formatTransactionDate(
     return '-';
   }
 
-  const locale = getLocaleForLanguage(options?.language || options?.locale);
+  const locale = resolveFormatLocale('date', options);
 
   const defaultOptions: Intl.DateTimeFormatOptions = {
     year: 'numeric',
@@ -352,7 +368,7 @@ export function formatLargeNumber(num: number, decimals: number = 1): string {
  */
 export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOptions): string {
   const dateObj = typeof date === 'string' ? new Date(date) : date;
-  
+
   const defaultOptions: Intl.DateTimeFormatOptions = {
     year: 'numeric',
     month: 'short',
@@ -361,7 +377,7 @@ export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOpt
     minute: '2-digit',
   };
 
-  return dateObj.toLocaleDateString('en-US', { ...defaultOptions, ...options });
+  return dateObj.toLocaleDateString(getFormattingLocale('date'), { ...defaultOptions, ...options });
 }
 
 /**
@@ -409,7 +425,7 @@ export function formatRelativeTime(date: string | Date, now: Date = new Date()):
  */
 export function formatExactTime(
   date: string | Date,
-  locale: string = 'en-US',
+  locale: string = getFormattingLocale('date'),
 ): { iso: string; label: string } {
   const dateObj = typeof date === 'string' ? new Date(date) : date;
   const iso = dateObj.toISOString();
