@@ -1,17 +1,78 @@
 'use client';
 
-import React from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store';
+import { updateProfile } from '@/store/slices/authSlice';
 import { ChatLayout } from '@/components/layout/ChatLayout';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 
 export default function SettingsPage() {
-  const router = useRouter();
-  const { isAuthenticated, user } = useAppSelector((state) => state.auth);
+  const dispatch = useAppDispatch();
+  const { isAuthenticated, user, error } = useAppSelector((state) => state.auth);
   const { theme } = useAppSelector((state) => state.ui) || { mode: 'dark' };
+
+  // Profile edit state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedName, setEditedName] = useState(user?.name || '');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const handleEditClick = () => {
+    setIsEditing(true);
+    setEditedName(user?.name || '');
+    setSaveStatus('idle');
+    setLocalError(null);
+  };
+
+  const handleCancelClick = () => {
+    setIsEditing(false);
+    setEditedName(user?.name || '');
+    setSaveStatus('idle');
+    setLocalError(null);
+  };
+
+  const handleSaveClick = async () => {
+    // Validate name
+    if (!editedName || editedName.trim().length === 0) {
+      setLocalError('Name is required');
+      setSaveStatus('error');
+      return;
+    }
+
+    if (editedName.trim().length < 2) {
+      setLocalError('Name must be at least 2 characters');
+      setSaveStatus('error');
+      return;
+    }
+
+    if (editedName.trim().length > 50) {
+      setLocalError('Name must be less than 50 characters');
+      setSaveStatus('error');
+      return;
+    }
+
+    setSaveStatus('pending');
+    setLocalError(null);
+
+    try {
+      const result = await dispatch(updateProfile({ name: editedName.trim() }));
+      
+      if (updateProfile.fulfilled.match(result)) {
+        setSaveStatus('success');
+        setIsEditing(false);
+        // Clear success message after 3 seconds
+        setTimeout(() => setSaveStatus('idle'), 3000);
+      } else {
+        setSaveStatus('error');
+        setLocalError(result.payload as string || 'Failed to update profile');
+      }
+    } catch (err) {
+      setSaveStatus('error');
+      setLocalError('An unexpected error occurred');
+    }
+  };
 
   if (!isAuthenticated) {
     return (
@@ -47,18 +108,74 @@ export default function SettingsPage() {
               {/* Profile Settings */}
               <Card>
                 <div className="p-6">
-                  <div className="flex items-center space-x-3 mb-4">
+                  <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-medium text-white">
                       Profile
                     </h3>
+                    {!isEditing ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleEditClick}
+                      >
+                        Edit Profile
+                      </Button>
+                    ) : (
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleCancelClick}
+                          disabled={saveStatus === 'pending'}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={handleSaveClick}
+                          loading={saveStatus === 'pending'}
+                          disabled={saveStatus === 'pending'}
+                        >
+                          Save
+                        </Button>
+                      </div>
+                    )}
                   </div>
+
+                  {/* Success/Error Messages */}
+                  {saveStatus === 'success' && (
+                    <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                      <p className="text-green-400 text-sm">Profile updated successfully!</p>
+                    </div>
+                  )}
+                  {localError && (
+                    <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                      <p className="text-red-400 text-sm">{localError}</p>
+                    </div>
+                  )}
+                  {error && !localError && (
+                    <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                      <p className="text-red-400 text-sm">{error}</p>
+                    </div>
+                  )}
+
                   <div className="space-y-4">
                     <div>
                       <Input
                         label="Name"
-                        value={user?.name || ''}
-                        disabled
+                        value={isEditing ? editedName : user?.name || ''}
+                        onChange={isEditing ? (e) => {
+                          setEditedName(e.target.value);
+                          // Clear error when user types
+                          if (localError) {
+                            setLocalError(null);
+                            setSaveStatus('idle');
+                          }
+                        } : undefined}
+                        disabled={!isEditing}
                         placeholder="Your display name"
+                        error={localError && saveStatus === 'error' ? ' ' : undefined}
                       />
                     </div>
                     <div>
