@@ -55,6 +55,8 @@ export function MfaSettingsSection({
   const [reauthenticationError, setReauthenticationError] = useState<string | null>(null);
   const [isReauthenticating, setIsReauthenticating] = useState(false);
   const [showReauthentication, setShowReauthentication] = useState(false);
+  // Live announcement for the verification code field (#513)
+  const [codeHint, setCodeHint] = useState<string | null>(null);
 
   const isMountedRef = useRef<boolean>(true);
   const pendingProtectedActionRef = useRef<(() => Promise<void>) | null>(null);
@@ -81,6 +83,7 @@ export function MfaSettingsSection({
     setSecret(null);
     setQrCodeDataUrl(null);
     setVerificationCode('');
+    setCodeHint(null);
     setRecoveryCodes([]);
     setCopiedSecret(false);
     authService.cancelMfaSetup();
@@ -164,6 +167,28 @@ export function MfaSettingsSection({
     }
   };
 
+  // Normalize pasted OTP values: keep digits only, capped at 6 (#513)
+  const handleCodePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const digits = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    setVerificationCode(digits);
+    setCodeHint(
+      digits.length > 0 && digits.length < 6
+        ? `Code must be 6 digits — ${6 - digits.length} more needed.`
+        : null,
+    );
+  };
+
+  const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 6);
+    setVerificationCode(digits);
+    setCodeHint(
+      digits.length > 0 && digits.length < 6
+        ? `Code must be 6 digits — ${6 - digits.length} more needed.`
+        : null,
+    );
+  };
+
   const handleVerify = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!requireRecentAuthentication(() => handleVerify())) return;
@@ -171,6 +196,7 @@ export function MfaSettingsSection({
     const code = verificationCode.trim();
     if (!/^\d{6}$/.test(code)) {
       setErrorMessage('Please enter a valid 6-digit code.');
+      setCodeHint('Please enter a valid 6-digit code.');
       return;
     }
 
@@ -455,17 +481,30 @@ export function MfaSettingsSection({
                 <Input
                   id="mfa-verification-code"
                   type="text"
+                  name="one-time-code"
                   inputMode="numeric"
                   autoComplete="one-time-code"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   maxLength={6}
                   placeholder="123456"
                   value={verificationCode}
-                  onChange={(e) =>
-                    setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))
-                  }
+                  onChange={handleCodeChange}
+                  onPaste={handleCodePaste}
+                  aria-invalid={verificationCode.length > 0 && verificationCode.length < 6}
+                  aria-describedby="mfa-code-hint"
                   className="font-mono text-center tracking-widest text-lg"
                   autoFocus
                 />
+                {/* Live region: announces incomplete codes to screen readers (#513) */}
+                <p
+                  id="mfa-code-hint"
+                  aria-live="polite"
+                  className={`mt-1 text-xs ${codeHint ? 'text-amber-400' : 'text-gray-500'}`}
+                >
+                  {codeHint ?? 'Enter the 6-digit code from your authenticator app.'}
+                </p>
               </div>
 
               <div className="flex items-center space-x-3 pt-2">

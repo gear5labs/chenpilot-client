@@ -406,11 +406,11 @@ Protected settings actions include password changes, MFA changes, and device man
 
 ### Data Export Fallbacks
 
-`exportUserData()` tries these paths in order, moving to the next only on HTTP 404. Each successful response is consumed as a binary `Blob`, not JSON.
+`exportUserData()` tries these paths in order, moving to the next only on HTTP 404. Each successful response is consumed as a binary `Blob`, not JSON. The method accepts `{ onProgress, signal }` options: `onProgress` receives `{ loaded, total, percent }` download progress (percent is omitted when the total size is unknown) and `signal` aborts the in-flight request so the settings UI can offer cancellation. It resolves to `{ blob, fileName, mimeType }`: `fileName` is parsed from the response `Content-Disposition` header and sanitized (path separators, traversal and malformed headers fall back to `chenpilot-account-export.json`), and `mimeType` comes from the response `Content-Type` (falling back to `application/octet-stream` when absent or malformed).
 
 | Endpoint | Request example | Success response example | UI surface / behavior |
 | --- | --- | --- | --- |
-| `GET /data-export` | No body; bearer token when available. | `200` with `Content-Type: application/octet-stream` and downloadable bytes. | Service method only. |
+| `GET /data-export` | No body; bearer token when available. | `200` with `Content-Type` (used as the download MIME type) and downloadable bytes. | Settings → Danger zone "Export account data". |
 | `GET /data/export` | Same request; tried only if the preceding path returns 404. | `200` with downloadable bytes (`Blob`). | Service fallback candidate only. |
 | `GET /api/data-export` | Same request; tried only if both preceding paths return 404. | `200` with downloadable bytes (`Blob`). | Service fallback candidate only. |
 

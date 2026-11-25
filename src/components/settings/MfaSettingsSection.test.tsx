@@ -326,4 +326,83 @@ describe('MfaSettingsSection Component', () => {
     expect(localStorage.getItem('mfa_recovery_codes')).toBeNull();
     expect(localStorage.getItem('mfa_secret')).toBeNull();
   });
+
+  describe('verification code paste & autofill (#513)', () => {
+    const reachVerification = async () => {
+      vi.spyOn(authService, 'getMfaStatus').mockResolvedValueOnce({
+        enabled: false,
+        supported: true,
+      });
+      vi.spyOn(authService, 'initiateMfaSetup').mockResolvedValueOnce({
+        secret: 'SECRET-KEY-1234',
+      });
+
+      render(<MfaSettingsSection language="en" />);
+      fireEvent.click(
+        await screen.findByRole('button', {
+          name: /set up two-factor authentication/i,
+        }),
+      );
+      return screen.findByLabelText(/enter 6-digit code/i);
+    };
+
+    it('exposes one-time-code autofill metadata', async () => {
+      const input = await reachVerification();
+      expect(input).toHaveAttribute('autocomplete', 'one-time-code');
+      expect(input).toHaveAttribute('inputmode', 'numeric');
+      expect(input).toHaveAttribute('name', 'one-time-code');
+    });
+
+    it('normalizes pasted codes to digits only', async () => {
+      const input = (await reachVerification()) as HTMLInputElement;
+
+      fireEvent.paste(input, {
+        clipboardData: { getData: () => '12-34 56' },
+      });
+
+      expect(input.value).toBe('123456');
+      expect(
+        screen.getByRole('button', { name: /verify & enable/i }),
+      ).toBeEnabled();
+    });
+
+    it('caps pasted codes at six digits', async () => {
+      const input = (await reachVerification()) as HTMLInputElement;
+
+      fireEvent.paste(input, {
+        clipboardData: { getData: () => '1234567890' },
+      });
+
+      expect(input.value).toBe('123456');
+    });
+
+    it('announces incomplete codes via a live region and aria-invalid', async () => {
+      const input = await reachVerification();
+
+      fireEvent.paste(input, {
+        clipboardData: { getData: () => '123' },
+      });
+
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(input).toHaveAttribute('aria-describedby', 'mfa-code-hint');
+      const hint = document.getElementById('mfa-code-hint');
+      expect(hint).not.toBeNull();
+      expect(hint).toHaveAttribute('aria-live', 'polite');
+      expect(hint).toHaveTextContent(/3 more needed/i);
+      expect(
+        screen.getByRole('button', { name: /verify & enable/i }),
+      ).toBeDisabled();
+    });
+
+    it('does not announce an error once a full code is entered', async () => {
+      const input = await reachVerification();
+
+      fireEvent.change(input, { target: { value: '654321' } });
+
+      expect(input).toHaveAttribute('aria-invalid', 'false');
+      expect(document.getElementById('mfa-code-hint')).toHaveTextContent(
+        /enter the 6-digit code/i,
+      );
+    });
+  });
 });

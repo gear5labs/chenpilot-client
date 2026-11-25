@@ -6,7 +6,6 @@ import {
   logger,
   setCorrelationIdHeader,
 } from "../utils/logger";
-import { env } from '@/config/env';
 import {
   RegisterRequest,
   LoginRequest,
@@ -58,8 +57,8 @@ import {
 } from "@/utils/retryUtils";
 import { horizonFetch } from "@/utils/horizonFetch";
 import { buildPaymentIdempotencyKey } from "@/utils/paymentIdempotency";
-import {
 import type { NotificationPreferences } from "@/types/notificationPreferences";
+import {
   PaymentOutcomeUnknownError,
   isPaymentOutcomeUnknown,
 } from "@/utils/paymentOutcome";
@@ -100,6 +99,88 @@ export interface AddTrustlineRequest {
 }
 
 const FRIENDTEST_URL = "https://friendbot.stellar.org";
+
+// ─── Account data export helpers (#511, #512) ────────────────────────────────
+
+export const EXPORT_FALLBACK_FILENAME = "chenpilot-account-export.json";
+export const EXPORT_FALLBACK_MIME_TYPE = "application/octet-stream";
+
+export interface ExportProgress {
+  loaded: number;
+  total?: number;
+  /** 0–100 when the response advertises a total size; undefined otherwise. */
+  percent?: number;
+}
+
+export interface ExportUserDataOptions {
+  onProgress?: (progress: ExportProgress) => void;
+  signal?: AbortSignal;
+}
+
+export interface UserDataExportResult {
+  blob: Blob;
+  fileName: string;
+  mimeType: string;
+}
+
+/**
+ * Reduce a candidate file name to a safe single path segment. Returns null when
+ * nothing usable remains — callers must then use EXPORT_FALLBACK_FILENAME.
+ */
+function sanitizeExportFilename(candidate: string): string | null {
+  const cleaned = candidate
+    // Path separators and traversal are never allowed in a download name.
+    .replace(/[\\/]/g, "")
+    // Control characters, quotes and other header-hostile bytes.
+    .replace(/[\x00-\x1f\x7f"'`<>|?*]/g, "")
+    .trim();
+  if (!cleaned || cleaned === "." || cleaned === "..") return null;
+  return cleaned.slice(0, 200);
+}
+
+/**
+ * Extract a safe file name from a Content-Disposition header (#512).
+ * Supports `filename="..."` and RFC 5987 `filename*=UTF-8''...` forms.
+ * Malformed headers and unsafe names yield null (caller uses the fallback).
+ */
+export function parseContentDispositionFilename(
+  header: string | null | undefined,
+): string | null {
+  if (!header || typeof header !== "string") return null;
+
+  // RFC 5987 encoded form takes precedence when present.
+  const extended = /filename\*\s*=\s*(?:UTF-8|utf-8)''([^;]+)/i.exec(header);
+  if (extended) {
+    try {
+      return sanitizeExportFilename(decodeURIComponent(extended[1].trim()));
+    } catch {
+      return null;
+    }
+  }
+
+  const quoted = /filename\s*=\s*"((?:[^"\\]|\\.)*)"/i.exec(header);
+  if (quoted) {
+    return sanitizeExportFilename(quoted[1].replace(/\\(.)/g, "$1"));
+  }
+
+  const bare = /filename\s*=\s*([^;]+)/i.exec(header);
+  if (bare) {
+    return sanitizeExportFilename(bare[1]);
+  }
+
+  return null;
+}
+
+/**
+ * Normalise a Content-Type header into a bare MIME type, falling back to a
+ * generic binary type when the header is missing or malformed (#512).
+ */
+export function parseExportMimeType(header: string | null | undefined): string {
+  const value = (header ?? "").split(";")[0].trim();
+  return /^[\w.+-]+\/[\w.+-]+$/.test(value)
+    ? value
+    : EXPORT_FALLBACK_MIME_TYPE;
+}
 
 /**
  * Narrowly-scoped single-flight guard for keyed asynchronous work.
@@ -804,10 +885,19 @@ export class ApiService {
    * Export all user data as a binary file Blob.
    * Iterates through candidate endpoints (`/data-export`, `/data/export`, `/api/data-export`).
    *
-   * @returns Promise resolving to downloadable `Blob`.
+   * The returned file name is parsed from the response `Content-Disposition`
+   * header and validated: path separators, control characters and malformed
+   * headers are rejected in favour of a safe fallback (#512). The MIME type is
+   * taken from the response `Content-Type` rather than assumed (#512).
+   *
+   * @param options.onProgress Called with download progress while the response
+   *   body streams in (#511). `percent` is undefined when the total size is
+   *   unknown.
+   * @param options.signal AbortSignal that cancels the in-flight request (#511).
+   * @returns Promise resolving to the export blob, a safe file name and its MIME type.
    * @throws {Error} Throws Error if user data export endpoint is not found or fails.
    */
-  async exportUserData(): Promise<Blob> {
+  async exportUserData(options: ExportUserDataOptions = {}): Promise<UserDataExportResult> {
     const endpoints = [
       "/data-export",
       "/data/export",
@@ -818,10 +908,35 @@ export class ApiService {
       try {
         const response = await this.api.get<Blob>(endpoint, {
           responseType: "blob",
+          signal: options.signal,
+          onDownloadProgress: (event) => {
+            options.onProgress?.({
+              loaded: event.loaded,
+              total: event.total,
+              percent:
+                event.total && event.total > 0
+                  ? Math.min(100, Math.round((event.loaded / event.total) * 100))
+                  : undefined,
+            });
+          },
         });
 
         if (response.status === 200 && response.data) {
-          return response.data;
+          const headers = (response.headers ?? {}) as Record<string, unknown>;
+          const contentDisposition =
+            (headers["content-disposition"] as string | undefined) ??
+            (headers["Content-Disposition"] as string | undefined);
+          const contentType =
+            (headers["content-type"] as string | undefined) ??
+            (headers["Content-Type"] as string | undefined);
+
+          return {
+            blob: response.data,
+            fileName:
+              parseContentDispositionFilename(contentDisposition) ??
+              EXPORT_FALLBACK_FILENAME,
+            mimeType: parseExportMimeType(contentType),
+          };
         }
       } catch (error: unknown) {
         if (

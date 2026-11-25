@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { ChatMessage } from '@/types';
 
 vi.mock('@/store', () => ({
-  useAppSelector: (select: (state: unknown) => unknown) => select({ chat: { pendingMessages: new Set<string>() } }),
+  useAppSelector: (select: (state: unknown) => unknown) =>
+    select({
+      chat: { pendingMessages: new Set<string>() },
+      ui: { language: 'en', translationLanguage: null },
+    }),
 }));
 
 import UserMessage from './UserMessage';

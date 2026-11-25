@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useRef, useState } from "react";
 import { Send, Mic, Square, Sun } from "lucide-react";
@@ -6,7 +6,6 @@ import toast from "react-hot-toast";
 import { useAppDispatch, useAppSelector } from "@/store";
 import {
   addMessage as reduxAddMessage,
-  setMessageDelivery,
   addPendingMessage,
   queueMessage,
   sendMessage,
@@ -20,6 +19,7 @@ import AgentMessage from "@/components/chat/AgentMessage";
 import UserMessage from "@/components/chat/UserMessage";
 import { OfflineIndicator } from "@/components/chat/OfflineIndicator";
 import { TagWidget } from "@/components/chat/TagWidget";
+import { ChatDraftComposer } from "@/components/chat/ChatDraftComposer";
 import type { ChatMessage } from "@/types";
 
 export default function ChatEngine() {
@@ -32,20 +32,21 @@ export default function ChatEngine() {
     isLoading: isChatLoading,
     isTyping,
     isOnline,
-    pendingMessages,
-    streamingResponse,
+    currentConversation,
   } = useAppSelector((state) => state.chat);
 
   const [inputValue, setInputValue] = useState("");
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const {
     status: voiceStatus,
     elapsedSeconds,
-    liveTranscript,
     recording,
     isSupported: isVoiceSupported,
+    maxDurationSeconds,
+    durationLimitReached,
     startRecording,
     stopRecording,
     reset: resetRecorder,
@@ -107,6 +108,25 @@ export default function ChatEngine() {
     toast.success("Copied to clipboard");
   };
 
+  const handleMicClick = () => {
+    if (inputValue.trim()) {
+      void handleSendMessage();
+      return;
+    }
+    if (isVoiceSupported) {
+      if (isVoiceRecording) {
+        stopRecording();
+      } else {
+        void startRecording().catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : "Could not start recording.";
+          toast.error(message);
+        });
+      }
+    } else {
+      toast.error("Voice recording is not supported in this browser.");
+    }
+  };
+
   const renderInput = (isSticky = false) => (
     <div className={`w-full ${isSticky ? "max-w-4xl mx-auto px-4 py-6" : "max-w-3xl mb-8"}`}>
       <div className="relative bg-[#1A1A2E] rounded-2xl p-6 border border-gray-800/50 shadow-xl">
@@ -117,19 +137,9 @@ export default function ChatEngine() {
           onChange={setInputValue}
           onEnter={() => {
             void handleSendMessage();
-      <div className="rounded-2xl border border-gray-800/50 bg-[#1A1A2E] p-5 shadow-xl">
-        <input
-          value={inputValue}
-          onChange={(event) => setInputValue(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              void handleSendMessage();
-            }
           }}
           placeholder={isVoiceRecording ? "Listening..." : "Ask ChenPilot..."}
           disabled={isVoiceRecording}
-          className="w-full bg-transparent border-none text-white placeholder:text-gray-500 focus:outline-none text-lg mb-4"
         />
 
         {isVoiceRecording && (
@@ -139,13 +149,20 @@ export default function ChatEngine() {
               <div className="w-1 h-4 bg-red-400 rounded-full animate-pulse" style={{ animationDelay: "0.1s" }} />
               <div className="w-1 h-4 bg-red-400 rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
             </div>
-            <span className="text-xs font-mono">{elapsedSeconds}s</span>
+            <span className="text-xs font-mono">
+              {elapsedSeconds}s / {maxDurationSeconds}s
+            </span>
           </div>
         )}
 
         {isVoicePreview && recording && (
           <div className="mb-4 rounded-lg border border-purple-500/30 bg-purple-500/10 p-3 text-sm text-purple-100">
             <div className="font-medium">Voice preview</div>
+            {durationLimitReached && (
+              <div role="status" className="mt-1 text-amber-300">
+                Maximum duration of {maxDurationSeconds} seconds reached — recording stopped automatically.
+              </div>
+            )}
             <div className="mt-1 text-purple-200">{recording.transcript || "Voice message ready"}</div>
             <div className="mt-3 flex gap-2">
               <button
@@ -174,25 +191,16 @@ export default function ChatEngine() {
           <div className="flex items-center space-x-3">
             <AgentToolsMenu selectedTool={selectedTool} onSelect={setSelectedTool} />
             <TagWidget />
+            {isVoiceSupported && !isVoiceRecording && !isVoicePreview && (
+              <span className="text-xs text-gray-500" data-testid="voice-duration-hint">
+                Voice messages up to {maxDurationSeconds}s
+              </span>
+            )}
           </div>
 
           <button
             type="button"
-            onClick={() => {
-              if (inputValue.trim()) {
-                void handleSendMessage();
-                return;
-              }
-              if (isVoiceSupported) {
-                if (isVoiceRecording) {
-                  stopRecording();
-                } else {
-                  void startRecording();
-                }
-              } else {
-                toast.error("Voice recording is not supported in this browser.");
-              }
-            }}
+            onClick={handleMicClick}
             disabled={isChatLoading || isTyping}
             className={`p-3 rounded-lg transition-colors ${
               isVoiceRecording
@@ -201,6 +209,14 @@ export default function ChatEngine() {
                   ? "bg-purple-600 text-white hover:bg-purple-700"
                   : "text-gray-400 hover:bg-gray-800/50 hover:text-white"
             }`}
+            aria-label={isVoiceRecording ? "Stop recording" : inputValue.trim() ? "Send message" : "Record voice message"}
+            title={
+              isVoiceRecording
+                ? `Stop recording (max ${maxDurationSeconds}s)`
+                : inputValue.trim()
+                  ? "Send message"
+                  : `Record voice message (max ${maxDurationSeconds}s)`
+            }
           >
             {isVoiceRecording ? <Square className="h-6 w-6" /> : inputValue.trim() ? <Send className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
           </button>

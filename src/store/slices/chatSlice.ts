@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { logger } from "../../utils/logger";
-import { ChatMessage, AgentQueryRequest, Conversation, MessageFeedback } from "@/types";
+import { ChatMessage, Conversation, MessageFeedback } from "@/types";
 import { AgentQueryResponse } from "@/types/agent";
 import apiService from "@/services/api";
 import { VOICE_MESSAGE } from "@/constants";
@@ -259,13 +259,17 @@ export const fetchChatHistory = createAsyncThunk(
   async (_: void, { rejectWithValue }) => {
     try {
       return await apiService.getChatHistory({ limit: HISTORY_PAGE_SIZE });
-    } catch (error: any) {
-      const status = error?.response?.status;
+    } catch (error) {
+      const apiError = error as {
+        response?: { status?: number; data?: { message?: string } };
+        message?: string;
+      };
+      const status = apiError?.response?.status;
       if (status === 404 || status === 501) {
         return { messages: [] as ChatMessage[], nextCursor: null, hasMore: false };
       }
       return rejectWithValue(
-        error?.response?.data?.message || error?.message || "Failed to load chat history",
+        apiError?.response?.data?.message || apiError?.message || "Failed to load chat history",
       );
     }
   },
@@ -282,9 +286,13 @@ export const loadOlderHistory = createAsyncThunk(
     try {
       const page = await apiService.getChatHistory({ before: cursor, limit: HISTORY_PAGE_SIZE });
       return { page, cursor };
-    } catch (error: any) {
+    } catch (error) {
+      const apiError = error as {
+        response?: { data?: { message?: string } };
+        message?: string;
+      };
       return rejectWithValue(
-        error?.response?.data?.message || error?.message || "Failed to load older messages",
+        apiError?.response?.data?.message || apiError?.message || "Failed to load older messages",
       );
     }
   },
@@ -491,10 +499,14 @@ export const sendMessage = createAsyncThunk(
       }
 
       // Extract server timestamp from response if available
-      const rawServerTimestamp = (response.result as any).serverTimestamp
-        || (response.result as any).timestamp
-        || (response as any).serverTimestamp
-        || (response as any).timestamp
+      const resultMeta = response.result as
+        | { serverTimestamp?: unknown; timestamp?: unknown }
+        | undefined;
+      const responseMeta = response as { serverTimestamp?: unknown; timestamp?: unknown };
+      const rawServerTimestamp = resultMeta?.serverTimestamp
+        || resultMeta?.timestamp
+        || responseMeta.serverTimestamp
+        || responseMeta.timestamp
         || Date.now();
 
       const serverTimestamp = typeof rawServerTimestamp === 'string' && isNaN(Number(rawServerTimestamp))
@@ -1373,6 +1385,7 @@ const chatSlice = createSlice({
         state.currentConversation = action.payload.conversation;
         if (action.payload.conversation?.id) {
           clearChatDraft(action.payload.conversation.id);
+        }
         // The final agent message replaces the streamed preview in the same update, so the
         // reply is never shown twice (#261)
         if (state.streamingResponse?.requestId === action.meta.requestId) {
