@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 const { mockAxiosInstance, mockBareAxios } = vi.hoisted(() => {
   const mockAxiosInstance = {
@@ -63,6 +63,7 @@ vi.mock('../agentService', () => ({
 }));
 
 import { ApiService, requestAccountFunding } from '../api';
+import { tokenRefreshService } from '../tokenRefreshService';
 import { CreateContactRequest, UpdateContactRequest, Contact, StellarTransaction } from '@/types';
 
 describe('ApiService - Contact & Transaction API Contracts', () => {
@@ -73,6 +74,11 @@ describe('ApiService - Contact & Transaction API Contracts', () => {
     vi.clearAllMocks();
     mockBareAxios.create.mockReturnValue(mockAxiosInstance);
     apiService = new ApiService();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   describe('Authentication response validation', () => {
@@ -100,6 +106,32 @@ describe('ApiService - Contact & Transaction API Contracts', () => {
 
       await expect(apiService.refreshToken()).rejects.toThrow(
         'Invalid backend response from POST /auth/refresh',
+      );
+    });
+
+    it('clears auth and returns to a safe destination after refresh failure', async () => {
+      const refreshError = new Error('Refresh failed');
+      const dispatch = vi.fn();
+      const currentWindow = {
+        location: { pathname: '/dashboard', search: '?tab=wallet', hash: '', href: '' },
+        localStorage: { removeItem: vi.fn() },
+      };
+      vi.stubGlobal('window', currentWindow);
+      apiService.setStore({ dispatch } as never);
+      vi.spyOn(tokenRefreshService, 'refreshToken').mockRejectedValue(refreshError);
+
+      const onRejected = mockAxiosInstance.interceptors.response.use.mock.calls.at(-1)?.[1] as
+        (error: unknown) => Promise<unknown>;
+      const requestError = {
+        response: { status: 401 },
+        config: { url: '/wallet/balance', headers: {} },
+      };
+
+      await expect(onRejected(requestError)).rejects.toBe(refreshError);
+
+      expect(dispatch).toHaveBeenCalledWith({ type: 'auth/clearAuth' });
+      expect(currentWindow.location.href).toBe(
+        '/auth/login?returnTo=%2Fdashboard%3Ftab%3Dwallet&reason=session-expired',
       );
     });
   });

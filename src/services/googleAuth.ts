@@ -6,6 +6,12 @@ interface GoogleCredentialResponse {
   select_by: string;
 }
 
+interface GooglePromptNotification {
+  isNotDisplayed(): boolean;
+  isSkippedMoment(): boolean;
+  isDismissedMoment(): boolean;
+}
+
 interface GoogleAuthConfig {
   client_id: string;
   callback: (response: GoogleCredentialResponse) => void;
@@ -86,15 +92,12 @@ class GoogleAuthService {
               if (result.success) {
                 resolve({ success: true, token: result.data.token });
               } else {
-                resolve({
-                  success: false,
-                  error: result.message || "Google authentication failed",
-                });
+                resolve({ success: false, error: "Google sign-in failed. Please try again." });
               }
-            } catch (error: any) {
+            } catch {
               resolve({
                 success: false,
-                error: error.message || "Failed to authenticate with Google",
+                error: "Google sign-in failed. Please try again.",
               });
             }
           },
@@ -105,7 +108,15 @@ class GoogleAuthService {
         // Render the Google Sign-In button
         if (window.google && window.google.accounts) {
           window.google.accounts.id.initialize(config);
-          window.google.accounts.id.prompt();
+          window.google.accounts.id.prompt((notification) => {
+            if (
+              notification.isNotDisplayed() ||
+              notification.isSkippedMoment() ||
+              notification.isDismissedMoment()
+            ) {
+              resolve({ success: false, error: "Google sign-in was cancelled. You can try again." });
+            }
+          });
         } else {
           resolve({
             success: false,
@@ -113,10 +124,10 @@ class GoogleAuthService {
           });
         }
       });
-    } catch (error: any) {
+    } catch {
       return {
         success: false,
-        error: error.message || "Google authentication failed",
+        error: "Google sign-in failed. Please try again.",
       };
     }
   }
@@ -169,7 +180,7 @@ declare global {
       accounts: {
         id: {
           initialize: (config: GoogleAuthConfig) => void;
-          prompt: () => void;
+          prompt: (callback?: (notification: GooglePromptNotification) => void) => void;
           renderButton: (element: HTMLElement | null, options: any) => void;
           disableAutoSelect: () => void;
         };

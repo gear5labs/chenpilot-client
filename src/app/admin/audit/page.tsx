@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import apiService from '@/services/api';
 import { formatRelativeTime, formatAddress } from '@/utils/format';
+import { buildLoginUrl, getCurrentPath } from '@/utils/authRedirect';
 import {
   AuditLogEntry,
   AuditLogsQueryParams,
@@ -295,7 +296,7 @@ export default function AdminAuditLogsPage() {
   // Redirect if not authenticated
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/auth/login');
+      router.replace(buildLoginUrl(getCurrentPath()));
     }
   }, [isAuthenticated, router]);
 

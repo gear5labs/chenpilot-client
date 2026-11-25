@@ -12,6 +12,7 @@ import apiService from '@/services/api';
 import { StellarNetworkBadge } from '@/components/wallet/StellarNetworkBadge';
 import { ArrowLeft, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { buildLoginUrl, getCurrentPath } from '@/utils/authRedirect';
 
 export default function SendPaymentPage() {
   const router = useRouter();
@@ -26,7 +27,7 @@ export default function SendPaymentPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/auth/login');
+      router.replace(buildLoginUrl(getCurrentPath()));
       return;
     }
     dispatch(getContacts());

@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { ChatLayout } from "@/components/layout/ChatLayout";
 import apiService from "@/services/api";
 import type { PromptVersion, PromptVersionRecord } from "@/types";
+import { buildLoginUrl, getCurrentPath } from '@/utils/authRedirect';
 
 const DEFAULT_TEST_INPUT = "Help a user move idle USDC into the highest-yield low-risk strategy.";
 const DEFAULT_VARIABLES = JSON.stringify(
@@ -130,7 +131,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/auth/login');
+      router.replace(buildLoginUrl(getCurrentPath()));
       return;
     }
     dispatch(loadUser());
@@ -171,7 +172,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push("/auth/login");
+      router.replace(buildLoginUrl(getCurrentPath()));
       return;
     }
     void loadVersions();

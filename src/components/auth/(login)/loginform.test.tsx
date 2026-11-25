@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockDispatch = vi.fn();
 const mockPush = vi.fn();
+const mockReplace = vi.fn();
 const mockToastError = vi.fn();
 const mockToastSuccess = vi.fn();
 
@@ -22,7 +23,7 @@ vi.mock('@/store', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
 }));
 
 vi.mock('react-hot-toast', () => ({
@@ -67,6 +68,7 @@ async function fillAndSubmit(email: string, password: string) {
 
 describe('LoginForm — privacy-safe error messages', () => {
   beforeEach(() => {
+    window.history.replaceState({}, '', '/');
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -137,14 +139,24 @@ describe('LoginForm — privacy-safe error messages', () => {
     });
   });
 
-  it('redirects to /chat on successful login', async () => {
+  it('redirects to /chat on successful login without a return path', async () => {
     mockDispatch.mockReturnValue({ unwrap: () => Promise.resolve({}) });
 
     await fillAndSubmit('test@example.com', 'Password1');
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/chat');
+      expect(mockReplace).toHaveBeenCalledWith('/chat');
     });
+  });
+
+  it('explains an expired session and resumes the safe return path after sign-in', async () => {
+    window.history.replaceState({}, '', '/auth/login?reason=session-expired&returnTo=%2Fcontacts');
+    mockDispatch.mockReturnValue({ unwrap: () => Promise.resolve({}) });
+
+    await fillAndSubmit('test@example.com', 'Password1');
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/session expired/i);
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/contacts'));
   });
 
   it('shows field-level validation error for invalid email without calling thunk', async () => {

@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema } from "@/utils/validation";
@@ -16,6 +16,7 @@ import { isTerminalAuthError, useClearPasswordOnLeave } from "@/components/auth/
 import { authService, toAuthPayload } from "@/services/auth.service";
 import { useT } from "@/lib/i18n/useT";
 import { LiveAnnouncer, SILENT_TOAST, type Announcement } from "@/components/ui/LiveAnnouncer";
+import { getPostLoginPath } from "@/utils/authRedirect";
 
 interface LoginFormData {
   email: string;
@@ -30,6 +31,11 @@ export default function LoginForm() {
   // Translated workflow strings (#292)
   const { t, tv } = useT();
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  useEffect(() => {
+    setSessionExpired(new URLSearchParams(window.location.search).get('reason') === 'session-expired');
+  }, []);
 
   const {
     register,
@@ -51,7 +57,7 @@ export default function LoginForm() {
       await dispatch(login(toAuthPayload(data))).unwrap();
       toast.success(t("auth.loginSuccess"), SILENT_TOAST);
       setAnnouncement({ text: "Signed in.", tone: "polite" });
-      router.push("/chat");
+      router.replace(getPostLoginPath(window.location.search));
     } catch (error: unknown) {
       // Privacy-safe (account-enumeration resistance): every login failure shows the same
       // generic message and no server field errors, so the response can't reveal whether an
@@ -83,6 +89,11 @@ export default function LoginForm() {
 
       {/* Announces sign-in progress and outcome once; the toasts are silent to screen readers (#307) */}
       <LiveAnnouncer announcement={announcement} />
+      {sessionExpired && (
+        <p role="alert" className="mb-6 text-sm text-amber-300">
+          Your session expired. Sign in again to continue where you left off.
+        </p>
+      )}
       <form onSubmit={handleSubmit(onSubmit, onInvalid)} noValidate className="space-y-6">
         <div>
           <label
@@ -203,7 +214,7 @@ export default function LoginForm() {
 
         <div className="mt-6">
           <GoogleSignInButton
-            onSuccess={() => router.push("/chat")}
+            onSuccess={() => router.replace(getPostLoginPath(window.location.search))}
             onError={(error) => console.error(error)}
             className="w-full px-10 py-4 text-base font-light rounded-full border border-white/10 text-black hover:text-white hover:border-white/20 transition-all duration-500"
           />

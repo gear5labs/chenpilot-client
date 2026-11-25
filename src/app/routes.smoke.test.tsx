@@ -5,13 +5,14 @@ import type { RootState } from '@/store';
 
 // Common mocks for route smoke tests
 const mockPush = vi.fn();
+const mockReplace = vi.fn();
 const mockDispatch = vi.fn();
 let mockState: Partial<RootState> = {};
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: mockPush,
-    replace: vi.fn(),
+    replace: mockReplace,
     prefetch: vi.fn(),
     back: vi.fn(),
     forward: vi.fn(),
@@ -227,7 +228,7 @@ describe('#342 — Route-level Smoke Tests for Primary App Destinations', () => 
       render(<ChatPage />);
 
       expect(screen.getByText('Redirecting to login...')).toBeInTheDocument();
-      expect(mockPush).toHaveBeenCalledWith('/auth/login');
+      expect(mockReplace).toHaveBeenCalledWith('/auth/login');
     });
   });
 

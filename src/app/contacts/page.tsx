@@ -26,6 +26,7 @@ import { Contact, CreateContactRequest } from '@/types';
 import { BIDI_LTR_INPUT_PROPS, LtrText } from '@/components/ui/LtrText';
 import toast from 'react-hot-toast';
 import { useT } from "@/lib/i18n/useT";
+import { buildLoginUrl, getCurrentPath } from '@/utils/authRedirect';
 
 export default function ContactsPage() {
   const router = useRouter();
@@ -48,7 +49,7 @@ export default function ContactsPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/auth/login');
+      router.replace(buildLoginUrl(getCurrentPath()));
       return;
     }
 

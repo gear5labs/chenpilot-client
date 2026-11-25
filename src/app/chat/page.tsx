@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAppSelector } from '@/store';
 import { ClientOnlyChatLayout } from '@/components/layout/ClientOnlyChatLayout';
 import ChatEngine from '@/components/chat/ChatEngine';
+import { buildLoginUrl, getCurrentPath } from '@/utils/authRedirect';
 
 function ChatPageContent() {
   const router = useRouter();
@@ -12,7 +13,7 @@ function ChatPageContent() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/auth/login');
+      router.replace(buildLoginUrl(getCurrentPath()));
     }
   }, [isAuthenticated, router]);
 

@@ -200,10 +200,7 @@ const authSlice = createSlice({
       state.error = null;
       state.sessionExpirationTime = null;
       state.isSessionWarningActive = false;
-      // Clear session from localStorage
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("session_expiration");
-      }
+      clearUserScopedStorage();
     },
     setSessionExpirationTime: (state, action: PayloadAction<number | null>) => {
       state.sessionExpirationTime = action.payload;

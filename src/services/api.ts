@@ -49,6 +49,7 @@ import { parseAgentEnvelope, protocolErrorResult } from "./agentEnvelope";
 import { tokenRefreshService } from "./tokenRefreshService";
 import type { MissedEventsPage } from "./socketManager";
 import { clearUserScopedStorage } from "./storageInventory";
+import { buildLoginUrl, getCurrentPath } from "@/utils/authRedirect";
 import {
   isRetryableError,
   computeBackoffMs,
@@ -58,8 +59,8 @@ import {
 } from "@/utils/retryUtils";
 import { horizonFetch } from "@/utils/horizonFetch";
 import { buildPaymentIdempotencyKey } from "@/utils/paymentIdempotency";
-import {
 import type { NotificationPreferences } from "@/types/notificationPreferences";
+import {
   PaymentOutcomeUnknownError,
   isPaymentOutcomeUnknown,
 } from "@/utils/paymentOutcome";
@@ -361,11 +362,15 @@ export class ApiService {
           error.response?.status !== 401 ||
           originalRequest._retry
         ) {
-          if (error.response?.status === 401) {
+          const isCredentialSubmission = /\/auth\/(login|register|google-auth|reauthenticate)(?:\?|$)/.test(
+            originalRequest.url ?? "",
+          );
+          if (error.response?.status === 401 && !isCredentialSubmission) {
             this.clearToken();
+            _store?.dispatch({ type: "auth/clearAuth" });
 
             if (typeof window !== "undefined") {
-              window.location.href = "/auth/login";
+              window.location.href = buildLoginUrl(getCurrentPath(), "session-expired");
             }
           }
 
@@ -402,7 +407,7 @@ export class ApiService {
           }
 
           if (typeof window !== "undefined") {
-            window.location.href = "/auth/login";
+            window.location.href = buildLoginUrl(getCurrentPath(), "session-expired");
           }
 
           return Promise.reject(refreshError);

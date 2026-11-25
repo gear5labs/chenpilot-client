@@ -4,7 +4,7 @@ import React, { useEffect } from "react";
 import { Provider } from "react-redux";
 import { Toaster } from "react-hot-toast";
 import { store } from "@/store";
-import { initializeAuth } from "@/store/slices/authSlice";
+import { clearAuth, initializeAuth } from "@/store/slices/authSlice";
 import { initializeUI } from "@/store/slices/uiSlice";
 import { ThemeProvider } from "./ThemeProvider";
 import { LanguageProvider } from "./LanguageProvider";
@@ -16,6 +16,7 @@ import { ToastOverflowManager } from "@/components/providers/ToastOverflowManage
 import { SessionManagementProvider } from "./SessionManagementProvider";
 import { PresenceProvider } from "./PresenceProvider";
 import { SessionExpirationWarning } from "@/components/auth/SessionExpirationWarning";
+import { listenForAuthStorageChanges } from "@/services/authTabSync";
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -29,19 +30,11 @@ export function Providers({ children }: ProvidersProps) {
     // Initialize UI state (theme, language, etc.)
     store.dispatch(initializeUI());
 
-    // Sync auth state across browser tabs
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'auth_token' || e.key === 'user_data') {
-        // Re-initialize auth state when it changes in another tab
-        store.dispatch(initializeAuth());
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
+    return listenForAuthStorageChanges(
+      window,
+      () => store.dispatch(clearAuth()),
+      () => store.dispatch(initializeAuth()),
+    );
   }, []);
 
   return (

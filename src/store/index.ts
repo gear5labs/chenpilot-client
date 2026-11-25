@@ -1,6 +1,6 @@
-import { configureStore } from '@reduxjs/toolkit';
+import { combineReducers, configureStore } from '@reduxjs/toolkit';
 import { useDispatch, useSelector, TypedUseSelectorHook } from 'react-redux';
-import authSlice, { initializeAuth } from './slices/authSlice';
+import authSlice, { clearAuth, initializeAuth, logout } from './slices/authSlice';
 import accountSlice from './slices/accountSlice';
 import contactsSlice from './slices/contactsSlice';
 import chatSlice, { initializeChatHistory } from './slices/chatSlice';
@@ -8,15 +8,31 @@ import uiSlice from './slices/uiSlice';
 import presenceSlice from './slices/presenceSlice';
 import apiService from '@/services/api';
 
+const appReducer = combineReducers({
+  auth: authSlice,
+  account: accountSlice,
+  contacts: contactsSlice,
+  chat: chatSlice,
+  ui: uiSlice,
+  presence: presenceSlice,
+});
+
+const rootReducer = (state: ReturnType<typeof appReducer> | undefined, action: Parameters<typeof appReducer>[1]) => {
+  if (state && (clearAuth.match(action) || logout.fulfilled.match(action))) {
+    state = {
+      ...state,
+      auth: undefined as never,
+      account: undefined as never,
+      contacts: undefined as never,
+      chat: undefined as never,
+      presence: undefined as never,
+    };
+  }
+  return appReducer(state, action);
+};
+
 export const store = configureStore({
-  reducer: {
-    auth: authSlice,
-    account: accountSlice,
-    contacts: contactsSlice,
-    chat: chatSlice,
-    ui: uiSlice,
-    presence: presenceSlice,
-  },
+  reducer: rootReducer,
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: {

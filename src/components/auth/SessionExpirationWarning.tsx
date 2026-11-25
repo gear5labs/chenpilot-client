@@ -4,8 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { Clock, AlertTriangle } from 'lucide-react';
 import { sessionService } from '@/services/sessionService';
 import { useAppDispatch } from '@/store';
-import { logout } from '@/store/slices/authSlice';
+import { clearAuth } from '@/store/slices/authSlice';
 import { useRouter } from 'next/navigation';
+import { buildLoginUrl, getCurrentPath } from '@/utils/authRedirect';
 
 export function SessionExpirationWarning() {
   const [isVisible, setIsVisible] = useState(false);
@@ -22,8 +23,8 @@ export function SessionExpirationWarning() {
     // Handle expiration
     const unsubscribeExpiration = sessionService.onExpiration(() => {
       setIsVisible(false);
-      dispatch(logout());
-      router.push('/auth/login');
+      dispatch(clearAuth());
+      router.replace(buildLoginUrl(getCurrentPath(), 'session-expired'));
     });
 
     // Handle extension
@@ -61,8 +62,8 @@ export function SessionExpirationWarning() {
   };
 
   const handleLogout = () => {
-    dispatch(logout());
-    router.push('/auth/login');
+    dispatch(clearAuth());
+    router.replace(buildLoginUrl(getCurrentPath()));
   };
 
   const formatTime = (ms: number): string => {

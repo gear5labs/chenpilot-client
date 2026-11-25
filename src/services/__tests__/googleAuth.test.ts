@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import googleAuthService from "../googleAuth";
+import apiService from "../api";
 
 describe("GoogleAuthService", () => {
   beforeEach(() => {
@@ -11,6 +12,7 @@ describe("GoogleAuthService", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe("constructor", () => {
@@ -91,6 +93,59 @@ describe("GoogleAuthService", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("Google Identity Services not available");
+    });
+
+    it("returns a recoverable cancellation when the provider dismisses sign-in", async () => {
+      (googleAuthService as unknown as { isInitialized: boolean }).isInitialized = true;
+      (googleAuthService as unknown as { clientId: string }).clientId = "test-client-id";
+      const prompt = vi.fn((callback?: (notification: {
+        isNotDisplayed: () => boolean;
+        isSkippedMoment: () => boolean;
+        isDismissedMoment: () => boolean;
+      }) => void) => callback?.({
+        isNotDisplayed: () => false,
+        isSkippedMoment: () => false,
+        isDismissedMoment: () => true,
+      }));
+      Object.defineProperty(window, "google", {
+        configurable: true,
+        value: { accounts: { id: { initialize: vi.fn(), prompt, renderButton: vi.fn(), disableAutoSelect: vi.fn() } } },
+      });
+
+      const result = await googleAuthService.signIn();
+
+      expect(result).toEqual({
+        success: false,
+        error: "Google sign-in was cancelled. You can try again.",
+      });
+    });
+
+    it("does not surface a provider credential in a backend error", async () => {
+      (googleAuthService as unknown as { isInitialized: boolean }).isInitialized = true;
+      (googleAuthService as unknown as { clientId: string }).clientId = "test-client-id";
+      const providerCredential = "provider-secret-credential";
+      let callback: ((response: { credential: string; select_by: string }) => Promise<void>) | undefined;
+      Object.defineProperty(window, "google", {
+        configurable: true,
+        value: {
+          accounts: {
+            id: {
+              initialize: vi.fn((config: { callback: typeof callback }) => { callback = config.callback; }),
+              prompt: vi.fn(),
+              renderButton: vi.fn(),
+              disableAutoSelect: vi.fn(),
+            },
+          },
+        },
+      });
+      vi.spyOn(apiService, "googleAuth").mockRejectedValue(new Error(providerCredential));
+
+      const resultPromise = googleAuthService.signIn();
+      await callback?.({ credential: providerCredential, select_by: "btn" });
+      const result = await resultPromise;
+
+      expect(result.error).toBe("Google sign-in failed. Please try again.");
+      expect(result.error).not.toContain(providerCredential);
     });
   });
 

@@ -5,10 +5,11 @@ import ContactsPage from './page';
 import type { Contact } from '@/types';
 
 const mockPush = vi.fn();
+const mockReplace = vi.fn();
 const { mockGetContacts } = vi.hoisted(() => ({ mockGetContacts: vi.fn() }));
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
   usePathname: () => '/contacts',
 }));
 
@@ -98,7 +99,7 @@ describe('#343 — ContactsPage Component Tests', () => {
     render(<ContactsPage />);
 
     expect(screen.getByText('Loading...')).toBeInTheDocument();
-    expect(mockPush).toHaveBeenCalledWith('/auth/login');
+    expect(mockReplace).toHaveBeenCalledWith('/auth/login');
   });
 
   it('renders loading indicator when contacts are loading', () => {
