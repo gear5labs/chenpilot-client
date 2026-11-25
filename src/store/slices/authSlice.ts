@@ -354,6 +354,10 @@ const authSlice = createSlice({
         state.isLoading = false;
         state.user = action.payload;
         state.error = null;
+        // Save updated user data to localStorage
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('user_data', JSON.stringify(action.payload));
+        }
       })
       .addCase(updateProfile.rejected, (state, action) => {
         state.isLoading = false;
