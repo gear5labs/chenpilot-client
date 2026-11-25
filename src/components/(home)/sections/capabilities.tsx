@@ -3,15 +3,15 @@ import React from "react";
 
 const capabilities = [
   {
-    text: "Swap 100k sats to STRK and lend it on Vesu",
+    text: "Swap 100 USDC to XLM and lend it on Blend",
     category: "Trade",
   },
   {
-    text: "Send 20 USDC from Starknet to Bitcoin Lightning",
+    text: "Send 20 USDC from Stellar to Bitcoin Lightning",
     category: "Bridge",
   },
   {
-    text: "Deploy a new Starknet account and fund it",
+    text: "Deploy a new Stellar account and fund it",
     category: "Deploy",
   },
   {

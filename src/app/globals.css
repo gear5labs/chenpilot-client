@@ -1,4 +1,16 @@
 @import "tailwindcss";
+@import "./dark-mode.css";
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
 
 :root {
   --background: #ffffff;
@@ -22,5 +34,69 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: 'Manrope', system-ui, sans-serif;
+  font-family: "Manrope", system-ui, sans-serif;
+}
+
+/* RTL Support */
+html.rtl {
+  direction: rtl;
+  text-align: right;
+}
+
+html.rtl body {
+  direction: rtl;
+}
+
+/* RTL utility classes */
+html.rtl .ltr-only {
+  display: none;
+}
+
+html:not(.rtl) .rtl-only {
+  display: none;
+}
+
+/* Bidirectional isolation for LTR wallet values (keys, hashes, amounts, tickers) in RTL (#293) */
+.bidi-ltr-isolate {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.bidi-plaintext {
+  unicode-bidi: plaintext;
+}
+
+/* RTL spacing utilities */
+html.rtl [class*="ml-"],
+html.rtl [class*="mr-"],
+html.rtl [class*="pl-"],
+html.rtl [class*="pr-"] {
+  /* Tailwind will handle through CSS */
+
+  @layer utilities {
+
+    /* Safe area padding utilities for notched devices */
+    .safe-top {
+      padding-top: env(safe-area-inset-top, 0px);
+    }
+
+    .safe-bottom {
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    .safe-left {
+      padding-left: env(safe-area-inset-left, 0px);
+    }
+
+    .safe-right {
+      padding-right: env(safe-area-inset-right, 0px);
+    }
+  }
+
+  /* Prevent body scroll when mobile sidebar drawer is open */
+  body.sidebar-open {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+  }
 }

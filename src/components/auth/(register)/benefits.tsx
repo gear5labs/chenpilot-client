@@ -16,7 +16,7 @@ const benefits: Benefit[] = [
     description: "120K TPS blockchain performance",
   },
   { title: "Secure Wallet", description: "Your keys, your crypto" },
-  { title: "Multi-Chain", description: "Bitcoin & Starknet support" },
+  { title: "Multi-Chain", description: "Bitcoin & Stellar support" },
 ];
 
 export function Benefits() {

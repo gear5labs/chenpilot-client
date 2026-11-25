@@ -13,6 +13,8 @@ export const agentConfig = {
   enableVoiceCommands: process.env.NEXT_PUBLIC_ENABLE_VOICE_COMMANDS === 'true',
   enableAgentTools: process.env.NEXT_PUBLIC_ENABLE_AGENT_TOOLS === 'true',
   enableRealTimeUpdates: process.env.NEXT_PUBLIC_ENABLE_REAL_TIME_UPDATES === 'true',
+  // Stream agent responses over POST /query/stream (SSE) when the backend supports it (#261)
+  enableStreaming: process.env.NEXT_PUBLIC_ENABLE_AGENT_STREAMING === 'true',
   
   // Logging
   logLevel: process.env.NEXT_PUBLIC_LOG_LEVEL || 'info',
@@ -20,16 +22,17 @@ export const agentConfig = {
   
   // Agent capabilities
   supportedActions: [
-    'lend', 'borrow', 'withdraw', 'repay', 'swap', 'deploy',
+    'transfer_xlm', 'swap', 'lend', 'borrow', 'withdraw', 'repay', 'deploy',
     'check_balance', 'get_apy', 'health_check', 'liquidate',
     'claim_rewards', 'add_collateral', 'remove_collateral',
     'deposit_vault', 'withdraw_vault', 'get_vaults',
-    'get_vault_positions', 'harvest_vault', 'get_strategies'
+    'get_vault_positions', 'harvest_vault', 'get_strategies',
+    'swap_stellar_dex', 'add_liquidity', 'remove_liquidity'
   ],
-  
-  supportedAssets: ['ETH', 'STRK', 'USDC', 'USDT', 'WBTC', 'DAI'],
-  
-  supportedProtocols: ['Vesu', 'Atomiq', 'XVerse', 'Troves'],
+
+  supportedAssets: ['XLM', 'USDC', 'USDT', 'BTC', 'ETH', 'AQUA'],
+
+  supportedProtocols: ['Soroswap', 'Blend', 'Aquarius', 'Phoenix'],
   
   // Default agent settings
   defaultModel: 'claude-3-5-haiku-20241022',

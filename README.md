@@ -1,86 +1,35 @@
 # ChenPilot Client
 
-A modern, responsive web client for **ChenPilot** - a Starknet-based crypto wallet management system with AI agent capabilities. Built with Next.js, TypeScript, and Tailwind CSS.
-
-## Features
-
-### Core Functionality
-- **AI-Powered Agent Interface**: Natural language interface for complex DeFi operations
-- **Cross-Chain Operations**: Seamless Bitcoin to Starknet asset swaps
-- **Wallet Management**: Secure Starknet wallet operations and balance tracking
-- **Contact Management**: Add, edit, and organize your contacts
-- **Real-time Chat**: Interactive AI agent with message history
-
-### Technical Features
-- **Modern UI/UX**: Clean, responsive design with dark/light theme support
-- **Type Safety**: Full TypeScript implementation with comprehensive type definitions
-- **State Management**: Redux Toolkit for predictable state management
-- **Form Validation**: Zod schema validation with React Hook Form
-- **API Integration**: Axios-based service layer with error handling
-- **Authentication**: JWT-based auth with protected routes
-
-## Technology Stack
-
-- **Framework**: Next.js 15 with App Router
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **State Management**: Redux Toolkit
-- **Forms**: React Hook Form + Zod validation
-- **HTTP Client**: Axios
-- **Icons**: Lucide React
-- **Notifications**: React Hot Toast
-- **Package Manager**: pnpm
-
-## Project Structure
-
-```
-src/
-├── app/                    # Next.js App Router pages
-│   ├── auth/              # Authentication pages
-│   │   ├── login/         # Login page
-│   │   └── register/      # Registration page
-│   ├── dashboard/         # Main dashboard
-│   ├── chat/              # AI agent chat interface
-│   ├── contacts/          # Contact management
-│   └── layout.tsx         # Root layout
-├── components/            # Reusable UI components
-│   ├── ui/               # Base UI components
-│   └── providers/        # Context providers
-├── services/             # API service layer
-├── store/                # Redux store and slices
-│   └── slices/           # Redux slices
-├── types/                # TypeScript type definitions
-├── utils/                # Utility functions
-├── constants/            # Application constants
-└── config/               # Configuration files
-```
+A modern, responsive web client for **ChenPilot** - a crypto wallet management system with AI agent capabilities. Built with Next.js, TypeScript, and Tailwind CSS.
 
 ## Getting Started
 
+> 💡 **Troubleshooting**: Having issues setting up locally? Check out our [Troubleshooting Guide](./docs/TROUBLESHOOTING.md) for solutions to common environment, port, socket, and git hook problems.
+
 ### Prerequisites
-- Node.js 18+ 
-- pnpm (recommended) or npm
-- ChenPilot Experimental Backend (see [AGENT_INTEGRATION.md](./AGENT_INTEGRATION.md))
+
+- Node.js 18+
+- pnpm
 
 ### Installation
 
 1. **Clone the repository**
+
    ```bash
    git clone <repository-url>
    cd chenpilot-client
    ```
 
 2. **Install dependencies**
+
    ```bash
    pnpm install
    ```
 
 3. **Set up environment variables**
-   ```bash
-   cp .env.example .env.local
-   ```
-   
-   Update the environment variables in `.env.local`:
+
+   Create a `.env.local` file in the project root:
+
    ```env
    NEXT_PUBLIC_API_BASE_URL=http://localhost:2333
    NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id
@@ -88,25 +37,17 @@ src/
    NEXT_PUBLIC_APP_VERSION=1.0.0
    ```
 
-4. **Start the experimental backend** (required for full functionality)
-   ```bash
-   cd ../chenpilot-experimental
-   npm install
-   npm run dev
-   ```
+   Use [`.env.example`](./.env.example) for the complete public configuration list and server/CI variable names. Never put secrets in `NEXT_PUBLIC_*` variables: Next.js ships those values to browsers.
 
-5. **Start the development server**
+   Refer to [TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md) if you encounter environment setup issues.
+
+4. **Start the development server**
+
    ```bash
-   cd ../chenpilot-client
    pnpm dev
    ```
 
-6. **Test the integration**
-   ```bash
-   node test-integration.js
-   ```
-
-7. **Open your browser**
+5. **Open your browser**
    Navigate to [http://localhost:3000](http://localhost:3000)
 
 ## Available Scripts
@@ -115,139 +56,116 @@ src/
 - `pnpm build` - Build for production
 - `pnpm start` - Start production server
 - `pnpm lint` - Run ESLint
-- `pnpm test` - Run tests (when implemented)
+- `pnpm lint:fix` - Run ESLint and fix issues automatically
+- `pnpm typecheck` - Run TypeScript type checking
+- [`pnpm test`](docs/TESTING.md) - Run the Vitest suite once
+- `pnpm test:watch` - Run Vitest in watch mode
+- `pnpm test:coverage` - Run tests and generate coverage report
 
-## UI Components
+## CI/CD Pipeline
 
-### Core Components
-- **Button**: Primary, secondary, ghost, and danger variants
-- **Input**: Form inputs with validation and error states
-- **Card**: Content containers with optional headers and actions
-- **Modal**: Overlay modals with backdrop and escape key handling
+This project uses GitHub Actions for continuous integration and deployment to Vercel.
 
-### Layout Components
-- **Header**: Navigation header with theme toggle
-- **Sidebar**: Collapsible navigation sidebar
-- **Footer**: Application footer with links
+### GitHub Secrets Configuration
 
-## Authentication
+Before the CI/CD pipeline can run, configure the following secrets in your GitHub repository:
 
-The application implements a complete authentication system:
+1. Navigate to **Settings** → **Secrets and variables** → **Actions**
+2. Add the following repository secrets:
 
-### Features
-- User registration and login
-- JWT token management
-- Protected routes
-- Password validation
-- Google OAuth integration (ready for implementation)
+| Secret Name         | Description            | How to Obtain                                                                         |
+| ------------------- | ---------------------- | ------------------------------------------------------------------------------------- |
+| `VERCEL_TOKEN`      | Vercel API token       | Go to [Vercel Account Settings](https://vercel.com/account/tokens) → Create new token |
+| `VERCEL_ORG_ID`     | Vercel organization ID | Run `vercel link` in your project, then check `.vercel/project.json`                  |
+| `VERCEL_PROJECT_ID` | Vercel project ID      | Run `vercel link` in your project, then check `.vercel/project.json`                  |
 
-### Protected Routes
-- `/dashboard` - Main user dashboard
-- `/chat` - AI agent interface
-- `/contacts` - Contact management
-- `/settings` - User settings
+### Workflow Behavior
 
-## AI Agent Integration
+**On Pull Requests:**
 
-### Supported Operations
-- **Meta Operations**: "What is your name?", "What can you do?"
-- **Wallet Operations**: Balance queries, address display
-- **Contact Management**: Create, list, and manage contacts
-- **Trading Operations**: Token swaps and DeFi operations
-- **QA Functionality**: Help and guidance
+- Runs CI checks (install, lint, build)
+- Creates a Vercel preview deployment
+- Comments the preview URL on the PR
+- Blocks merge if any check fails
 
-### Chat Interface
-- Real-time messaging with typing indicators
-- Message history persistence
-- Copy-to-clipboard functionality
-- Transaction status tracking
+**On Push to Main:**
 
-## Responsive Design
+- Runs CI checks (install, lint, build)
+- Deploys to Vercel production
+- Updates deployment summary
 
-The application is fully responsive and optimized for:
-- Desktop (1024px+)
-- Tablet (768px - 1023px)
-- Mobile (320px - 767px)
+### CI Checks
 
-## Theme Support
+All deployments require passing:
 
-- Light and dark theme support
-- System preference detection
-- Persistent theme selection
-- Smooth theme transitions
+1. ✅ Dependency installation (`pnpm install --frozen-lockfile`)
+2. ✅ Linting (`pnpm lint`)
+3. ✅ Build (`pnpm build`)
+4. ✅ Tests (`pnpm test`)
 
-## API Integration
+## Git Hooks (Husky)
 
-### Endpoints
-- **Authentication**: `/auth/*` - Login, register, profile management
-- **Account**: `/auth/starknet/*` - Wallet operations and status
-- **Contacts**: `/contacts` - Contact CRUD operations
-- **Agent**: `/query` - AI agent interactions
+This project uses Husky to enforce code quality before commits.
 
-### Error Handling
-- Comprehensive error handling with user-friendly messages
-- Automatic token refresh
-- Network error recovery
-- Loading states and feedback
+### Automatic Setup
 
-## Testing
+Husky hooks are automatically installed when you run:
 
-Testing framework setup (to be implemented):
-- Unit tests with Vitest
-- Component tests with React Testing Library
-- E2E tests with Playwright
-- API integration tests
-
-## Deployment
-
-### Build for Production
 ```bash
-pnpm build
+pnpm install
 ```
 
-### Deploy to Vercel
+The `prepare` script in `package.json` handles the installation.
+
+### Pre-commit Hook
+
+Before each commit, the following checks run automatically:
+
+- **Linting**: ESLint runs on all staged `.js`, `.jsx`, `.ts`, `.tsx` files
+- **Auto-fix**: ESLint will attempt to fix issues automatically
+- **Commit blocking**: If linting fails, the commit is blocked
+
+### Troubleshooting Husky
+
+**Hooks not running?**
+
 ```bash
-pnpm vercel
+# Reinstall hooks
+pnpm exec husky install
+
+# Check hook permissions
+chmod +x .husky/pre-commit
 ```
+
+For more detailed failure modes, see [Troubleshooting Guide](./docs/TROUBLESHOOTING.md).
+
+**Skip hooks (emergency only):**
+
+```bash
+git commit --no-verify -m "your message"
+```
+
+> ⚠️ **Note**: Skipping hooks should be rare. The CI pipeline will still enforce all checks.
 
 ### Environment Variables for Production
+
 Ensure all required environment variables are set in your deployment platform.
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+For guidelines on contributing code, submitting Architectural Decision Records (ADRs), and code styles, see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 ## Support
 
 For support and questions:
+
 - Create an issue in the repository
-- Check the documentation
+- Check the [Troubleshooting Guide](./docs/TROUBLESHOOTING.md) and documentation
 - Contact the development team
-
-## Roadmap
-
-### Upcoming Features
-- [ ] Advanced DeFi operations
-- [ ] Multi-wallet support
-- [ ] Mobile app
-- [ ] Advanced analytics
-- [ ] Social features
-- [ ] Plugin system
-
-### Technical Improvements
-- [ ] Performance optimization
-- [ ] Advanced caching
-- [ ] Offline support
-- [ ] PWA capabilities
-- [ ] Advanced security features
 
 ---
 

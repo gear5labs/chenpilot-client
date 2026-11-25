@@ -10,7 +10,7 @@ const features: Feature[] = [
   { title: "AI-Powered", description: "Natural language DeFi operations" },
   { title: "Lightning Fast", description: "120K TPS blockchain performance" },
   { title: "Secure", description: "Trustless and decentralized" },
-  { title: "Multi-Chain", description: "Bitcoin & Starknet support" },
+  { title: "Multi-Chain", description: "Bitcoin & Stellar support" },
 ];
 
 export default function Features() {

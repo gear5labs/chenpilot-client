@@ -1,477 +1,396 @@
-'use client';
+﻿"use client";
 
-import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAppDispatch, useAppSelector } from '@/store';
-import { getAccountStatus, getBalance, deployAccount, fundAccount } from '@/store/slices/accountSlice';
-import { loadUser } from '@/store/slices/authSlice';
-import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import { ChatLayout } from '@/components/layout/ChatLayout';
-import { 
-  Copy, 
-  ExternalLink,
-  Clock,
-  ArrowUpRight,
-  ArrowDownLeft,
-  RefreshCw
-} from 'lucide-react';
-import { formatAddress, formatTokenAmount } from '@/utils/format';
-import toast from 'react-hot-toast';
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAppSelector } from "@/store";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { ChatLayout } from "@/components/layout/ChatLayout";
+import apiService from "@/services/api";
+import type { PromptVersion, PromptVersionRecord } from "@/types";
+
+const DEFAULT_TEST_INPUT = "Help a user move idle USDC into the highest-yield low-risk strategy.";
+const DEFAULT_VARIABLES = JSON.stringify(
+  {
+    agentName: "ChenPilot",
+    userName: "Ada",
+    network: "mainnet",
+    riskLevel: "low",
+    tone: "clear and confident",
+  },
+  null,
+  2,
+);
+
+function isRecord(value: unknown): value is PromptVersionRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function getBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function getArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function extractVersionRecords(payload: unknown): PromptVersionRecord[] {
+  if (Array.isArray(payload)) {
+    return payload.filter(isRecord);
+  }
+
+  if (!isRecord(payload)) {
+    return [];
+  }
+
+  const directCollections = [payload.versions, payload.data, payload.items, payload.results];
+  for (const candidate of directCollections) {
+    if (Array.isArray(candidate)) return candidate.filter(isRecord);
+  }
+
+  if (isRecord(payload.data)) {
+    const nestedCollections = [payload.data.versions, payload.data.items, payload.data.results];
+    for (const candidate of nestedCollections) {
+      if (Array.isArray(candidate)) return candidate.filter(isRecord);
+    }
+  }
+  return [];
+}
+
+function normalizeVersion(record: PromptVersionRecord, index: number): PromptVersion {
+  const id = getString(record.id) ?? getString(record._id) ?? getString(record.uuid) ?? `version-${index + 1}`;
+  const tags = getArray(record.tags)
+    .map((tag) => (typeof tag === "string" ? tag.trim() : ""))
+    .filter(Boolean);
+
+  return {
+    id,
+    label: getString(record.name) ?? getString(record.title) ?? `Template ${index + 1}`,
+    description: getString(record.description) ?? "No description provided for this prompt version.",
+    template: getString(record.template) ?? getString(record.prompt) ?? "",
+    version: getString(record.version) ?? id,
+    isActive: getBoolean(record.isActive) ?? getBoolean(record.active) ?? false,
+    createdAt: getString(record.createdAt) ?? getString(record.created_at) ?? null,
+    updatedAt: getString(record.updatedAt) ?? getString(record.updated_at) ?? null,
+    tags,
+    raw: record,
+  };
+}
+
+function parseVariables(rawValue: string): { parsed: Record<string, string>; error: string | null } {
+  try {
+    const value = JSON.parse(rawValue) as unknown;
+
+    if (!isRecord(value)) {
+      return { parsed: {}, error: "Variables must be a JSON object." };
+    }
+
+    const flattened = Object.entries(value).reduce<Record<string, string>>((accumulator, [key, entry]) => {
+      accumulator[key] = entry == null ? "" : typeof entry === "string" ? entry : JSON.stringify(entry);
+      return accumulator;
+    }, {});
+    return { parsed: flattened, error: null };
+  } catch {
+    return { parsed: {}, error: "Variables JSON is invalid." };
+  }
+}
+
+function renderTemplate(template: string, variables: Record<string, string>): string {
+  return template
+    .replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_, key: string) => variables[key] ?? `{{${key}}}`)
+    .replace(/\$\{\s*([a-zA-Z0-9_.-]+)\s*\}/g, (_, key: string) => variables[key] ?? `\${${key}}`);
+}
+
+function getPlaceholders(template: string): string[] {
+  const matches = template.match(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}|\$\{\s*([a-zA-Z0-9_.-]+)\s*\}/g) ?? [];
+  const normalized = matches.map((placeholder) => placeholder.replace(/^\{\{\s*|\s*\}\}$|^\$\{\s*|\s*\}$/g, ""));
+  return Array.from(new Set(normalized));
+}
 
 export default function DashboardPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
-  const { status, balance, isLoading } = useAppSelector((state) => state.account);
+  const { status, balance, network, transactions } = useAppSelector((state) => state.account);
   const { messages } = useAppSelector((state) => state.chat);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [versions, setVersions] = useState<PromptVersion[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isLoadingVersions, setIsLoadingVersions] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isActivating, setIsActivating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [testInput, setTestInput] = useState(DEFAULT_TEST_INPUT);
+  const [variablesText, setVariablesText] = useState(DEFAULT_VARIABLES);
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.push('/auth/login');
       return;
     }
-
-    // Load user data and account status
     dispatch(loadUser());
     dispatch(getAccountStatus());
     dispatch(getBalance());
+    dispatch(getStellarNetworkStatus());
   }, [dispatch, isAuthenticated, router]);
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied to clipboard`);
-  };
+  useEffect(() => {
+    if (isAuthenticated && user?.id) {
+      dispatch(getAccountTransactions({ userId: user.id, page: currentPage, limit: pageSize }));
+    }
+  }, [currentPage, dispatch, isAuthenticated, pageSize, user?.id]);
 
-  const handleDeployAccount = async () => {
+  const loadVersions = async (showRefreshState = false) => {
+    if (showRefreshState) setIsRefreshing(true);
+    else setIsLoadingVersions(true);
+
     try {
-      await dispatch(deployAccount()).unwrap();
-      toast.success('Account deployment initiated!');
-      // Refresh account status
-      dispatch(getAccountStatus());
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.message || error.message || 'Deployment failed';
-      toast.error(errorMessage);
+      setError(null);
+      const response = await apiService.getPromptVersions();
+      const normalizedVersions = extractVersionRecords(response).map(normalizeVersion);
+      setVersions(normalizedVersions);
+      setSelectedId((currentSelectedId) => {
+        if (currentSelectedId && normalizedVersions.some((version) => version.id === currentSelectedId)) {
+          return currentSelectedId;
+        }
+        return normalizedVersions.find((version) => version.isActive)?.id ?? normalizedVersions[0]?.id ?? null;
+      });
+    } catch (requestError: unknown) {
+      const message = requestError instanceof Error ? requestError.message : "Failed to load prompt versions.";
+      setError(message);
+    } finally {
+      setIsLoadingVersions(false);
+      setIsRefreshing(false);
+    }
+  }, [dispatch, user?.id, currentPage, pageSize]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push("/auth/login");
+      return;
+    }
+    void loadVersions();
+  }, [isAuthenticated, router]);
+
+  const selectedVersion = useMemo(
+    () => versions.find((version) => version.id === selectedId) ?? versions[0] ?? null,
+    [selectedId, versions],
+  );
+  const activeVersion = useMemo(() => versions.find((version) => version.isActive) ?? null, [versions]);
+  const parsedVariables = useMemo(() => {
+    const { parsed, error: parseError } = parseVariables(variablesText);
+    return {
+      variables: {
+        ...parsed,
+        input: testInput,
+        userInput: testInput,
+        user_query: testInput,
+      } as Record<string, string>,
+      error: parseError,
+    };
+  }, [testInput, variablesText]);
+
+  const renderedPrompt = useMemo(() => {
+    if (!selectedVersion) {
+      return "";
+    }
+    return renderTemplate(selectedVersion.template, parsedVariables.variables);
+  }, [parsedVariables.variables, selectedVersion]);
+
+  const unresolvedPlaceholders = useMemo(() => {
+    if (!selectedVersion) {
+      return [];
+    }
+    return getPlaceholders(selectedVersion.template).filter(
+      (placeholder) => parsedVariables.variables[placeholder] === undefined,
+    );
+  }, [parsedVariables.variables, selectedVersion]);
+
+  const handleActivate = async () => {
+    if (!selectedVersion || selectedVersion.isActive) return;
+    setIsActivating(true);
+    try {
+      await apiService.activatePromptVersion(selectedVersion.id);
+      setVersions((currentVersions) =>
+        currentVersions.map((version) => ({
+          ...version,
+          isActive: version.id === selectedVersion.id,
+        })),
+      );
+    } catch (requestError: unknown) {
+      const message = requestError instanceof Error ? requestError.message : "Failed to activate the selected version.";
+      setError(message);
+    } finally {
+      setIsDeploying(false);
     }
   };
 
-  const handleFundAccount = async () => {
+  const copyText = async (text: string, label: string) => {
     try {
-      await dispatch(fundAccount()).unwrap();
-      toast.success('Account funding initiated!');
-      // Refresh account status and balance
-      dispatch(getAccountStatus());
-      dispatch(getBalance());
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.message || error.message || 'Funding failed';
-      toast.error(errorMessage);
+      await navigator.clipboard.writeText(text);
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error(`Unable to copy ${label.toLowerCase()}.`);
     }
   };
-
   const quickActions = [
     {
-      title: 'Chat with AI Agent',
-      description: 'Ask questions or execute DeFi operations',
-      action: () => router.push('/chat'),
-      color: 'bg-blue-500',
-    },
-    {
-      title: 'Manage Contacts',
-      description: 'Add and organize your contacts',
-      action: () => router.push('/contacts'),
-      color: 'bg-green-500',
+      title: 'Send Payment',
+      description: 'Transfer native XLM or custom anchored assets',
+      icon: <Send className="h-5 w-5 text-cyan-400" />,
+      action: () => router.push('/send'),
     },
     {
       title: 'View Transactions',
-      description: 'Check your transaction history',
+      description: 'Check complete ledger history and operations',
+      icon: <Coins className="h-5 w-5 text-emerald-400" />,
       action: () => router.push('/transactions'),
-      color: 'bg-purple-500',
+    },
+    {
+      title: 'Manage Contacts',
+      description: 'Save Stellar addresses for fast recurring transfers',
+      icon: <Users className="h-5 w-5 text-indigo-400" />,
+      action: () => router.push('/contacts'),
     },
   ];
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-[#060816] text-white">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
+          <p className="text-lg text-slate-300">Redirecting to login...</p>
         </div>
       </div>
     );
   }
 
+  const activePublicKey =
+    status?.publicKey ||
+    status?.address ||
+    user?.publicKey ||
+    user?.address ||
+    '';
+
   return (
     <ChatLayout>
-      <div className="h-full flex flex-col bg-black text-white overflow-hidden relative">
-        {/* Simple Background */}
-        <div className="absolute inset-0">
-          {/* Grid Pattern */}
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:50px_50px]" />
-        </div>
+      <div className="h-full overflow-auto bg-[#060816] text-white">
+        <div className="mx-auto flex max-w-6xl flex-col gap-6 p-6">
+          <section className="rounded-3xl border border-white/10 bg-slate-950/70 p-6 shadow-2xl shadow-cyan-950/20">
+            <h1 className="text-3xl font-semibold">Prompt version dashboard</h1>
+            <p className="mt-2 text-sm text-slate-300">
+              Review or promote prompt versions for {user?.name ?? "your account"}.
+            </p>
+          </section>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
-        {/* Welcome Section */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">
-            Welcome back, {user?.name || 'User'}!
-          </h1>
-          <p className="text-gray-300">
-            Here's an overview of your ChenPilot account and recent activity.
-          </p>
-        </div>
-
-        {/* Account Status Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {/* Wallet Address */}
-          <Card>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-300">
-                  Wallet Address
-                </p>
-                <p className="text-lg font-semibold text-white">
-                  {status?.address ? formatAddress(status.address) : 'Loading...'}
-                </p>
-              </div>
+          {error && (
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+              {error}
             </div>
-            {status?.address && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-2"
-                onClick={() => copyToClipboard(status.address, 'Address')}
-              >
-                <Copy className="h-4 w-4 mr-1" />
-                Copy
-              </Button>
-            )}
-          </Card>
+          )}
 
-          {/* Account Status */}
-          <Card>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-300">
-                  Account Status
-                </p>
-                <div className="flex items-center mt-1">
-                  <span className="text-lg font-semibold text-white">
-                    {status?.isDeployed ? 'Deployed' : 'Not Deployed'}
-                  </span>
-                </div>
+          <div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
+            <Card>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-xl font-semibold">Prompt versions</h2>
+                <Button
+                  variant="secondary"
+                  onClick={() => void loadVersions(true)}
+                  disabled={isRefreshing || isLoading}
+                >
+                  {isRefreshing ? "Refreshing..." : "Refresh"}
+                </Button>
               </div>
-            </div>
-            {!status?.isDeployed && (
-              <Button
-                size="sm"
-                className="mt-2"
-                onClick={handleDeployAccount}
-                disabled={isLoading}
-              >
-                {isLoading ? 'Deploying...' : 'Deploy Account'}
-              </Button>
-            )}
-          </Card>
 
-          {/* Funding Status */}
-          <Card>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-300">
-                  Funding Status
-                </p>
-                <div className="flex items-center mt-1">
-                  <span className="text-lg font-semibold text-white">
-                    {status?.isFunded ? 'Funded' : 'Not Funded'}
-                  </span>
-                </div>
-              </div>
-            </div>
-            {!status?.isFunded && (
-              <Button
-                size="sm"
-                className="mt-2"
-                onClick={handleFundAccount}
-                disabled={isLoading}
-              >
-                {isLoading ? 'Funding...' : 'Fund Account'}
-              </Button>
-            )}
-          </Card>
-
-          {/* Balance */}
-          <Card>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-300">
-                  STRK Balance
-                </p>
-                <p className="text-lg font-semibold text-white">
-                  {balance ? formatTokenAmount(balance.balance, 4, 'STRK') : 'Loading...'}
-                </p>
-              </div>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mt-2"
-              onClick={() => dispatch(getBalance())}
-            >
-              Refresh
-            </Button>
-          </Card>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-white mb-6">
-            Quick Actions
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {quickActions.map((action, index) => (
-              <Card key={index} className="cursor-pointer hover:shadow-lg transition-shadow">
-                <div className="flex items-start space-x-4">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-white mb-1">
-                      {action.title}
-                    </h3>
-                    <p className="text-gray-300 mb-4">
-                      {action.description}
-                    </p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={action.action}
-                    >
-                      Get Started
-                      <ExternalLink className="h-4 w-4 ml-1" />
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-
-        {/* Recent Activity */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-white mb-6">
-            Recent Activity
-          </h2>
-          <Card>
-            {messages.length > 0 ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium text-white">
-                    Recent Chat Messages
-                  </h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => router.push('/chat')}
-                  >
-                    View All
-                  </Button>
-                </div>
+              {isLoading ? (
+                <p className="text-sm text-slate-300">Loading prompt versions…</p>
+              ) : versions.length === 0 ? (
+                <p className="text-sm text-slate-300">No prompt versions available yet.</p>
+              ) : (
                 <div className="space-y-3">
-                  {messages.slice(-5).reverse().map((message, index) => (
-                    <div key={index} className="flex items-start space-x-2 p-2 bg-gray-800/50 rounded-lg">
-                      <div className={`w-2 h-2 rounded-full mt-2 ${
-                        message.type === 'user' ? 'bg-blue-500' : 'bg-green-500'
-                      }`} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <span className="text-sm font-medium text-white">
-                            {message.type === 'user' ? 'You' : 'AI Agent'}
+                  {versions.map((version) => (
+                    <button
+                      key={version.id}
+                      type="button"
+                      onClick={() => setSelectedId(version.id)}
+                      className={`w-full rounded-xl border p-3 text-left transition ${
+                        selectedVersion?.id === version.id
+                          ? "border-cyan-400 bg-cyan-500/10"
+                          : "border-white/10 bg-slate-900/50 hover:border-white/20"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-white">{version.label}</span>
+                        {version.isActive && (
+                          <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-[10px] uppercase tracking-wide text-green-300">
+                            Active
                           </span>
-                        </div>
-                        <p className="text-sm text-gray-300 truncate">
-                          {message.content.length > 100 
-                            ? message.content.substring(0, 100) + '...' 
-                            : message.content
-                          }
-                        </p>
+                        )}
                       </div>
-                    </div>
+                      <p className="mt-1 text-xs text-slate-400">{version.description}</p>
+                    </button>
                   ))}
                 </div>
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <h3 className="text-lg font-medium text-white mb-2">
-                  No recent activity
-                </h3>
-                <p className="text-gray-300 mb-4">
-                  Your recent transactions and interactions will appear here.
-                </p>
-                <Button
-                  onClick={() => router.push('/chat')}
-                >
-                  Start with AI Agent
-                </Button>
-              </div>
-            )}
-          </Card>
-        </div>
+              )}
+            </Card>
 
-        {/* Transaction History */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-white mb-6">
-            Transaction History
-          </h2>
+            <Card>
+              <h2 className="text-xl font-semibold">Preview</h2>
+              {selectedVersion ? (
+                <div className="mt-4 space-y-4">
+                  <div className="rounded-xl border border-white/10 bg-slate-900/60 p-3 text-sm whitespace-pre-wrap text-slate-200">
+                    {renderedPrompt || "Select a prompt version to preview it."}
+                  </div>
+                  <Button onClick={handleActivate} disabled={isActivating || selectedVersion.isActive}>
+                    {isActivating ? "Activating..." : selectedVersion.isActive ? "Active" : "Activate version"}
+                  </Button>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-300">No version selected.</p>
+              )}
+            </Card>
+          </div>
+
           <Card>
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-medium text-white">
-                  Recent Transactions
-                </h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    // TODO: Implement transaction history fetch
-                    toast('Transaction history coming soon!');
-                  }}
-                >
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  Refresh
-                </Button>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-200">Test input</label>
+                <textarea
+                  value={testInput}
+                  onChange={(event) => setTestInput(event.target.value)}
+                  className="min-h-[100px] w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white"
+                />
               </div>
-              
-              {/* Mock transaction data - will be replaced with real data */}
-              <div className="space-y-3">
-                {status?.deploymentTransactionHash && (
-                  <div className="flex items-center space-x-3 p-3 bg-gray-800/50 rounded-lg">
-                    <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center">
-                      <ArrowUpRight className="h-4 w-4 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-white">
-                          Account Deployment
-                        </span>
-                        <span className="text-xs text-gray-400">
-                          {new Date().toLocaleDateString()}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-300">
-                        Transaction: {formatAddress(status.deploymentTransactionHash)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-sm text-green-400">Deployed</span>
-                    </div>
-                  </div>
-                )}
-                
-                {status?.fundingTransactionHash && (
-                  <div className="flex items-center space-x-3 p-3 bg-gray-800/50 rounded-lg">
-                    <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
-                      <ArrowDownLeft className="h-4 w-4 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-white">
-                          Account Funding
-                        </span>
-                        <span className="text-xs text-gray-400">
-                          {new Date().toLocaleDateString()}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-300">
-                        Transaction: {formatAddress(status.fundingTransactionHash)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-sm text-blue-400">Funded</span>
-                    </div>
-                  </div>
-                )}
-                
-                {!status?.deploymentTransactionHash && !status?.fundingTransactionHash && (
-                  <div className="text-center py-8">
-                    <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-white mb-2">
-                      No transactions yet
-                    </h3>
-                    <p className="text-gray-300 mb-4">
-                      Your transaction history will appear here once you start using ChenPilot.
-                    </p>
-                    <Button
-                      onClick={() => router.push('/chat')}
-                    >
-                      Start with AI Agent
-                    </Button>
-                  </div>
-                )}
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-200">Variables (JSON)</label>
+                <textarea
+                  value={variablesText}
+                  onChange={(event) => setVariablesText(event.target.value)}
+                  className="min-h-[140px] w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white font-mono"
+                />
               </div>
+
+              {parsedVariables.error && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200">
+                  {parsedVariables.error}
+                </div>
+              )}
+
+              {unresolvedPlaceholders.length > 0 && (
+                <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3 text-sm text-cyan-200">
+                  Missing variables: {unresolvedPlaceholders.join(", ")}
+                </div>
+              )}
             </div>
           </Card>
         </div>
-
-        {/* Account Setup Progress */}
-        {(!status?.isDeployed || !status?.isFunded) && (
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-white mb-6">
-              Complete Your Setup
-            </h2>
-            <Card>
-              <div className="space-y-4">
-                <div className="flex items-center space-x-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    status?.isDeployed ? 'bg-green-600 text-white' : 'bg-gray-600 text-white'
-                  }`}>
-                    {status?.isDeployed ? '✓' : '1'}
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-medium text-white">
-                      Deploy Your Account
-                    </h3>
-                    <p className="text-sm text-gray-300">
-                      Deploy your Starknet account to start using ChenPilot
-                    </p>
-                  </div>
-                  {!status?.isDeployed && (
-                    <Button 
-                      size="sm"
-                      onClick={handleDeployAccount}
-                      disabled={isLoading}
-                    >
-                      {isLoading ? 'Deploying...' : 'Deploy Now'}
-                    </Button>
-                  )}
-                </div>
-                
-                <div className="flex items-center space-x-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    status?.isFunded ? 'bg-green-600 text-white' : 'bg-gray-600 text-white'
-                  }`}>
-                    {status?.isFunded ? '✓' : '2'}
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-medium text-white">
-                      Fund Your Account
-                    </h3>
-                    <p className="text-sm text-gray-300">
-                      Add STRK tokens to your account for transactions
-                    </p>
-                  </div>
-                  {!status?.isFunded && (
-                    <Button 
-                      size="sm"
-                      onClick={handleFundAccount}
-                      disabled={isLoading}
-                    >
-                      {isLoading ? 'Funding...' : 'Fund Now'}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </Card>
-          </div>
-        )}
-      </div>
       </div>
     </ChatLayout>
   );
 }
+```

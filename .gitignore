@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+/node-modules
+
 /.pnp
 .pnp.*
 .yarn/*
@@ -30,8 +32,16 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# lockfiles for other package managers (pnpm is the supported manager)
+package-lock.json
+yarn.lock
+
+# stale install logs
+npm-install.log
+
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +49,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# tsc output logs (#135)
+tsc_output.txt
+*.tsc_output.txt
+fix.md
