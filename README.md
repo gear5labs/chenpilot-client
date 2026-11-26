@@ -4,11 +4,12 @@ A modern, responsive web client for **ChenPilot** - a crypto wallet management s
 
 ## Getting Started
 
+> 💡 **Troubleshooting**: Having issues setting up locally? Check out our [Troubleshooting Guide](./docs/TROUBLESHOOTING.md) for solutions to common environment, port, socket, and git hook problems.
+
 ### Prerequisites
 
 - Node.js 18+
-- pnpm (recommended) or npm
-- ChenPilot Experimental Backend (see [AGENT_INTEGRATION.md](./AGENT_INTEGRATION.md))
+- pnpm
 
 ### Installation
 
@@ -27,11 +28,7 @@ A modern, responsive web client for **ChenPilot** - a crypto wallet management s
 
 3. **Set up environment variables**
 
-   ```bash
-   cp .env.example .env.local
-   ```
-
-   Update the environment variables in `.env.local`:
+   Create a `.env.local` file in the project root:
 
    ```env
    NEXT_PUBLIC_API_BASE_URL=http://localhost:2333
@@ -40,28 +37,17 @@ A modern, responsive web client for **ChenPilot** - a crypto wallet management s
    NEXT_PUBLIC_APP_VERSION=1.0.0
    ```
 
-4. **Start the experimental backend** (required for full functionality)
+   Use [`.env.example`](./.env.example) for the complete public configuration list and server/CI variable names. Never put secrets in `NEXT_PUBLIC_*` variables: Next.js ships those values to browsers.
+
+   Refer to [TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md) if you encounter environment setup issues.
+
+4. **Start the development server**
 
    ```bash
-   cd ../chenpilot-experimental
-   npm install
-   npm run dev
-   ```
-
-5. **Start the development server**
-
-   ```bash
-   cd ../chenpilot-client
    pnpm dev
    ```
 
-6. **Test the integration**
-
-   ```bash
-   node test-integration.js
-   ```
-
-7. **Open your browser**
+5. **Open your browser**
    Navigate to [http://localhost:3000](http://localhost:3000)
 
 ## Available Scripts
@@ -70,7 +56,11 @@ A modern, responsive web client for **ChenPilot** - a crypto wallet management s
 - `pnpm build` - Build for production
 - `pnpm start` - Start production server
 - `pnpm lint` - Run ESLint
-- `pnpm test` - Run tests (when implemented)
+- `pnpm lint:fix` - Run ESLint and fix issues automatically
+- `pnpm typecheck` - Run TypeScript type checking
+- [`pnpm test`](docs/TESTING.md) - Run the Vitest suite once
+- `pnpm test:watch` - Run Vitest in watch mode
+- `pnpm test:coverage` - Run tests and generate coverage report
 
 ## CI/CD Pipeline
 
@@ -111,7 +101,7 @@ All deployments require passing:
 1. ✅ Dependency installation (`pnpm install --frozen-lockfile`)
 2. ✅ Linting (`pnpm lint`)
 3. ✅ Build (`pnpm build`)
-4. ✅ Tests (`pnpm test` - when implemented)
+4. ✅ Tests (`pnpm test`)
 
 ## Git Hooks (Husky)
 
@@ -147,6 +137,8 @@ pnpm exec husky install
 chmod +x .husky/pre-commit
 ```
 
+For more detailed failure modes, see [Troubleshooting Guide](./docs/TROUBLESHOOTING.md).
+
 **Skip hooks (emergency only):**
 
 ```bash
@@ -161,25 +153,20 @@ Ensure all required environment variables are set in your deployment platform.
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+For guidelines on contributing code, submitting Architectural Decision Records (ADRs), and code styles, see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 ## Support
 
 For support and questions:
 
 - Create an issue in the repository
-- Check the documentation
+- Check the [Troubleshooting Guide](./docs/TROUBLESHOOTING.md) and documentation
 - Contact the development team
 
 ---
 
 Built with love by the ChenPilot Team
-

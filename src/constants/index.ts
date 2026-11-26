@@ -8,6 +8,15 @@ export const API_CONFIG = {
   RETRY_DELAY: 1000,
 } as const;
 
+export const RETRY_CONFIG = {
+  MAX_ATTEMPTS: 3,
+  RETRYABLE_STATUS_CODES: [408, 429, ...Array.from({ length: 100 }, (_, index) => 500 + index)],
+  IDEMPOTENT_METHODS: ['get', 'head', 'options'],
+  BASE_DELAY_MS: 1000,
+  MAX_DELAY_MS: 30000,
+  JITTER_MS: 1000,
+} as const;
+
 // Application Information
 export const APP_CONFIG = {
   NAME: 'ChenPilot',
@@ -52,6 +61,18 @@ export const UI_CONFIG = {
   NOTIFICATION_DURATION: 5000,
   DEBOUNCE_DELAY: 300,
   ANIMATION_DURATION: 200,
+} as const;
+
+export const VOICE_MESSAGE = {
+  PREFERRED_MIME_TYPES: [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/ogg;codecs=opus',
+  ],
+  MAX_SIZE_BYTES: 2 * 1024 * 1024,
+  MAX_DURATION_SECONDS: 60,
+  STORAGE_WARN_BYTES: 1024 * 1024,
 } as const;
 
 // Theme Colors
@@ -171,6 +192,20 @@ export const VALIDATION_MESSAGES = {
   NAME_TOO_SHORT: 'Name must be at least 2 characters',
   NAME_TOO_LONG: 'Name must be less than 50 characters',
   MESSAGE_TOO_LONG: 'Message is too long (max 1000 characters)',
+  // Payment validation messages
+  RECIPIENT_ADDRESS_REQUIRED: 'Recipient address is required',
+  RECIPIENT_ADDRESS_INVALID: 'Please enter a valid Stellar address (starts with G followed by 55 alphanumeric characters)',
+  AMOUNT_REQUIRED: 'Amount is required',
+  AMOUNT_INVALID_FORMAT: 'Please enter a valid amount (up to 7 decimal places)',
+  AMOUNT_MUST_BE_POSITIVE: 'Amount must be greater than 0',
+  AMOUNT_EXCEEDS_MAX: 'Amount cannot exceed 1,000,000',
+  AMOUNT_EXCEEDS_MIN: 'Amount must be at least 0.0000001',
+  TOKEN_TYPE_REQUIRED: 'Please select a token type',
+  MEMO_TOO_LONG: 'Text memo cannot exceed 28 UTF-8 bytes',
+  MEMO_TYPE_REQUIRED: 'Memo type is required when memo is provided',
+  MEMO_INVALID_FORMAT: 'Invalid memo format for the selected memo type',
+  MEMO_ID_INVALID: 'Memo ID must be an unsigned 64-bit integer',
+  MEMO_HASH_INVALID: 'Memo hash must be a 64-character hexadecimal string',
 } as const;
 
 // Error Messages
@@ -182,6 +217,26 @@ export const ERROR_MESSAGES = {
   SERVER_ERROR: 'Server error. Please try again later.',
   TIMEOUT: 'Request timed out. Please try again.',
   UNKNOWN_ERROR: 'An unknown error occurred.',
+} as const;
+
+// Payment Limits and Configuration
+export const PAYMENT_LIMITS = {
+  MIN_AMOUNT: 0.0000001,
+  MAX_AMOUNT: 1000000,
+  MAX_MEMO_LENGTH: 28,
+  MAX_DECIMAL_PLACES: 7,
+  SUPPORTED_TOKENS: ['XLM', 'USDC', 'USDT', 'BTC', 'ETH', 'AQUA'] as const,
+  MEMO_TYPES: ['none', 'text', 'id', 'hash'] as const,
+} as const;
+
+// Security Validation Constants
+export const SECURITY_VALIDATION = {
+  STELLAR_ADDRESS_REGEX: /^G[A-Z0-9]{55}$/,
+  MEMO_ID_REGEX: /^\d{1,20}$/,
+  MEMO_HASH_REGEX: /^[a-fA-F0-9]{64}$/,
+  AMOUNT_REGEX: /^\d+(\.\d{1,7})?$/,
+  MAX_RECIPIENT_ADDRESSES_PER_TRANSACTION: 1,
+  RATE_LIMIT_PER_MINUTE: 10,
 } as const;
 
 // Success Messages
@@ -220,6 +275,7 @@ export const QUERY_KEYS = {
 // Pagination
 export const PAGINATION = {
   DEFAULT_PAGE_SIZE: 20,
+  CONTACTS_PAGE_SIZE: 24,
   MAX_PAGE_SIZE: 100,
   PAGE_SIZE_OPTIONS: [10, 20, 50, 100],
 } as const;
@@ -258,4 +314,65 @@ export const Z_INDEX = {
   POPOVER: 1060,
   TOOLTIP: 1070,
   TOAST: 1080,
+} as const;
+
+// Account Deployment Constants
+export const DEPLOYMENT_STEPS = {
+  AUTH: {
+    id: 'auth' as const,
+    title: 'Authentication',
+    description: 'Securely authenticate your account',
+    icon: 'Shield',
+  },
+  FUNDING: {
+    id: 'funding' as const,
+    title: 'Account Funding',
+    description: 'Receive initial funding for your account',
+    icon: 'Coins',
+  },
+  DEPLOYMENT: {
+    id: 'deployment' as const,
+    title: 'Account Deployment',
+    description: 'Deploy your smart contract account',
+    icon: 'Rocket',
+  },
+  VERIFICATION: {
+    id: 'verification' as const,
+    title: 'Verification',
+    description: 'Verify account deployment and functionality',
+    icon: 'CheckCircle',
+  },
+  COMPLETE: {
+    id: 'complete' as const,
+    title: 'Complete',
+    description: 'Your account is ready for use',
+    icon: 'Sparkles',
+  },
+} as const;
+
+export const DEPLOYMENT_STATUS = {
+  PENDING: 'pending' as const,
+  IN_PROGRESS: 'in_progress' as const,
+  COMPLETED: 'completed' as const,
+  FAILED: 'failed' as const,
+} as const;
+
+export const DEPLOYMENT_MESSAGES = {
+  AUTH_SUCCESS: 'Authentication successful',
+  FUNDING_SUCCESS: 'Account funded successfully',
+  DEPLOYMENT_SUCCESS: 'Account deployed successfully',
+  VERIFICATION_SUCCESS: 'Account verified successfully',
+  AUTH_FAILED: 'Authentication failed',
+  FUNDING_FAILED: 'Funding failed',
+  DEPLOYMENT_FAILED: 'Deployment failed',
+  VERIFICATION_FAILED: 'Verification failed',
+  NETWORK_ERROR: 'Network error, please try again',
+  TIMEOUT_ERROR: 'Operation timed out',
+} as const;
+
+export const DEPLOYMENT_CONFIG = {
+  DEFAULT_FUNDING_AMOUNT: '2', // XLM
+  MAX_RETRIES: 3,
+  RETRY_DELAY: 2000, // ms
+  TIMEOUT: 30000, // ms
 } as const;

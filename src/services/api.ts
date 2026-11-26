@@ -1,121 +1,444 @@
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
-import { 
-  RegisterRequest, 
-  LoginRequest, 
-  RegisterResponse, 
-  LoginResponse, 
-  User, 
-  Contact, 
-  CreateContactRequest, 
+import axios, { AxiosInstance, AxiosRequestConfig } from "axios";
+import {
+  correlationIdForError,
+  extractCorrelationId,
+  generateCorrelationId,
+  logger,
+  setCorrelationIdHeader,
+} from "../utils/logger";
+import { env } from '@/config/env';
+import {
+  RegisterRequest,
+  LoginRequest,
+  RegisterResponse,
+  LoginResponse,
+  User,
+  Contact,
+  CreateContactRequest,
   UpdateContactRequest,
+  SendPaymentRequest,
   BalanceResponse,
   AgentQueryRequest,
   AgentQueryResponse,
   ApiResponse,
-  ChatMessage,
-  Conversation,
-  PromptVersionRecord
-  LiquidityPool,
+  SignInActivityPage,
+  ChatHistoryPage,
+  ChatHistoryQuery,
+  PromptVersionRecord,
   LiquidityStats,
   LiquidityRequest,
   StellarTransaction,
   AuditLogEntry,
   AuditLogsQueryParams,
   AuditLogsResponse,
-  AuditLogStats
-} from '@/types';
-import agentService from './agentService';
-import { tokenRefreshService } from './tokenRefreshService';
+  AuditLogStats,
+  MfaStatusData,
+  MfaEnrollmentData,
+  MfaVerifyRequest,
+  MfaVerifyData,
+  PaymentSubmissionResult,
+  PaymentStatusResult,
+} from "@/types";
+import agentService, {
+  classifyAgentError,
+  isStateChangingQuery,
+  agentErrorMessage,
+} from "./agentService";
+import type { AgentStatus } from "@/types/agent";
+import { parseAgentEnvelope, protocolErrorResult } from "./agentEnvelope";
+import { tokenRefreshService } from "./tokenRefreshService";
+import type { MissedEventsPage } from "./socketManager";
+import { clearUserScopedStorage } from "./storageInventory";
+import {
+  isRetryableError,
+  computeBackoffMs,
+  sleep,
+  incrementRetryCount,
+  retryLabel,
+} from "@/utils/retryUtils";
+import { horizonFetch } from "@/utils/horizonFetch";
+import { buildPaymentIdempotencyKey } from "@/utils/paymentIdempotency";
+import {
+import type { NotificationPreferences } from "@/types/notificationPreferences";
+  PaymentOutcomeUnknownError,
+  isPaymentOutcomeUnknown,
+} from "@/utils/paymentOutcome";
+import {
+  apiResponseSchema,
+  balanceResponseSchema,
+  contactDeleteResponseSchema,
+  contactResponseEnvelopeSchema,
+  contactsResponseSchema,
+  fundedAccountBalanceResponseSchema,
+  loginResponseSchema,
+  parseBackendResponse,
+  reauthenticationResponseSchema,
+  registerResponseSchema,
+  refreshTokenResponseSchema,
+  transactionPageResponseSchema,
+  userResponseSchema,
+} from "@/utils/validation";
 
-class ApiService {
+/**
+ * Local trustline types keep this service independent of whether the
+ * application-wide @/types barrel exports these types.
+ */
+export interface Trustline {
+  assetCode: string;
+  assetIssuer: string;
+  balance: string;
+  limit: string;
+  assetType?: string;
+  buyingLiabilities?: string;
+  sellingLiabilities?: string;
+}
+
+export interface AddTrustlineRequest {
+  assetCode: string;
+  assetIssuer: string;
+  limit?: string;
+}
+
+const FRIENDTEST_URL = "https://friendbot.stellar.org";
+
+/**
+ * Narrowly-scoped single-flight guard for keyed asynchronous work.
+ *
+ * While a key is in flight, additional calls for the same key reuse the pending
+ * promise instead of issuing a duplicate request. The entry is released on both
+ * success and failure, so a failed attempt never blocks a later retry.
+ *
+ * The guard deliberately lives outside React state: two clicks dispatched in
+ * the same tick must be deduplicated even though no re-render has happened yet,
+ * and `finally`-style cleanup cannot be skipped by an unmount.
+ */
+export class SingleFlight {
+  private inFlight = new Map<string, Promise<unknown>>();
+
+  isInFlight(key: string): boolean {
+    return this.inFlight.has(key);
+  }
+
+  run<T>(key: string, task: () => Promise<T>): Promise<T> {
+    const pending = this.inFlight.get(key) as Promise<T> | undefined;
+    if (pending) {
+      return pending;
+    }
+
+    const promise = Promise.resolve().then(task);
+    this.inFlight.set(key, promise);
+    const release = () => {
+      if (this.inFlight.get(key) === promise) {
+        this.inFlight.delete(key);
+      }
+    };
+    promise.then(release, release);
+
+    return promise;
+  }
+}
+
+export const singleFlight = new SingleFlight();
+
+export interface FundingResult {
+  success: boolean;
+  message: string;
+  txHash?: string;
+}
+
+export const requestAccountFunding = async (
+  publicKey: string,
+  requiredAmount: number,
+  currentBalance: number,
+  isTestnet: boolean,
+): Promise<FundingResult> => {
+  if (currentBalance >= requiredAmount) {
+    return {
+      success: true,
+      message: `Account is already sufficiently funded (${currentBalance} XLM >= required ${requiredAmount} XLM).`,
+    };
+  }
+
+  try {
+    const response = await axios.post("/api/fund", {
+      publicKey,
+      requiredAmount,
+    });
+
+    return {
+      success: true,
+      message: "Account funded successfully via backend service.",
+      txHash: response.data.txHash,
+    };
+  } catch (backendError: unknown) {
+    if (isTestnet) {
+      try {
+        const friendbotResponse = await axios.get(
+          `${FRIENDTEST_URL}/?addr=${encodeURIComponent(publicKey)}`,
+        );
+
+        return {
+          success: true,
+          message:
+            "Account funded successfully via Stellar Testnet Friendbot fallback.",
+          txHash: friendbotResponse.data.hash,
+        };
+      } catch {
+        throw new Error(
+          `Funding failed: Backend service unavailable and Friendbot fallback failed. Required: ${requiredAmount} XLM, Current: ${currentBalance} XLM.`,
+        );
+      }
+    }
+
+    const statusCode = axios.isAxiosError(backendError)
+      ? backendError.response?.status
+      : undefined;
+
+    if (statusCode === 429) {
+      throw new Error(
+        `Funding rate limit exceeded. Required: ${requiredAmount} XLM. Please try again later.`,
+      );
+    }
+
+    if (statusCode === 400) {
+      throw new Error(
+        `Invalid funding request. Required balance: ${requiredAmount} XLM, Current: ${currentBalance} XLM.`,
+      );
+    }
+
+    throw new Error(
+      `Failed to fund account. Required: ${requiredAmount} XLM, Current: ${currentBalance} XLM. Please check your network connection.`,
+    );
+  }
+};
+
+// Lazy store reference prevents a circular dependency between the store,
+// authentication slice, and API service.
+
+type MinimalStore = {
+  dispatch: (action: { type: string; payload?: unknown }) => void;
+};
+
+let _store: MinimalStore | null = null;
+
+interface PaymentRequestConfig extends AxiosRequestConfig {
+  paymentOperation?: boolean;
+}
+
+/**
+ * Main API service handling HTTP requests, authentication state,
+ * error retries, background token refreshes, and backend integrations.
+ */
+export class ApiService {
   private api: AxiosInstance;
   private token: string | null = null;
 
   constructor() {
+    this.loadTokenFromStorage();
+
     this.api = axios.create({
-      baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:2333',
+      baseURL:
+        process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:2333",
       timeout: 30000,
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
     });
 
-    // Request interceptor to add auth token
+    // Attach the current token to outgoing requests.
     this.api.interceptors.request.use(
       (config) => {
+        const existingId = extractCorrelationId(config.headers);
+        const correlationId = existingId ?? generateCorrelationId('http');
+        setCorrelationIdHeader(config.headers, correlationId);
+        (config as AxiosRequestConfig & { correlationId?: string }).correlationId = correlationId;
         if (this.token) {
           config.headers.Authorization = `Bearer ${this.token}`;
         }
+
         return config;
       },
-      (error) => {
-        return Promise.reject(error);
-      }
+      (error) => Promise.reject(error),
     );
 
-    // Response interceptor for automatic token refresh
+    // Retry eligible transient failures. Payment requests must carry an
+    // idempotency key before being retried.
     this.api.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        const correlationId =
+          extractCorrelationId(response.headers) ??
+          extractCorrelationId(response.config?.headers);
+        if (correlationId) {
+          (response as typeof response & { correlationId?: string }).correlationId = correlationId;
+          setCorrelationIdHeader(response.config?.headers, correlationId);
+        }
+        return response;
+      },
       async (error) => {
-        const originalRequest = error.config;
+        const correlationId = correlationIdForError(error);
+        if (correlationId) {
+          (error as { correlationId?: string }).correlationId = correlationId;
+        }
+        const originalRequest = error.config as
+          | (AxiosRequestConfig & {
+              _retryCount?: number;
+              paymentOperation?: boolean;
+            })
+          | undefined;
 
-        // If error is not 401 or original request already tried refresh, reject
-        if (error.response?.status !== 401 || originalRequest._retry) {
-          // Handle 401 by clearing token and redirecting to login
-          if (error.response?.status === 401) {
-            this.clearToken();
-            if (typeof window !== 'undefined') {
-              window.location.href = '/auth/login';
-            }
-          }
+        if (!originalRequest || !isRetryableError(error)) {
           return Promise.reject(error);
         }
 
-        // Mark that we're retrying
+        if (
+          originalRequest.paymentOperation &&
+          !originalRequest.headers
+        ) {
+          return Promise.reject(error);
+        }
+
+        const attempt = incrementRetryCount(originalRequest);
+        const delayMs = computeBackoffMs(attempt - 1, error);
+        const label = retryLabel(error);
+
+        if (_store) {
+          _store.dispatch({
+            type: "ui/setRetryStatus",
+            payload: {
+              label,
+              attempt,
+              maxAttempts: 3,
+              nextRetryAt: Date.now() + delayMs,
+            },
+          });
+        }
+
+        await sleep(delayMs);
+
+        if (_store) {
+          _store.dispatch({ type: "ui/clearRetryStatus" });
+        }
+
+        return this.api(originalRequest);
+      },
+    );
+
+    // Refresh expired authentication tokens after a 401 response.
+    this.api.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const correlationId =
+          correlationIdForError(error) ??
+          generateCorrelationId('http');
+        (error as { correlationId?: string }).correlationId = correlationId;
+        logger.error('[ApiService] Request failed:', {
+          correlationId,
+          status: error.response?.status,
+          code: error.code,
+          method: error.config?.method,
+        });
+
+        const originalRequest = error.config as
+          | (AxiosRequestConfig & {
+              _retry?: boolean;
+              headers?: Record<string, unknown> & {
+                Authorization?: string;
+              };
+            })
+          | undefined;
+
+        if (!originalRequest) {
+          return Promise.reject(error);
+        }
+
+        // A step-up challenge is not an expired session: let the caller prompt for
+        // re-authentication instead of refreshing or logging out (#255, ADR-0006).
+        if (error.response?.data?.code === "REAUTH_REQUIRED") {
+          return Promise.reject(error);
+        }
+
+        if (
+          error.response?.status !== 401 ||
+          originalRequest._retry
+        ) {
+          if (error.response?.status === 401) {
+            this.clearToken();
+
+            if (typeof window !== "undefined") {
+              window.location.href = "/auth/login";
+            }
+          }
+
+          return Promise.reject(error);
+        }
+
         originalRequest._retry = true;
 
         try {
-          // Attempt to refresh the token
-          const response = await tokenRefreshService.refreshToken(this.api.defaults.baseURL as string);
-          const newToken = response.token;
-          
-          // Update the token in the service and original request
+          const { token: newToken } =
+            await tokenRefreshService.refreshToken(
+              this.api.defaults.baseURL as string,
+            );
+
           this.setToken(newToken);
-          originalRequest.headers.Authorization = `Bearer ${newToken}`;
-          
-          // Retry the original request
+
+          if (originalRequest.headers) {
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          }
+
+          if (_store) {
+            _store.dispatch({
+              type: "auth/setToken",
+              payload: newToken,
+            });
+          }
+
           return this.api(originalRequest);
         } catch (refreshError) {
-          // Refresh failed, clear token and redirect to login
           this.clearToken();
-          
-          if (typeof window !== 'undefined') {
-            window.location.href = '/auth/login';
+
+          if (_store) {
+            _store.dispatch({ type: "auth/clearAuth" });
           }
-          
+
+          if (typeof window !== "undefined") {
+            window.location.href = "/auth/login";
+          }
+
           return Promise.reject(refreshError);
         }
-      }
+      },
     );
   }
 
-  setToken(token: string) {
+  setStore(store: MinimalStore): void {
+    _store = store;
+  }
+
+  getStore(): MinimalStore | null {
+    return _store;
+  }
+
+  setToken(token: string): void {
     this.token = token;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('auth_token', token);
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem("auth_token", token);
     }
   }
 
-  clearToken() {
+  clearToken(): void {
     this.token = null;
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('auth_token');
+
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("auth_token");
     }
   }
 
-  loadTokenFromStorage() {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('auth_token');
+  loadTokenFromStorage(): void {
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("auth_token");
+
       if (token) {
         this.token = token;
       }
@@ -123,410 +446,1028 @@ class ApiService {
   }
 
   // Authentication endpoints
+
   async register(data: RegisterRequest): Promise<RegisterResponse> {
-    // Validate input data before processing
-    if (!data || typeof data !== 'object') {
-      throw new Error('Invalid registration data');
+    if (!data || typeof data !== "object") {
+      throw new Error("Invalid registration data");
     }
-    
-    if (!data.email || typeof data.email !== 'string') {
-      throw new Error('Email is required and must be a string');
+
+    if (!data.email || typeof data.email !== "string") {
+      throw new Error("Email is required and must be a string");
     }
-    
-    if (!data.password || typeof data.password !== 'string') {
-      throw new Error('Password is required and must be a string');
+
+    if (!data.password || typeof data.password !== "string") {
+      throw new Error("Password is required and must be a string");
     }
-    
-    if (data.name && typeof data.name !== 'string') {
-      throw new Error('Name must be a string if provided');
+
+    if (data.name && typeof data.name !== "string") {
+      throw new Error("Name must be a string if provided");
     }
-    
-    const response = await this.api.post<RegisterResponse>('/auth/register', data);
-    // Persist token on successful registration to keep the user authenticated
-    if (response.data?.success && (response.data as { data?: { token?: string } })?.data?.token) {
-      this.setToken((response.data as { data: { token: string } }).data.token);
+
+    const response = await this.api.post<RegisterResponse>(
+      "/auth/register",
+      data,
+    );
+
+    const registrationData = parseBackendResponse(
+      "POST /auth/register",
+      registerResponseSchema,
+      response.data,
+    );
+
+    if (registrationData.data.token) {
+      this.setToken(registrationData.data.token);
     }
-    return response.data;
+
+    return registrationData;
   }
 
+  /**
+   * Verify current credentials without changing the active session token.
+   */
+  async reauthenticate(email: string, password: string): Promise<void> {
+    const response = await axios.post<LoginResponse>(
+      this.api.getUri({ url: "/auth/login" }),
+      { email, password },
+      { headers: { "Content-Type": "application/json" } },
+    );
+
+    parseBackendResponse(
+      "POST /auth/login (reauthentication)",
+      reauthenticationResponseSchema,
+      response.data,
+    );
+  }
+
+  /**
+   * Authenticate a user using email and password.
+   *
+   * @param data - Login credentials containing email and password.
+   * @returns Promise resolving to `LoginResponse` containing token and user profile data.
+   * @throws {Error} Throws an Error if input validation fails or if network/auth request fails.
+   */
   async login(data: LoginRequest): Promise<LoginResponse> {
-    // Validate input data before processing
-    if (!data || typeof data !== 'object') {
-      throw new Error('Invalid login data');
+    if (!data || typeof data !== "object") {
+      throw new Error("Invalid login data");
     }
-    
-    if (!data.email || typeof data.email !== 'string') {
-      throw new Error('Email is required and must be a string');
+
+    if (!data.email || typeof data.email !== "string") {
+      throw new Error("Email is required and must be a string");
     }
-    
-    if (!data.password || typeof data.password !== 'string') {
-      throw new Error('Password is required and must be a string');
+
+    if (!data.password || typeof data.password !== "string") {
+      throw new Error("Password is required and must be a string");
     }
-    
-    const response = await this.api.post<LoginResponse>('/auth/login', data);
-    if (response.data.success && response.data.data.token) {
-      this.setToken(response.data.data.token);
+
+    const response = await this.api.post<LoginResponse>(
+      "/auth/login",
+      data,
+    );
+    const loginData = parseBackendResponse(
+      "POST /auth/login",
+      loginResponseSchema,
+      response.data,
+    );
+
+    if (loginData.data.token) {
+      this.setToken(loginData.data.token);
     }
-    return response.data;
+
+    return loginData;
   }
 
   async googleAuth(token: string): Promise<LoginResponse> {
-    const response = await this.api.post<LoginResponse>('/auth/google-auth', { token });
-    if (response.data.success && response.data.data.token) {
-      this.setToken(response.data.data.token);
+    const response = await this.api.post<LoginResponse>(
+      "/auth/google-auth",
+      { token },
+    );
+    const loginData = parseBackendResponse(
+      "POST /auth/google-auth",
+      loginResponseSchema,
+      response.data,
+    );
+
+    if (loginData.data.token) {
+      this.setToken(loginData.data.token);
     }
+
+    return loginData;
+  }
+
+  async verifyEmail(
+    token: string,
+  ): Promise<ApiResponse<{ message: string }>> {
+    const response = await this.api.get<
+      ApiResponse<{ message: string }>
+    >(`/auth/verify-email/${encodeURIComponent(token)}`);
+
     return response.data;
   }
 
-  async verifyEmail(token: string): Promise<ApiResponse<{ message: string }>> {
-    const response = await this.api.get<ApiResponse<{ message: string }>>(`/auth/verify-email/${token}`);
+  async resendVerification(
+    email: string,
+  ): Promise<ApiResponse<{ message: string }>> {
+    const response = await this.api.post<
+      ApiResponse<{ message: string }>
+    >("/auth/resend-verification", { email });
+
     return response.data;
   }
 
-  async resendVerification(email: string): Promise<ApiResponse<{ message: string }>> {
-    const response = await this.api.post<ApiResponse<{ message: string }>>('/auth/resend-verification', { email });
+  async forgotPassword(
+    email: string,
+  ): Promise<ApiResponse<{ message: string }>> {
+    const response = await this.api.post<
+      ApiResponse<{ message: string }>
+    >("/auth/forgot-password", { email });
+
     return response.data;
   }
 
-  async forgotPassword(email: string): Promise<ApiResponse<{ message: string }>> {
-    const response = await this.api.post<ApiResponse<{ message: string }>>('/auth/forgot-password', { email });
+  async resetPassword(
+    token: string,
+    password: string,
+  ): Promise<ApiResponse<{ message: string }>> {
+    const response = await this.api.post<
+      ApiResponse<{ message: string }>
+    >(`/auth/reset-password/${encodeURIComponent(token)}`, {
+      password,
+    });
+
     return response.data;
   }
 
-  async resetPassword(token: string, password: string): Promise<ApiResponse<{ message: string }>> {
-    const response = await this.api.post<ApiResponse<{ message: string }>>(`/auth/reset-password/${token}`, { password });
-    return response.data;
-  }
-
-  async logout(): Promise<void> {
-    try {
-      // Send the request to invalidate the refresh token on the backend
-      // Using withCredentials: true ensures cookies (if used) are sent
-      await this.api.post('/auth/logout', {}, { withCredentials: true });
-    } catch (error) {
-      // Even if logout fails on server, clear local state
-      console.warn('Logout request failed, clearing local state anyway', error);
-    } finally {
-      this.clearToken();
-      // Purge all auth-related data from storage
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('user_data');
-        localStorage.removeItem('refresh_token'); // Clear refresh token if stored here
-        sessionStorage.clear(); // Clear session storage as well
-      }
-    }
-  }
-
-  async refreshToken(): Promise<{ token: string }> {
-    // Use direct axios call to avoid interceptor recursion
-    const response = await axios.post<{ token: string }>(
-      `${this.api.defaults.baseURL}/auth/refresh`,
+  async revokeOtherSessions(): Promise<{ currentSessionRevoked: boolean }> {
+    const token = this.token;
+    const response = await axios.post<
+      ApiResponse<{ currentSessionRevoked?: boolean }> | { currentSessionRevoked?: boolean }
+    >(
+      `${this.api.defaults.baseURL}/auth/sessions/revoke-others`,
       {},
       {
         headers: {
           'Content-Type': 'application/json',
-          // Don't send Authorization header for refresh to avoid circular dependency
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-      }
+        withCredentials: true,
+      },
     );
-    
-    if (response.data?.token) {
-      this.setToken(response.data.token);
-    }
-    return response.data;
+    const payload = response.data;
+    const currentSessionRevoked =
+      'data' in payload && payload.data
+        ? payload.data.currentSessionRevoked
+        : 'currentSessionRevoked' in payload
+          ? payload.currentSessionRevoked
+          : false;
+    return { currentSessionRevoked: currentSessionRevoked === true };
   }
 
-  // Protected endpoints
+  /**
+   * Logout user by invalidating backend session and purging all local auth state.
+   * Never throws errors; catches backend failures and ensures local token/storage cleanup.
+   *
+   * @returns Promise resolving when logout cleanup completes.
+   */
+  async logout(): Promise<void> {
+    try {
+      await this.api.post(
+        "/auth/logout",
+        {},
+        { withCredentials: true },
+      );
+    } catch (error) {
+      console.warn(
+        "Logout request failed; clearing local state anyway.",
+        error,
+      );
+    } finally {
+      this.clearToken();
+      // Purge every user-scoped key (auth, profile, chat history, offline queue) and all
+      // session storage; device preferences stay (#256)
+      clearUserScopedStorage();
+    }
+  }
+
+  async refreshToken(): Promise<{ token: string }> {
+    const response = await axios.post<unknown>(
+      `${this.api.defaults.baseURL}/auth/refresh`,
+      {},
+      {
+        headers: { "Content-Type": "application/json" },
+        withCredentials: true,
+      },
+    );
+
+    const refreshed = parseBackendResponse(
+      "POST /auth/refresh",
+      refreshTokenResponseSchema,
+      response.data,
+    );
+    this.setToken(refreshed.token);
+    return refreshed;
+  }
+
+  // Protected profile endpoints
+
   async getMe(): Promise<ApiResponse<User>> {
-    const response = await this.api.get<ApiResponse<User>>('/auth/me');
-    return response.data;
+    const response = await this.api.get<ApiResponse<User>>(
+      "/auth/me",
+    );
+
+    return parseBackendResponse(
+      "GET /auth/me",
+      apiResponseSchema(userResponseSchema),
+      response.data,
+    );
   }
 
   async getProfile(): Promise<ApiResponse<User>> {
-    const response = await this.api.get<ApiResponse<User>>('/auth/profile');
+    const response = await this.api.get<ApiResponse<User>>(
+      "/auth/profile",
+    );
+
+    return parseBackendResponse(
+      "GET /auth/profile",
+      apiResponseSchema(userResponseSchema),
+      response.data,
+    );
+  }
+
+  async updateProfile(
+    data: Partial<User>,
+  ): Promise<ApiResponse<User>> {
+    const response = await this.api.put<ApiResponse<User>>(
+      "/auth/profile",
+      data,
+    );
+
+    return parseBackendResponse(
+      "PUT /auth/profile",
+      apiResponseSchema(userResponseSchema),
+      response.data,
+    );
+  }
+
+  /**
+   * Recent sign-in activity for the current user (#257).
+   * Proposed contract: `GET /auth/activity?limit=<n>` → `SignInActivityPage`.
+   *
+   * @throws {AxiosError} 404/501 when the backend does not support activity yet.
+   */
+  async getSignInActivity(limit = 20): Promise<SignInActivityPage> {
+    const response = await this.api.get<SignInActivityPage>('/auth/activity', { params: { limit } });
     return response.data;
   }
 
-  async updateProfile(data: Partial<User>): Promise<ApiResponse<User>> {
-    const response = await this.api.put<ApiResponse<User>>('/auth/profile', data);
+  /** Sign out another session (#257). Proposed: `DELETE /auth/sessions/:sessionId` → 204. */
+  async revokeSession(sessionId: string): Promise<void> {
+    await this.api.delete(`/auth/sessions/${encodeURIComponent(sessionId)}`);
+  }
+
+  /** Report an activity event as "not me" (#257). Proposed: `POST /auth/activity/:id/report` → 202. */
+  async reportSignInEvent(eventId: string): Promise<void> {
+    await this.api.post(`/auth/activity/${encodeURIComponent(eventId)}/report`, {});
+  }
+
+  /**
+   * Server-driven step-up (#255, ADR-0006): confirm the password after a `REAUTH_REQUIRED`
+   * challenge. Distinct from `reauthenticate(email, password)`, which verifies credentials
+   * for the settings page's client-side grant.
+   * Proposed contract: `POST /auth/reauthenticate` `{ password }` → `{ authenticatedAt, expiresAt }`.
+   *
+   * @param password - The user's current password. Never stored or logged.
+   * @throws {AxiosError} 401/403 when the password is wrong.
+   */
+  async stepUpReauthenticate(password: string): Promise<{ authenticatedAt: string; expiresAt: string }> {
+    const response = await this.api.post<{ authenticatedAt: string; expiresAt: string }>(
+      '/auth/reauthenticate',
+      { password },
+      { withCredentials: true },
+    );
     return response.data;
   }
 
-  async changePassword(currentPassword: string, newPassword: string): Promise<ApiResponse<{ message: string }>> {
-    const response = await this.api.post<ApiResponse<{ message: string }>>('/auth/change-password', {
+  /**
+   * Saved notification preferences for the current user (#301).
+   * Proposed contract: `GET /users/me/notification-preferences` →
+   * `{ "transactions": boolean, "chat": boolean }`.
+   *
+   * @throws {AxiosError} 404/501 when the backend does not support preferences yet.
+   */
+  async getNotificationPreferences(): Promise<NotificationPreferences> {
+    const response = await this.api.get<NotificationPreferences>("/users/me/notification-preferences");
+    return response.data;
+  }
+
+  /**
+   * Save notification preferences (#301). Proposed: `PUT /users/me/notification-preferences`
+   * with the full object; responds with the saved object.
+   */
+  async updateNotificationPreferences(preferences: NotificationPreferences): Promise<NotificationPreferences> {
+    const response = await this.api.put<NotificationPreferences>("/users/me/notification-preferences", preferences);
+    return response.data;
+  }
+
+  /**
+   * Translate a message on demand (#83).
+   * Proposed contract: `POST /translate` `{ text, targetLanguage }` →
+   * `{ translatedText, detectedLanguage? }`.
+   *
+   * @throws {AxiosError} When the request fails; 404/501 means translation is not supported.
+   */
+  async translateText(
+    text: string,
+    targetLanguage: string,
+  ): Promise<{ translatedText: string; detectedLanguage?: string }> {
+    const response = await this.api.post<{ translatedText: string; detectedLanguage?: string }>(
+      "/translate",
+      { text, targetLanguage },
+    );
+    return response.data;
+  }
+
+  async changePassword(
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<ApiResponse<{ message: string }>> {
+    const response = await this.api.post<
+      ApiResponse<{ message: string }>
+    >("/auth/change-password", {
       currentPassword,
       newPassword,
     });
+
     return response.data;
   }
 
-  async deleteAccount(): Promise<ApiResponse<{ message: string }>> {
-    const response = await this.api.delete<ApiResponse<{ message: string }>>('/auth/account');
-    this.clearToken();
-    return response.data;
-  }
-
+  /**
+   * Export all user data as a binary file Blob.
+   * Iterates through candidate endpoints (`/data-export`, `/data/export`, `/api/data-export`).
+   *
+   * @returns Promise resolving to downloadable `Blob`.
+   * @throws {Error} Throws Error if user data export endpoint is not found or fails.
+   */
   async exportUserData(): Promise<Blob> {
-    const endpoints = ['/data-export', '/data/export', '/api/data-export'];
+    const endpoints = [
+      "/data-export",
+      "/data/export",
+      "/api/data-export",
+    ];
 
     for (const endpoint of endpoints) {
       try {
         const response = await this.api.get<Blob>(endpoint, {
-          responseType: 'blob',
+          responseType: "blob",
         });
 
         if (response.status === 200 && response.data) {
           return response.data;
         }
       } catch (error: unknown) {
-        if (axios.isAxiosError(error) && error.response?.status === 404) {
-          continue; // try next endpoint
+        if (
+          axios.isAxiosError(error) &&
+          error.response?.status === 404
+        ) {
+          continue;
         }
+
         throw error;
       }
     }
 
-    throw new Error('User data export endpoint not found.');
+    throw new Error("User data export endpoint not found.");
   }
 
   // Starknet account management
-  async deployAccount(): Promise<ApiResponse<{ transactionHash: string; contractAddress: string }>> {
-    const response = await this.api.post<ApiResponse<{ transactionHash: string; contractAddress: string }>>('/auth/starknet/deploy');
+
+  async deployAccount(): Promise<
+    ApiResponse<{
+      transactionHash: string;
+      contractAddress: string;
+    }>
+  > {
+    const response = await this.api.post<
+      ApiResponse<{
+        transactionHash: string;
+        contractAddress: string;
+      }>
+    >("/auth/starknet/deploy");
+
     return response.data;
   }
 
   async getBalance(): Promise<BalanceResponse> {
-    const response = await this.api.get<BalanceResponse>('/auth/starknet/balance');
+    const response = await this.api.get<BalanceResponse>(
+      "/auth/starknet/balance",
+    );
+
+    return parseBackendResponse(
+      "GET /auth/starknet/balance",
+      balanceResponseSchema,
+      response.data,
+    );
+  }
+
+  async getAccountStatus(): Promise<
+    ApiResponse<{
+      isDeployed: boolean;
+      isFunded: boolean;
+      address: string;
+      publicKey: string;
+    }>
+  > {
+    const response = await this.api.get<
+      ApiResponse<{
+        isDeployed: boolean;
+        isFunded: boolean;
+        address: string;
+        publicKey: string;
+      }>
+    >("/auth/starknet/status");
+
     return response.data;
   }
 
-  async getAccountStatus(): Promise<ApiResponse<{ isDeployed: boolean; isFunded: boolean; address: string; publicKey: string }>> {
-    const response = await this.api.get<ApiResponse<{ isDeployed: boolean; isFunded: boolean; address: string; publicKey: string }>>('/auth/starknet/status');
+  // Automatic funding
+
+  async fundAccount(): Promise<
+    ApiResponse<{ transactionHash: string; amount: string }>
+  > {
+    const response = await this.api.post<
+      ApiResponse<{ transactionHash: string; amount: string }>
+    >("/auth/funding/fund-account");
+
     return response.data;
   }
 
-  // Auto-funding
-  async fundAccount(): Promise<ApiResponse<{ transactionHash: string; amount: string }>> {
-    const response = await this.api.post<ApiResponse<{ transactionHash: string; amount: string }>>('/auth/funding/fund-account');
+  async getAutoFundingStats(): Promise<
+    ApiResponse<{
+      totalFunded: number;
+      totalAccounts: number;
+      averageAmount: string;
+    }>
+  > {
+    const response = await this.api.get<
+      ApiResponse<{
+        totalFunded: number;
+        totalAccounts: number;
+        averageAmount: string;
+      }>
+    >("/auth/funding/auto-funding-stats");
+
     return response.data;
   }
 
-  async getAutoFundingStats(): Promise<ApiResponse<{ totalFunded: number; totalAccounts: number; averageAmount: string }>> {
-    const response = await this.api.get<ApiResponse<{ totalFunded: number; totalAccounts: number; averageAmount: string }>>('/auth/funding/auto-funding-stats');
+  async getFundedAccountBalance(): Promise<
+    ApiResponse<{ balance: string; hasBalance: boolean }>
+  > {
+    const response = await this.api.get<
+      ApiResponse<{ balance: string; hasBalance: boolean }>
+    >("/auth/funding/funded-account-balance");
+
+    return parseBackendResponse(
+      "GET /auth/funding/funded-account-balance",
+      fundedAccountBalanceResponseSchema,
+      response.data,
+    );
+  }
+
+  async batchFund(
+    amounts: string[],
+  ): Promise<
+    ApiResponse<{
+      transactionHashes: string[];
+      totalAmount: string;
+    }>
+  > {
+    const response = await this.api.post<
+      ApiResponse<{
+        transactionHashes: string[];
+        totalAmount: string;
+      }>
+    >("/auth/funding/batch-fund", { amounts });
+
     return response.data;
   }
 
-  async getFundedAccountBalance(): Promise<ApiResponse<{ balance: string; hasBalance: boolean }>> {
-    const response = await this.api.get<ApiResponse<{ balance: string; hasBalance: boolean }>>('/auth/funding/funded-account-balance');
-    return response.data;
-  }
-
-  async batchFund(amounts: string[]): Promise<ApiResponse<{ transactionHashes: string[]; totalAmount: string }>> {
-    const response = await this.api.post<ApiResponse<{ transactionHashes: string[]; totalAmount: string }>>('/auth/funding/batch-fund', { amounts });
-    return response.data;
+  /**
+   * Fetch chat events emitted after `afterCursor`, oldest first, for post-reconnect resync (#277).
+   * Proposed contract: `GET /chat/events?after=<cursor>&limit=<n>` →
+   * `{ events: [{ event, cursor, data }], hasMore, nextCursor? }`.
+   *
+   * @param afterCursor - Last cursor the client acknowledged.
+   * @param limit - Page size (defaults to 100).
+   * @returns Promise resolving to one page of missed events.
+   * @throws {AxiosError} Throws if the request fails; the socket manager reports it as a resync error.
+   */
+  async getMissedChatEvents(afterCursor: string, limit = 100): Promise<MissedEventsPage> {
+    const response = await this.api.get<MissedEventsPage>('/chat/events', {
+      params: { after: afterCursor, limit },
+    });
+    return {
+      events: Array.isArray(response.data?.events) ? response.data.events : [],
+      hasMore: Boolean(response.data?.hasMore),
+      nextCursor: response.data?.nextCursor,
+    };
   }
 
   // Account transaction endpoints
-  async getAccountTransactions(userId: string, page: number = 1, limit: number = 10): Promise<ApiResponse<{ transactions: StellarTransaction[]; total: number; page: number; limit: number }>> {
-    const response = await this.api.get<ApiResponse<{ transactions: StellarTransaction[]; total: number; page: number; limit: number }>>(`/account/${userId}/transactions`, {
-      params: { page, limit }
-    });
-    return response.data;
+
+  async getAccountTransactions(
+    userId: string,
+    page = 1,
+    limit = 10,
+    signal?: AbortSignal,
+  ): Promise<
+    ApiResponse<{
+      transactions: StellarTransaction[];
+      total: number;
+      page: number;
+      limit: number;
+    }>
+  > {
+    try {
+      const requestConfig: AxiosRequestConfig = {
+        params: { userId, page, limit },
+      };
+      if (signal) {
+        requestConfig.signal = signal;
+      }
+
+      const response = await this.api.get<
+        ApiResponse<{
+          transactions: StellarTransaction[];
+          total: number;
+          page: number;
+          limit: number;
+        }>
+      >("/account/transactions", requestConfig);
+
+      return parseBackendResponse(
+        "GET /account/transactions",
+        transactionPageResponseSchema,
+        response.data,
+      );
+    } catch (error: unknown) {
+      // Try the alternative route used by older backend implementations
+      // only when the primary route is not found.
+      if (
+        !axios.isAxiosError(error) ||
+        error.response?.status !== 404
+      ) {
+        throw error;
+      }
+
+      const fallbackConfig: AxiosRequestConfig = {
+        params: { page, limit },
+      };
+      if (signal) {
+        fallbackConfig.signal = signal;
+      }
+
+      const response = await this.api.get<
+        ApiResponse<{
+          transactions: StellarTransaction[];
+          total: number;
+          page: number;
+          limit: number;
+        }>
+      >(
+        `/account/${encodeURIComponent(userId)}/transactions`,
+        fallbackConfig,
+      );
+
+      return parseBackendResponse(
+        "GET /account/{userId}/transactions",
+        transactionPageResponseSchema,
+        response.data,
+      );
+    }
   }
 
-  // Contact management - Note: Contact endpoints are not available in experimental backend
-  // Contact management is handled through the agent query system
-  async getContacts(): Promise<ApiResponse<Contact[]>> {
+  // Payment endpoints
+  //
+  // Both call signatures are supported to avoid breaking existing callers:
+  //   sendPayment(payment, idempotencyKey) -> PaymentSubmissionResult
+  //   sendPayment(payment) -> API response envelope
+
+  async sendPayment(
+    payment: SendPaymentRequest,
+    idempotencyKey: string,
+  ): Promise<PaymentSubmissionResult>;
+
+  async sendPayment(
+    payment: SendPaymentRequest,
+  ): Promise<ApiResponse<{ paymentId: string; status: string }>>;
+
+  async sendPayment(
+    payment: SendPaymentRequest,
+    suppliedIdempotencyKey?: string,
+  ): Promise<
+    | PaymentSubmissionResult
+    | ApiResponse<{ paymentId: string; status: string }>
+  > {
+    const paymentWithKey = payment as SendPaymentRequest & {
+      idempotencyKey?: string;
+    };
+
+    const idempotencyKey =
+      suppliedIdempotencyKey ||
+      paymentWithKey.idempotencyKey ||
+      buildPaymentIdempotencyKey(payment);
+
     try {
-      const response = await this.api.get<ApiResponse<Contact[]>>('/contacts');
-      return response.data;
+      const response = await this.api.post<
+        | PaymentSubmissionResult
+        | ApiResponse<{ paymentId: string; status: string }>
+        | ApiResponse<PaymentSubmissionResult>
+      >(
+        "/payments",
+        {
+          ...payment,
+          idempotencyKey,
+        },
+        {
+          headers: {
+            "Idempotency-Key": idempotencyKey,
+          },
+          paymentOperation: true,
+        } as PaymentRequestConfig,
+      );
+
+      const payload = response.data;
+
+      // Preserve the API envelope for the one-argument overload.
+      if (!suppliedIdempotencyKey) {
+        return payload as ApiResponse<{
+          paymentId: string;
+          status: string;
+        }>;
+      }
+
+      // The two-argument overload returns the unwrapped payment result.
+      if ("success" in payload) {
+        if (!payload.success) {
+          throw new Error(
+            payload.message || "Payment submission failed.",
+          );
+        }
+
+        return payload.data as PaymentSubmissionResult;
+      }
+
+      return payload as PaymentSubmissionResult;
     } catch (error: unknown) {
-      if ((error as { response?: { status?: number } }).response?.status === 404) {
-        // Contact endpoints not available in experimental backend
+      if (isPaymentOutcomeUnknown(error)) {
+        throw new PaymentOutcomeUnknownError(
+          "We could not confirm whether the payment was submitted. Check its status before taking any further action.",
+        );
+      }
+
+      throw error;
+    }
+  }
+
+  async getPaymentStatus(
+    idempotencyKey: string,
+  ): Promise<PaymentStatusResult> {
+    const response = await this.api.get<
+      PaymentStatusResult | ApiResponse<PaymentStatusResult>
+    >("/payments/status", {
+      params: { idempotencyKey },
+    });
+
+    const payload = response.data;
+
+    if ("success" in payload) {
+      if (!payload.success) {
+        throw new Error(
+          payload.message || "Payment status is unavailable.",
+        );
+      }
+
+      return payload.data;
+    }
+
+    return payload;
+  }
+
+  // Contact management
+
+  async getContacts(signal?: AbortSignal): Promise<ApiResponse<Contact[]>> {
+    try {
+      const response = signal
+        ? await this.api.get<ApiResponse<Contact[]>>("/contacts", { signal })
+        : await this.api.get<ApiResponse<Contact[]>>("/contacts");
+
+      return parseBackendResponse(
+        "GET /contacts",
+        contactsResponseSchema,
+        response.data,
+      );
+    } catch (error: unknown) {
+      if (
+        axios.isAxiosError(error) &&
+        error.response?.status === 404
+      ) {
         return {
           success: true,
           data: [],
-          message: 'Contact management is available through the chat interface'
+          message:
+            "Contact management is available through the chat interface",
         };
       }
+
       throw error;
     }
   }
 
-  async createContact(data: CreateContactRequest): Promise<ApiResponse<Contact>> {
+  async createContact(
+    data: CreateContactRequest,
+  ): Promise<ApiResponse<Contact>> {
     try {
-      const response = await this.api.post<ApiResponse<Contact>>('/contacts', data);
-      return response.data;
+      const response = await this.api.post<ApiResponse<Contact>>(
+        "/contacts",
+        data,
+      );
+
+      return parseBackendResponse(
+        "POST /contacts",
+        contactResponseEnvelopeSchema,
+        response.data,
+      );
     } catch (error: unknown) {
-      if ((error as { response?: { status?: number } }).response?.status === 404) {
-        // Contact endpoints not available in experimental backend
+      if (
+        axios.isAxiosError(error) &&
+        error.response?.status === 404
+      ) {
         return {
           success: false,
           status: 404,
-          message: 'Contact creation is available through the chat interface. Try: "Add John as a contact with address 0x123..."'
+          message:
+            'Contact creation is available through the chat interface. Try: "Add John as a contact with address 0x123..."',
         };
       }
+
       throw error;
     }
   }
 
-  async updateContact(id: string, data: UpdateContactRequest): Promise<ApiResponse<Contact>> {
+  async updateContact(
+    id: string,
+    data: UpdateContactRequest,
+  ): Promise<ApiResponse<Contact>> {
     try {
-      const response = await this.api.put<ApiResponse<Contact>>(`/contacts/${id}`, data);
-      return response.data;
+      const response = await this.api.put<ApiResponse<Contact>>(
+        `/contacts/${encodeURIComponent(id)}`,
+        data,
+      );
+
+      return parseBackendResponse(
+        "PUT /contacts/{id}",
+        contactResponseEnvelopeSchema,
+        response.data,
+      );
     } catch (error: unknown) {
-      if ((error as { response?: { status?: number } }).response?.status === 404) {
-        // Contact endpoints not available in experimental backend
+      if (
+        axios.isAxiosError(error) &&
+        error.response?.status === 404
+      ) {
         return {
           success: false,
           status: 404,
-          message: 'Contact updates are available through the chat interface'
+          message:
+            "Contact updates are available through the chat interface",
         };
       }
+
       throw error;
     }
   }
 
-  async deleteContact(id: string): Promise<ApiResponse<{ message: string }>> {
+  async deleteContact(
+    id: string,
+  ): Promise<ApiResponse<{ message: string }>> {
     try {
-      const response = await this.api.delete<ApiResponse<{ message: string }>>(`/contacts/${id}`);
-      return response.data;
+      const response = await this.api.delete<
+        ApiResponse<{ message: string }>
+      >(`/contacts/${encodeURIComponent(id)}`);
+
+      return parseBackendResponse(
+        "DELETE /contacts/{id}",
+        contactDeleteResponseSchema,
+        response.data,
+      );
     } catch (error: unknown) {
-      if ((error as { response?: { status?: number } }).response?.status === 404) {
-        // Contact endpoints not available in experimental backend
+      if (
+        axios.isAxiosError(error) &&
+        error.response?.status === 404
+      ) {
         return {
           success: false,
           status: 404,
-          message: 'Contact deletion is available through the chat interface. Try: "Remove John from my contacts"'
+          message:
+            'Contact deletion is available through the chat interface. Try: "Remove John from my contacts"',
         };
       }
+
       throw error;
     }
   }
 
-  // Agent query - Optimized for backend integration
-  async queryAgent(data: AgentQueryRequest): Promise<AgentQueryResponse> {
-    // First try the experimental agent service
+  // Payment endpoints
+
+  /**
+   * Submit a payment to the backend. The backend is expected to create and
+   * broadcast the Stellar transaction and return the confirmed result.
+   *
+   * The client must NOT treat a successful response here as the only
+   * authorisation gate — the backend enforces its own authorisation and
+   * balance checks independently.
+   *
+   * @param data - Validated and sanitized `SendPaymentRequest` payload.
+   * @returns Promise resolving to `ApiResponse` containing the transaction hash
+   *          and the ledger-confirmed status of the payment.
+   * @throws {AxiosError} Throws for network or server errors.
+   *
+   * @see docs/API_CONTRACT.md — "Payment Endpoint" section.
+   */
+  async sendPayment(
+    data: SendPaymentRequest,
+  ): Promise<ApiResponse<{ transactionHash: string; status: 'success' | 'failed' }>> {
+    const response = await this.api.post<
+      ApiResponse<{ transactionHash: string; status: 'success' | 'failed' }>
+    >('/payments/send', data);
+    return response.data;
+  }
+
+  // Agent query
+  async queryAgent(
+    data: AgentQueryRequest,
+    options?: { onDelta?: (text: string) => void; signal?: AbortSignal },
+  ): Promise<AgentQueryResponse> {
+    const isAbort = (error: unknown): boolean => {
+      const value = error as { code?: string; name?: string };
+
+      return (
+        value.code === "ERR_CANCELED" ||
+        value.name === "CanceledError" ||
+        value.name === "AbortError"
+      );
+    };
+
+    // First try the experimental agent service (streams partial text when supported, #261)
     try {
       if (agentService.isAgentConnected()) {
-        console.log('[ApiService] Using experimental agent service');
-        return await agentService.queryAgent(data);
+        logger.debug(
+          "[ApiService] Using experimental agent service",
+        );
+
+        return await agentService.queryAgentStreaming(data, options ?? {});
       }
-    } catch (error) {
-      console.warn('[ApiService] Experimental agent service failed, falling back to backend:', error);
+    } catch (error: unknown) {
+      // A cancelled request (Stop button / route change) must not fall through and re-send the query
+      if (isAbort(error) || options?.signal?.aborted) {
+        throw error;
+      }
+
+      logger.warn("[ApiService] Experimental agent service failed; falling back to backend:", {
+        correlationId: correlationIdForError(error) ?? data.clientRequestId,
+        code: (error as { code?: string })?.code,
+      });
     }
 
-    // Fallback to backend API (experimental backend)
     try {
       if (!data.query || data.query.trim().length === 0) {
-        throw new Error('Query cannot be empty');
+        throw new Error("Query cannot be empty");
       }
 
-      console.log('[ApiService] Querying backend /query endpoint');
-      const response = await this.api.post('/query', data);
-      
-      // The system returns response.data directly or wrapped in { result: ... }
-      if (response.data && response.data.result) {
+      logger.debug("[ApiService] Querying backend /query endpoint");
+
+      const response = await this.api.post(
+        "/query",
+        data,
+        { signal: options?.signal },
+      );
+
+      // Same envelope rules as AgentService: no defaulted success, no raw-body fallback (#275)
+      const parsed = parseAgentEnvelope(response.data);
+      if (!parsed.ok) {
+        const correlationId =
+          extractCorrelationId(response.headers) ??
+          extractCorrelationId(response.config?.headers) ??
+          data.clientRequestId ??
+          generateCorrelationId('http');
+        logger.error("[ApiService] Malformed /query response:", {
+          correlationId,
+          reason: parsed.reason,
+        });
         return {
           result: {
-            success: response.data.result.success ?? true,
-            data: response.data.result.data || 'Success',
-            error: response.data.result.error,
-            executionTrace: response.data.result.executionTrace
-          }
+            ...protocolErrorResult(parsed.reason),
+            diagnostics: { correlationId },
+          },
         };
       }
-      
-      // Handle the case where the backend returns the result directly
+      const correlationId =
+        extractCorrelationId(response.headers) ??
+        extractCorrelationId(response.config?.headers) ??
+        data.clientRequestId ??
+        generateCorrelationId('http');
       return {
         result: {
-          success: true,
-          data: typeof response.data === 'string' ? response.data : JSON.stringify(response.data),
-          error: undefined
-        }
+          ...parsed.result,
+          diagnostics: { correlationId },
+        },
       };
     } catch (error: unknown) {
-      console.error('[ApiService] Backend query failed:', error);
-      // Convert technical errors to user-friendly messages
-      let friendlyMessage = 'Query failed. Please try again.';
-      const errorMsg = (error as { response?: { data?: { message?: string } }; message?: string }).response?.data?.message || (error as { message?: string }).message || 'Unknown error';
-      
-      if (errorMsg.includes('invalid query')) {
-        friendlyMessage = "I didn't understand that. Could you please rephrase your question?";
-      } else if (errorMsg.includes('timeout')) {
-        friendlyMessage = "The request is taking longer than expected. Please try again.";
-      } else if (errorMsg.includes('network')) {
-        friendlyMessage = "I'm having trouble connecting. Please check your internet connection and try again.";
+      // A user-cancelled request (Stop button / navigation) is not a failure to report
+      if (isAbort(error)) {
+        throw error;
       }
+
+      logger.error("[ApiService] Backend query failed:", {
+        correlationId: correlationIdForError(error) ?? data.clientRequestId,
+        status: (error as { response?: { status?: number } })?.response?.status,
+        code: (error as { code?: string })?.code,
+        method: "POST",
+      });
+
+      const errorValue = error as {
+        response?: { data?: { message?: string } };
+        message?: string;
+      };
+
+      const errorMsg =
+        errorValue.response?.data?.message ||
+        errorValue.message ||
+        "Unknown error";
+
+      // Keep timeouts distinct from connectivity failures (#274)
+      const errorKind = classifyAgentError(error);
+      const stateChanging = isStateChangingQuery(data.query);
+      const friendlyMessage = errorKind === "server" || errorKind === "unknown"
+        ? "Query failed. Please try again."
+        : agentErrorMessage(errorKind, stateChanging);
 
       return {
         result: {
           success: false,
           data: friendlyMessage,
-          error: errorMsg
-        }
+          error: errorMsg,
+          errorKind,
+          requestId: data.clientRequestId,
+          diagnostics: {
+            correlationId:
+              correlationIdForError(error) ??
+              data.clientRequestId ??
+              generateCorrelationId('http'),
+          },
+          stateChanging,
+          // No HTTP response means the message never reached the service (#266)
+          delivered: Boolean((error as { response?: unknown })?.response),
+        },
       };
     }
   }
 
   // Agent-specific methods
+
   async getAgentStatus() {
     try {
       return await agentService.getStatus();
     } catch (error) {
       console.error('Failed to get agent status:', error);
-      // Return a default status instead of throwing
-      return {
+      // Unknown, not fabricated: no placeholder metrics or protocol states (#271)
+      const unavailable: AgentStatus = {
         isOnline: false,
-        version: '1.0.0',
-        uptime: 0,
-        lastActivity: new Date().toISOString(),
-        activeConnections: 0,
-        services: {
-          vesu: { isActive: false, isHealthy: false, lastCheck: new Date().toISOString() },
-          atomiq: { isActive: false, isHealthy: false, lastCheck: new Date().toISOString() },
-          xverse: { isActive: false, isHealthy: false, lastCheck: new Date().toISOString() },
-          troves: { isActive: false, isHealthy: false, lastCheck: new Date().toISOString() },
-          database: { isActive: false, isHealthy: false, lastCheck: new Date().toISOString() }
-        }
+        source: 'unavailable',
+        version: null,
+        uptime: null,
+        lastActivity: null,
+        activeConnections: null,
+        services: {},
+        health: null,
       };
+      return unavailable;
     }
   }
 
+  /**
+   * Retrieve agent capabilities with their source and freshness (#270). Never throws; an
+   * outage is reported as `availability: 'unavailable'` instead of an empty capability list.
+   *
+   * @returns Promise resolving to `AgentCapabilitiesResult`.
+   */
   async getAgentCapabilities() {
-    try {
-      return await agentService.getCapabilities();
-    } catch (error) {
-      console.error('Failed to get agent capabilities:', error);
-      // Return default capabilities instead of throwing
-      return {
-        supportedActions: [],
-        supportedAssets: [],
-        supportedProtocols: [],
-        features: {
-          defi: false,
-          crossChain: false,
-          voiceCommands: false,
-          smartContracts: false,
-          yieldFarming: false,
-          lending: false,
-          borrowing: false,
-          swapping: false
-        },
-        limits: {
-          maxQueryLength: 0,
-          maxConcurrentQueries: 0,
-          rateLimitPerMinute: 0
-        }
-      };
-    }
+    return agentService.getCapabilities();
   }
 
   async checkAgentHealth() {
     try {
       return await agentService.healthCheck();
     } catch (error) {
-      console.error('Failed to check agent health:', error);
+      console.error("Failed to check agent health:", error);
       throw error;
     }
   }
@@ -535,105 +1476,387 @@ class ApiService {
     try {
       return await agentService.getTools();
     } catch (error) {
-      console.error('Failed to get agent tools:', error);
+      console.error("Failed to get agent tools:", error);
       return [];
     }
   }
 
-  async executeAgentTool(toolName: string, params: Record<string, unknown>) {
+  async executeAgentTool(
+    toolName: string,
+    params: Record<string, unknown>,
+  ) {
     try {
       return await agentService.executeTool(toolName, params);
     } catch (error) {
-      console.error(`Failed to execute agent tool ${toolName}:`, error);
+      console.error(
+        `Failed to execute agent tool ${toolName}:`,
+        error,
+      );
+
       throw error;
     }
   }
 
+  /**
+   * Retrieve stored agent memory records for a given user (#267). Never throws; returns a typed
+   * result so callers can tell an empty memory (`ok: true, entries: []`) from an outage (`ok: false`).
+   *
+   * @param userId - User ID string.
+   * @returns Promise resolving to `AgentMemoryResult`.
+   */
   async getAgentMemory(userId: string) {
-    try {
-      return await agentService.getMemory(userId);
-    } catch (error) {
-      console.error('Failed to get agent memory:', error);
-      return [];
-    }
+    return agentService.getMemory(userId);
   }
 
-  async clearAgentMemory(userId: string) {
+  async clearAgentMemory(userId: string): Promise<void> {
     try {
       await agentService.clearMemory(userId);
     } catch (error) {
-      console.error('Failed to clear agent memory:', error);
+      console.error("Failed to clear agent memory:", error);
       throw error;
     }
   }
 
-  // Chat endpoints - Removed server-side conversation management
-  // All conversation and message management is now handled client-side
-
-  // Removed: getOrCreateActiveConversation - now handled client-side
-
-  async getConversationStats(): Promise<ApiResponse<{ totalConversations: number; totalMessages: number; activeConversations: number }>> {
-    const response = await this.api.get<ApiResponse<{ totalConversations: number; totalMessages: number; activeConversations: number }>>('/chat/stats');
-    return response.data;
-  }
-
-  async getPromptVersions(): Promise<PromptVersionRecord[] | ApiResponse<PromptVersionRecord[]> | PromptVersionRecord> {
-    const response = await this.api.get<PromptVersionRecord[] | ApiResponse<PromptVersionRecord[]> | PromptVersionRecord>('/versions');
-    return response.data;
-  }
-
-  async activatePromptVersion(id: string): Promise<ApiResponse<PromptVersionRecord> | PromptVersionRecord> {
-    const response = await this.api.patch<ApiResponse<PromptVersionRecord> | PromptVersionRecord>(`/versions/${id}/activate`);
-  // Liquidity Pool endpoints
-  async getLiquidityStats(request?: LiquidityRequest): Promise<ApiResponse<LiquidityStats>> {
-    const response = await this.api.post<ApiResponse<LiquidityStats>>('/liquidity', request || {});
-    return response.data;
-  }
-
-  // === Audit Log Endpoints ===
-
   /**
-   * Fetch audit logs with filtering, pagination, and search
+   * Fetch one page of the user's chat history, newest first, from the server (#265, #264).
+   * Proposed contract: `GET /chat/history?before=<cursor>&limit=<n>` →
+   * `{ messages: ChatMessage[], nextCursor: string | null, hasMore: boolean }`.
+   *
+   * @param query - `before` cursor from the previous page (omit for the newest page) and page size (defaults to 50, max 100).
+   * @returns Promise resolving to one page of history.
+   * @throws {AxiosError} Throws if the request fails.
    */
-  async getAuditLogs(params: AuditLogsQueryParams = {}): Promise<AuditLogsResponse> {
-    const response = await this.api.get<AuditLogsResponse>('/audit', { params });
+  async getChatHistory(query: ChatHistoryQuery = {}): Promise<ChatHistoryPage> {
+    const limit = Math.min(Math.max(1, query.limit ?? 50), 100);
+    const params: Record<string, string | number> = { limit };
+    if (query.before) params.before = query.before;
+
+    const response = await this.api.get<ChatHistoryPage>('/chat/history', { params });
+    const data = response.data;
+    return {
+      messages: Array.isArray(data?.messages) ? data.messages : [],
+      nextCursor: typeof data?.nextCursor === 'string' && data.nextCursor ? data.nextCursor : null,
+      hasMore: Boolean(data?.hasMore && data?.nextCursor),
+    };
+  }
+
+  // Conversation endpoints
+
+  async getConversationStats(): Promise<
+    ApiResponse<{
+      totalConversations: number;
+      totalMessages: number;
+      activeConversations: number;
+    }>
+  > {
+    const response = await this.api.get<
+      ApiResponse<{
+        totalConversations: number;
+        totalMessages: number;
+        activeConversations: number;
+      }>
+    >("/chat/stats");
+
     return response.data;
   }
 
-  /**
-   * Fetch a single audit log entry by ID
-   */
-  async getAuditLogById(id: string): Promise<ApiResponse<AuditLogEntry>> {
-    const response = await this.api.get<ApiResponse<AuditLogEntry>>(`/audit/${id}`);
+  // Prompt versions
+
+  async getPromptVersions(): Promise<
+    | PromptVersionRecord[]
+    | ApiResponse<PromptVersionRecord[]>
+    | PromptVersionRecord
+  > {
+    const response = await this.api.get<
+      | PromptVersionRecord[]
+      | ApiResponse<PromptVersionRecord[]>
+      | PromptVersionRecord
+    >("/versions");
+
     return response.data;
   }
 
-  /**
-   * Fetch aggregated audit log statistics
-   */
-  async getAuditLogStats(): Promise<ApiResponse<AuditLogStats>> {
-    const response = await this.api.get<ApiResponse<AuditLogStats>>('/audit/stats');
+  async activatePromptVersion(
+    id: string,
+  ): Promise<
+    ApiResponse<PromptVersionRecord> | PromptVersionRecord
+  > {
+    const response = await this.api.patch<
+      ApiResponse<PromptVersionRecord> | PromptVersionRecord
+    >(`/versions/${encodeURIComponent(id)}/activate`);
+
     return response.data;
   }
 
-  /**
-   * Export audit logs (download as CSV/JSON)
-   */
-  async exportAuditLogs(params: AuditLogsQueryParams = {}): Promise<Blob> {
-    const response = await this.api.get<Blob>('/audit/export', {
+  // Liquidity endpoints
+
+  async getLiquidityStats(
+    request?: LiquidityRequest,
+  ): Promise<ApiResponse<LiquidityStats>> {
+    const response = await this.api.post<
+      ApiResponse<LiquidityStats>
+    >("/liquidity", request || {});
+
+    return response.data;
+  }
+
+  // Audit log endpoints
+
+  async getAuditLogs(
+    params: AuditLogsQueryParams = {},
+  ): Promise<AuditLogsResponse> {
+    const response = await this.api.get<AuditLogsResponse>(
+      "/audit",
+      { params },
+    );
+
+    return response.data;
+  }
+
+  async getAuditLogById(
+    id: string,
+  ): Promise<ApiResponse<AuditLogEntry>> {
+    const response = await this.api.get<
+      ApiResponse<AuditLogEntry>
+    >(`/audit/${encodeURIComponent(id)}`);
+
+    return response.data;
+  }
+
+  async getAuditLogStats(): Promise<
+    ApiResponse<AuditLogStats>
+  > {
+    const response = await this.api.get<
+      ApiResponse<AuditLogStats>
+    >("/audit/stats");
+
+    return response.data;
+  }
+
+  async exportAuditLogs(
+    params: AuditLogsQueryParams = {},
+  ): Promise<Blob> {
+    const response = await this.api.get<Blob>("/audit/export", {
       params,
-      responseType: 'blob',
+      responseType: "blob",
     });
+
     return response.data;
   }
 
-  // Generic request method for custom endpoints
+
+  // Generic request helper
+
   async request<T>(config: AxiosRequestConfig): Promise<T> {
     const response = await this.api.request<T>(config);
     return response.data;
   }
+
+  // Stellar trustline endpoints
+
+  async fetchAccountTrustlines(
+    publicKey: string,
+  ): Promise<Trustline[]> {
+    try {
+      const response = await this.api.get<
+        ApiResponse<Trustline[]> | Trustline[]
+      >(`/account/${encodeURIComponent(publicKey)}/trustlines`);
+
+      if (Array.isArray(response.data)) {
+        return response.data;
+      }
+
+      if (
+        response.data &&
+        "data" in response.data &&
+        Array.isArray(response.data.data)
+      ) {
+        return response.data.data;
+      }
+    } catch {
+      // Fall back to the secure Horizon proxy if the backend fails.
+      try {
+        const response = await horizonFetch(
+          `/accounts/${encodeURIComponent(publicKey)}`,
+        );
+
+        if (response.ok) {
+          const accountData = await response.json();
+          const balances = Array.isArray(accountData.balances)
+            ? accountData.balances
+            : [];
+
+          return balances
+            .filter(
+              (balance: { asset_type?: string }) =>
+                balance.asset_type !== "native",
+            )
+            .map(
+              (balance: {
+                asset_code?: string;
+                asset_issuer?: string;
+                balance?: string;
+                limit?: string;
+                asset_type?: string;
+                buying_liabilities?: string;
+                selling_liabilities?: string;
+              }) => ({
+                assetCode: balance.asset_code || "",
+                assetIssuer: balance.asset_issuer || "",
+                balance: balance.balance || "0",
+                limit: balance.limit || "0",
+                assetType: balance.asset_type,
+                buyingLiabilities: balance.buying_liabilities,
+                sellingLiabilities: balance.selling_liabilities,
+              }),
+            );
+        }
+      } catch (fallbackError) {
+        logger.warn(
+          "Horizon fallback for trustlines failed",
+          fallbackError,
+        );
+      }
+    }
+
+    return [];
+  }
+
+  async addTrustline(
+    publicKey: string,
+    data: AddTrustlineRequest,
+  ): Promise<ApiResponse<Trustline> | unknown> {
+    const response = await this.api.post<
+      ApiResponse<Trustline> | Trustline
+    >(
+      `/account/${encodeURIComponent(publicKey)}/trustlines`,
+      data,
+    );
+
+    return response.data;
+  }
+
+  async removeTrustline(
+    publicKey: string,
+    assetCode: string,
+    assetIssuer: string,
+  ): Promise<ApiResponse<void> | unknown> {
+    const response = await this.api.delete<ApiResponse<void>>(
+      `/account/${encodeURIComponent(publicKey)}/trustlines`,
+      {
+        data: { assetCode, assetIssuer },
+      },
+    );
+
+    return response.data;
+  }
+
+  // Multi-factor authentication endpoints
+
+  async getMfaStatus(): Promise<ApiResponse<MfaStatusData>> {
+    try {
+      const response = await this.api.get<ApiResponse<MfaStatusData>>(
+        "/auth/mfa/status",
+      );
+
+      return response.data;
+    } catch (error: unknown) {
+      if (
+        axios.isAxiosError(error) &&
+        error.response?.status === 404
+      ) {
+        return {
+          success: false,
+          status: 404,
+          message:
+            "MFA endpoints are not currently supported by the backend service",
+        };
+      }
+
+      throw error;
+    }
+  }
+
+  async initiateMfaEnrollment(): Promise<
+    ApiResponse<MfaEnrollmentData>
+  > {
+    try {
+      const response = await this.api.post<
+        ApiResponse<MfaEnrollmentData>
+      >("/auth/mfa/enroll");
+
+      return response.data;
+    } catch (error: unknown) {
+      if (
+        axios.isAxiosError(error) &&
+        error.response?.status === 404
+      ) {
+        return {
+          success: false,
+          status: 404,
+          message:
+            "MFA enrollment is not currently supported by the backend service",
+        };
+      }
+
+      throw error;
+    }
+  }
+
+  async verifyMfaEnrollment(
+    data: MfaVerifyRequest,
+  ): Promise<ApiResponse<MfaVerifyData>> {
+    try {
+      const response = await this.api.post<
+        ApiResponse<MfaVerifyData>
+      >("/auth/mfa/verify", data);
+
+      return response.data;
+    } catch (error: unknown) {
+      if (
+        axios.isAxiosError(error) &&
+        error.response?.status === 404
+      ) {
+        return {
+          success: false,
+          status: 404,
+          message:
+            "MFA verification is not currently supported by the backend service",
+        };
+      }
+
+      throw error;
+    }
+  }
 }
 
-// Create and export a singleton instance
+// Singleton instance
+
 export const apiService = new ApiService();
 export default apiService;
+
+// Standalone trustline helpers
+
+export const fetchAccountTrustlines = (
+  publicKey: string,
+): Promise<Trustline[]> =>
+  apiService.fetchAccountTrustlines(publicKey);
+
+export const addTrustline = (
+  publicKey: string,
+  data: AddTrustlineRequest,
+): Promise<ApiResponse<Trustline> | unknown> =>
+  apiService.addTrustline(publicKey, data);
+
+export const removeTrustline = (
+  publicKey: string,
+  assetCode: string,
+  assetIssuer: string,
+): Promise<ApiResponse<void> | unknown> =>
+  apiService.removeTrustline(publicKey, assetCode, assetIssuer);
+
+export const getAccountTransactions = (
+  userId: string,
+  page = 1,
+  limit = 10,
+) => apiService.getAccountTransactions(userId, page, limit);
