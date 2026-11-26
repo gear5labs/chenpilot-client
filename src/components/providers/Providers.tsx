@@ -16,6 +16,7 @@ import { ToastOverflowManager } from "@/components/providers/ToastOverflowManage
 import { SessionManagementProvider } from "./SessionManagementProvider";
 import { PresenceProvider } from "./PresenceProvider";
 import { SessionExpirationWarning } from "@/components/auth/SessionExpirationWarning";
+import { OfflineQueueList } from "@/components/chat/OfflineQueueList";
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -73,6 +74,7 @@ export function Providers({ children }: ProvidersProps) {
                 autoConnect={true}
               >
                 {children}
+                <OfflineQueueList />
                 <SessionExpirationWarning />
                 <TransactionToastListener />
                 <ToastOverflowManager />
