@@ -15,6 +15,7 @@ import {
   SocketConfig,
   initializeSocketManager,
 } from '@/services/socketManager';
+import { SocketReconnectGate } from '@/services/socketConnectivity';
 import {
   INITIAL_SOCKET_CONNECTION_STATE,
   isSocketConnected,
@@ -111,6 +112,36 @@ export function SocketProvider({
       manager.disconnect();
     };
   }, [configKey, autoConnect]);
+
+  // Socket.io retries on its own even without a network. Pause those attempts
+  // while offline and allow only one resume attempt when connectivity returns (#539).
+  useEffect(() => {
+    if (!socketManager) return;
+
+    const gate = new SocketReconnectGate({
+      isOnline: () => navigator.onLine,
+      onPause: () => {
+        socketManager.disconnect();
+        setSocket(null);
+      },
+    });
+
+    const handleOffline = () => gate.handleOffline();
+    const handleOnline = () => {
+      gate.handleOnline();
+      if (gate.takeAttempt()) {
+        socketManager.retry();
+        setSocket(socketManager.getSocket());
+      }
+    };
+
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [socketManager]);
 
   const connect = useCallback(() => {
     if (socketManager) {

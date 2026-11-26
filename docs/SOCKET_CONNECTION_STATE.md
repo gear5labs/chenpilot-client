@@ -38,3 +38,12 @@ Real-time payloads use the envelope `{ version, event, data }`. The current supp
 | Malformed version (string, fraction, non-object payload) | **Dropped** as invalid. |
 
 `classifySocketEventVersion()` returns only version metadata and a reason string; it never echoes payload content into diagnostics. Unknown-version events are ignored rather than applied, so an older client cannot corrupt chat or presence state with data it cannot interpret. Contract tests: `src/services/__tests__/socketEventVersion.test.ts`.
+
+## Offline reconnect gating (#539)
+
+Socket.io retries on its own even without network connectivity. `src/services/socketConnectivity.ts` provides `SocketReconnectGate`, which `SocketProvider` uses to:
+
+- pause attempts on an `offline` transition (clearing any queued resume), and
+- resume with **at most one** attempt on the next `online` transition.
+
+Repeated `online` events while already online do not stack attempts, and a queued attempt is cancelled if the browser goes offline again before it is taken. `connectivityAction(wasOnline, isOnline)` documents the three allowed outcomes (`pause`, `resume-once`, `none`). Contract tests: `src/services/__tests__/socketConnectivity.test.ts` and `src/components/providers/SocketProvider.connectivity.test.tsx`.
