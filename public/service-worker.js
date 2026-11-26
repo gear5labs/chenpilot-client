@@ -3,8 +3,10 @@ import { isCacheablePublicResource } from './offline-cache-policy.js';
 const CACHE_NAME = 'chenpilot-public-static-v1';
 const CACHE_PREFIX = 'chenpilot-public-static-';
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(self.skipWaiting());
+self.addEventListener('install', () => {
+  // First install can activate immediately. An update waits for the user to
+  // confirm the refresh prompt so no active wallet transaction is interrupted (#552).
+  if (!self.registration.active) self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -49,4 +51,13 @@ self.addEventListener('fetch', (event) => {
       return response;
     })(),
   );
+});
+
+// Let the client request immediate activation only after the user confirms the
+// update prompt. The page reload closes the old client, so the waiting worker
+// can take over without interrupting an in-flight wallet transaction (#552).
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });

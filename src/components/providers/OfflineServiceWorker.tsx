@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { ServiceWorkerUpdatePrompt } from './ServiceWorkerUpdatePrompt';
 
 export function OfflineServiceWorker() {
   useEffect(() => {
@@ -15,5 +16,5 @@ export function OfflineServiceWorker() {
       });
   }, []);
 
-  return null;
+  return <ServiceWorkerUpdatePrompt />;
 }
