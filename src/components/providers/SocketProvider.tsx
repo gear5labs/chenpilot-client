@@ -48,6 +48,10 @@ export function SocketProvider({ children, config, configKey, autoConnect = true
   // Derived from the single shared state, never tracked separately (#279).
   const isConnected = isSocketConnected(connectionState);
 
+  // Refs to hold handler references so they can be cleaned up.
+  const handleConnectRef = useRef<(() => void) | null>(null);
+  const handleDisconnectRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
     const manager = initializeSocketManager(config);
     setSocketManager(manager);
@@ -69,6 +73,22 @@ export function SocketProvider({ children, config, configKey, autoConnect = true
 
   const connect = useCallback(() => {
     if (socketManager) {
+      // Remove any stale handlers before reconnecting.
+      if (handleConnectRef.current) {
+        const sock = socketManager.getSocket();
+        if (sock) {
+          sock.off('connect', handleConnectRef.current);
+        }
+        handleConnectRef.current = null;
+      }
+      if (handleDisconnectRef.current) {
+        const sock = socketManager.getSocket();
+        if (sock) {
+          sock.off('disconnect', handleDisconnectRef.current);
+        }
+        handleDisconnectRef.current = null;
+      }
+
       const socketInstance = socketManager.connect();
       setSocket(socketInstance);
     }
@@ -79,14 +99,27 @@ export function SocketProvider({ children, config, configKey, autoConnect = true
       socketManager.retry();
       setSocket(socketManager.getSocket());
     }
-  };
+  }, [socketManager]);
 
-  const disconnect = () => {
+  const disconnect = useCallback(() => {
     if (socketManager) {
+      // Remove handler refs before disconnecting.
+      const sock = socketManager.getSocket();
+      if (sock) {
+        if (handleConnectRef.current) {
+          sock.off('connect', handleConnectRef.current);
+        }
+        if (handleDisconnectRef.current) {
+          sock.off('disconnect', handleDisconnectRef.current);
+        }
+      }
+      handleConnectRef.current = null;
+      handleDisconnectRef.current = null;
+
       socketManager.disconnect();
       setSocket(null);
     }
-  };
+  }, [socketManager]);
 
   const emit = (event: string, data?: unknown): boolean => {
     return socketManager?.emit(event, data) ?? false;
@@ -120,11 +153,7 @@ export function SocketProvider({ children, config, configKey, autoConnect = true
     once,
   };
 
-  return (
-    <SocketContext.Provider value={value}>
-      {children}
-    </SocketContext.Provider>
-  );
+  return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;
 }
 
 /**
