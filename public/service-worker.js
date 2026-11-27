@@ -4,8 +4,10 @@ import {
   cleanupObsoleteCaches,
 } from './service-worker-cache.js';
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(self.skipWaiting());
+self.addEventListener('install', () => {
+  // First install can activate immediately. An update waits for the user to
+  // confirm the refresh prompt so no active wallet transaction is interrupted (#552).
+  if (!self.registration.active) self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
