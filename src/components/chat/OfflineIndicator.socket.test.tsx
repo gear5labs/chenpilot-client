@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SocketConnectionState } from '@/types/socket';
+import type { ManualReconnectResult } from '@/components/providers/SocketProvider';
 import { OfflineIndicator, describeSocketState } from './OfflineIndicator';
 
 const { dispatch, chat, socketContext } = vi.hoisted(() => ({
@@ -14,6 +15,8 @@ const { dispatch, chat, socketContext } = vi.hoisted(() => ({
           connectionState: SocketConnectionState;
           reconnectAttempt: number;
           maxReconnectAttempts: number;
+          isRetrying?: boolean;
+          lastRetryResult?: ManualReconnectResult | null;
           retry: () => void;
         },
   },
@@ -33,12 +36,18 @@ vi.mock('@/components/providers/SocketProvider', () => ({
   useOptionalSocket: () => socketContext.current,
 }));
 
-function withSocket(connectionState: SocketConnectionState, attempt = 0, retry = vi.fn()) {
+function withSocket(
+  connectionState: SocketConnectionState,
+  attempt = 0,
+  retry = vi.fn(),
+  extra: { isRetrying?: boolean; lastRetryResult?: ManualReconnectResult | null } = {},
+) {
   socketContext.current = {
     connectionState,
     reconnectAttempt: attempt,
     maxReconnectAttempts: 5,
     retry,
+    ...extra,
   };
   return retry;
 }
@@ -50,6 +59,10 @@ describe('OfflineIndicator socket status', () => {
     chat.messageQueue = [];
     socketContext.current = undefined;
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('renders nothing outside a SocketProvider while online', () => {
@@ -118,5 +131,70 @@ describe('OfflineIndicator socket status', () => {
     expect(describeSocketState('idle')).toBeNull();
     expect(describeSocketState('connected')).toBeNull();
     expect(describeSocketState('reconnecting', 0, 0)).toBe('Reconnecting to live updates…');
+  });
+
+  describe('manual reconnect control (#286)', () => {
+    it('prevents concurrent reconnect calls on rapid clicks', () => {
+      const retry = withSocket('exhausted', 5);
+      render(<OfflineIndicator />);
+
+      const button = screen.getByRole('button', { name: 'Retry' });
+      fireEvent.click(button);
+      fireEvent.click(button);
+
+      expect(retry).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('button', { name: 'Reconnecting…' })).toBeDisabled();
+    });
+
+    it('announces reconnect success in a polite status region, preserves route state, and auto-dismisses', () => {
+      vi.useFakeTimers();
+      window.history.pushState({}, '', '/chat/session-42?tab=active#draft');
+      const retry = withSocket('exhausted', 5);
+      const view = render(<OfflineIndicator />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      expect(retry).toHaveBeenCalledOnce();
+
+      withSocket('connecting', 0, retry, { isRetrying: true, lastRetryResult: null });
+      view.rerender(<OfflineIndicator />);
+
+      withSocket('connected', 0, retry, { isRetrying: false, lastRetryResult: 'succeeded' });
+      view.rerender(<OfflineIndicator />);
+
+      const status = screen.getByRole('status');
+      expect(status).toHaveAttribute('aria-live', 'polite');
+      expect(status).toHaveTextContent('Live updates reconnected');
+      expect(window.location.pathname).toBe('/chat/session-42');
+      expect(window.location.search).toBe('?tab=active');
+      expect(window.location.hash).toBe('#draft');
+
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(screen.queryByText('Live updates reconnected')).not.toBeInTheDocument();
+    });
+
+    it('announces reconnect failure and re-enables Retry for a subsequent attempt', () => {
+      const retry = withSocket('disconnected');
+      const view = render(<OfflineIndicator />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      expect(retry).toHaveBeenCalledTimes(1);
+
+      withSocket('connecting', 0, retry, { isRetrying: true, lastRetryResult: null });
+      view.rerender(<OfflineIndicator />);
+
+      withSocket('disconnected', 0, retry, { isRetrying: false, lastRetryResult: 'failed' });
+      view.rerender(<OfflineIndicator />);
+
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Reconnect failed • live updates disconnected',
+      );
+
+      const retryButton = screen.getByRole('button', { name: 'Retry' });
+      expect(retryButton).toBeEnabled();
+      fireEvent.click(retryButton);
+      expect(retry).toHaveBeenCalledTimes(2);
+    });
   });
 });

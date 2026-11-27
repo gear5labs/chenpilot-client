@@ -33,6 +33,9 @@ export default function ResetPasswordForm({ token }: ResetPasswordFormProps) {
     setRequestError(null);
     try {
       await authService.resetPassword(token, password);
+      // The reset token is a one-time credential in the URL. Remove it as soon
+      // as the server confirms completion; never persist it in browser storage.
+      window.history.replaceState({}, "", "/auth/reset-password");
       setIsComplete(true);
     } catch (error: unknown) {
       const status = (error as { response?: { status?: number } })?.response?.status;

@@ -70,11 +70,27 @@ vi.mock('@/services/socketManager', () => ({
 const config = { url: 'http://localhost:3001' };
 
 function StateProbe() {
-  const { connectionState, isConnected, reconnectAttempt, maxReconnectAttempts } = useSocket();
+  const {
+    connectionState,
+    isConnected,
+    reconnectAttempt,
+    maxReconnectAttempts,
+    isRetrying,
+    lastRetryResult,
+    retry,
+  } = useSocket();
   return (
-    <p data-testid="probe">
-      {connectionState}|{String(isConnected)}|{reconnectAttempt}|{maxReconnectAttempts}
-    </p>
+    <div>
+      <p data-testid="probe">
+        {connectionState}|{String(isConnected)}|{reconnectAttempt}|{maxReconnectAttempts}
+      </p>
+      <p data-testid="retry-probe">
+        {String(isRetrying)}|{lastRetryResult ?? 'none'}
+      </p>
+      <button type="button" onClick={retry}>
+        Trigger Retry
+      </button>
+    </div>
   );
 }
 
@@ -183,6 +199,92 @@ describe('SocketProvider connection state', () => {
       </SocketProvider>,
     );
     expect(manager.onStateChange).toHaveBeenCalledTimes(1);
+  });
+
+  describe('manual reconnect control (#286)', () => {
+    const retryProbe = () => screen.getByTestId('retry-probe').textContent;
+
+    it('exposes retry from disconnected and exhausted states and announces success', () => {
+      render(
+        <SocketProvider config={config}>
+          <StateProbe />
+        </SocketProvider>,
+      );
+
+      emit('disconnected');
+      expect(retryProbe()).toBe('false|none');
+
+      act(() => {
+        screen.getByRole('button', { name: 'Trigger Retry' }).click();
+      });
+
+      expect(manager.retry).toHaveBeenCalledTimes(1);
+      expect(retryProbe()).toBe('true|none');
+
+      emit('connecting');
+      emit('connected');
+      expect(retryProbe()).toBe('false|succeeded');
+    });
+
+    it('prevents concurrent retry calls while a reconnect is already in flight or active', () => {
+      render(
+        <SocketProvider config={config}>
+          <StateProbe />
+        </SocketProvider>,
+      );
+
+      emit('exhausted', 5);
+
+      act(() => {
+        const button = screen.getByRole('button', { name: 'Trigger Retry' });
+        button.click();
+        button.click();
+        button.click();
+      });
+
+      expect(manager.retry).toHaveBeenCalledTimes(1);
+
+      // Also ignored while connecting, reconnecting, or connected
+      emit('connecting');
+      act(() => {
+        screen.getByRole('button', { name: 'Trigger Retry' }).click();
+      });
+      emit('reconnecting', 1);
+      act(() => {
+        screen.getByRole('button', { name: 'Trigger Retry' }).click();
+      });
+      emit('connected');
+      act(() => {
+        screen.getByRole('button', { name: 'Trigger Retry' }).click();
+      });
+
+      expect(manager.retry).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports failed result when manual retry exhausts again and permits a follow-up retry', () => {
+      render(
+        <SocketProvider config={config}>
+          <StateProbe />
+        </SocketProvider>,
+      );
+
+      emit('exhausted', 5);
+      act(() => {
+        screen.getByRole('button', { name: 'Trigger Retry' }).click();
+      });
+      expect(manager.retry).toHaveBeenCalledTimes(1);
+
+      emit('connecting');
+      emit('exhausted', 5);
+      expect(retryProbe()).toBe('false|failed');
+
+      // Follow-up retry is allowed once the previous attempt has settled
+      act(() => {
+        screen.getByRole('button', { name: 'Trigger Retry' }).click();
+      });
+      expect(manager.retry).toHaveBeenCalledTimes(2);
+      expect(retryProbe()).toBe('true|none');
+    });
   });
 });
 

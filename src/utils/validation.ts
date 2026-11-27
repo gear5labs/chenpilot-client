@@ -222,6 +222,15 @@ export const fundedAccountBalanceResponseSchema = apiResponseSchema(
   }).passthrough(),
 );
 
+/** Client contract for GET /auth/funding/auto-funding-stats (#545). */
+export const autoFundingStatsResponseSchema = apiResponseSchema(
+  z.object({
+    totalFunded: z.number().int().nonnegative(),
+    totalAccounts: z.number().int().nonnegative(),
+    averageAmount: balanceAmountSchema,
+  }).passthrough(),
+);
+
 const stellarOperationResponseSchema = z.object({
   id: nonEmptyStringSchema,
   type: nonEmptyStringSchema,

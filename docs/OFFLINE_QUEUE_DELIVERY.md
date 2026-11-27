@@ -17,13 +17,12 @@ A locally queued message is **not** proof that the server received it (#547). Th
 
 `OfflineQueueList` is rendered from `Providers` so it is visible wherever the chat is used. It renders nothing when the queue is empty.
 
+## Discarding one entry (#548)
+
+Each row has a **Discard** button. It dispatches `dequeueMessage(id)` for the selected row only (#548); the reducer persists the remaining queue to localStorage, so unrelated queued work is preserved. Non-empty text (including whitespace-only content, which is treated as empty) is confirmed through `window.confirm` before removal via `confirmQueueRemoval()` in `src/utils/offlineQueueRemoval.ts`. Empty entries are removed directly. Declining confirmation leaves the queue untouched.
+
 ## Tests
 
 - `src/utils/offlineQueueDisplay.test.ts` — state mapping and the no-early-delivery guarantee.
-- `src/components/chat/OfflineQueueList.test.tsx` — all four states are visible and the unacknowledged row says "not sent".
-
-## Discarding one entry (#548)
-
-Each row has a **Discard** button. It dispatches `dequeueMessage(id)` for the selected row only; the reducer persists the remaining queue to localStorage, so unrelated queued work is preserved. Non-empty text (including whitespace-only content, which is treated as empty) is confirmed through `window.confirm` before removal via `confirmQueueRemoval()` in `src/utils/offlineQueueRemoval.ts`. Empty entries are removed directly. Declining confirmation leaves the queue untouched.
-
-Tests: `src/utils/offlineQueueRemoval.test.ts` covers the confirmation policy and single-item filtering; `src/components/chat/OfflineQueueList.test.tsx` covers the scoped dispatch and declined confirmation.
+- `src/components/chat/OfflineQueueList.test.tsx` — all four states are visible, the unacknowledged row says "not sent", and discard is scoped/confirmed.
+- `src/utils/offlineQueueRemoval.test.ts` — confirmation policy and single-item filtering.

@@ -6,11 +6,17 @@ import {
   sendMessage,
   isQueuedMessageExpired,
 } from '@/store/slices/chatSlice';
+import {
+  OFFLINE_QUEUE_OWNER_MISMATCH_NOTICE,
+  partitionQueueByOwner,
+  rememberOfflineQueueOwner,
+} from './offlineQueueOwnership';
 import toast from 'react-hot-toast';
 
 export const useOfflineQueue = () => {
   const dispatch = useAppDispatch();
   const { isOnline, messageQueue, error } = useAppSelector((state) => state.chat);
+  const userId = useAppSelector((state) => state.auth.user?.id ?? null);
 
   useEffect(() => {
     if (error && /offline .*unavailable|browser storage is full|expired offline data/i.test(error)) {
@@ -24,10 +30,23 @@ export const useOfflineQueue = () => {
   const processQueue = useCallback(async () => {
     if (processingRef.current) return;
     processingRef.current = true;
-    const queueCopy = [...messageQueue];
 
     try {
-      for (const queuedMsg of queueCopy) {
+      const { owned, quarantined } = partitionQueueByOwner(messageQueue, userId);
+
+      if (quarantined.length > 0) {
+        for (const entry of quarantined) {
+          dispatch(dequeueMessage(entry.id));
+        }
+        toast.error(OFFLINE_QUEUE_OWNER_MISMATCH_NOTICE, {
+          id: 'offline-queue-owner-mismatch',
+        });
+      }
+
+      let sent = 0;
+      let failed = 0;
+
+      for (const queuedMsg of owned) {
         // Never replay a stale prompt (#290)
         if (isQueuedMessageExpired(queuedMsg)) {
           dispatch(dequeueMessage(queuedMsg.id));
@@ -38,37 +57,45 @@ export const useOfflineQueue = () => {
           // second bubble being added (#266)
           await dispatch(sendMessage({ query: queuedMsg.query, tempId: queuedMsg.id })).unwrap();
 
-          // Remove from queue
           dispatch(dequeueMessage(queuedMsg.id));
-
+          sent += 1;
           toast.success('Queued message sent');
-        } catch (error: any) {
+        } catch (error) {
           // The row is now `failed` with a retry action; drop it from the automatic queue
           dispatch(dequeueMessage(queuedMsg.id));
+          failed += 1;
           const errorMsg = error instanceof Error ? error.message : String(error);
           toast.error(`Failed to send queued message: ${errorMsg}`);
         }
       }
 
-      if (queueCopy.length > 0) {
-        toast.success(`All ${queueCopy.length} queued message${queueCopy.length !== 1 ? 's' : ''} sent!`);
+      if (sent > 0) {
+        toast.success(`Sent ${sent} queued message${sent !== 1 ? 's' : ''}.`);
+      }
+      if (failed > 0) {
+        toast.error(`Failed to send ${failed} queued message${failed !== 1 ? 's' : ''}.`, {
+          id: 'offline-queue-replay-failures',
+        });
       }
     } finally {
       processingRef.current = false;
     }
-  }, [messageQueue, dispatch]);
+  }, [dispatch, messageQueue, userId]);
 
-  // Process queued messages when coming back online. Declared after processQueue: the
-  // dependency array is evaluated during render, so referencing it earlier throws (#290)
+  // Process queued messages when coming back online or when the authenticated
+  // account changes (queue length alone would miss a same-length swap). Declared
+  // after processQueue: the dependency array is evaluated during render, so
+  // referencing it earlier throws (#290).
   useEffect(() => {
     if (isOnline && messageQueue.length > 0) {
       processQueue();
     }
-  }, [isOnline, messageQueue.length, processQueue]);
+  }, [isOnline, messageQueue, processQueue]);
 
   const queueMessageForSending = useCallback(
     (query: string) => {
       const msgId = `queued_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      rememberOfflineQueueOwner(userId);
       dispatch(
         queueMessage({
           id: msgId,
@@ -77,7 +104,7 @@ export const useOfflineQueue = () => {
       );
       return msgId;
     },
-    [dispatch]
+    [dispatch, userId]
   );
 
   return {

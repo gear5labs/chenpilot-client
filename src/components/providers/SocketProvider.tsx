@@ -22,6 +22,8 @@ import {
   type SocketConnectionState,
 } from '@/types/socket';
 
+export type ManualReconnectResult = 'succeeded' | 'failed';
+
 interface SocketContextType {
   socket: Socket | null;
   socketManager: SocketManager | null;
@@ -29,6 +31,10 @@ interface SocketContextType {
   connectionState: SocketConnectionState;
   reconnectAttempt: number;
   maxReconnectAttempts: number;
+  /** True while a user-initiated manual reconnect is in flight (#286). */
+  isRetrying: boolean;
+  /** Outcome of the most recent user-initiated manual reconnect (#286). */
+  lastRetryResult: ManualReconnectResult | null;
   retry: () => void;
   connect: () => void;
   disconnect: () => void;
@@ -64,6 +70,12 @@ export function SocketProvider({
     INITIAL_SOCKET_CONNECTION_STATE,
   );
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [lastRetryResult, setLastRetryResult] = useState<ManualReconnectResult | null>(null);
+
+  const connectionStateRef = useRef<SocketConnectionState>(INITIAL_SOCKET_CONNECTION_STATE);
+  const retryInFlightRef = useRef(false);
+
   // Derived from the single shared state, never tracked separately (#279).
   const isConnected = isSocketConnected(connectionState);
 
@@ -92,8 +104,21 @@ export function SocketProvider({
     const manager = initializeSocketManager(configRef.current);
     setSocketManager(manager);
     const unsubscribeState = manager.onStateChange((state, attempt) => {
+      connectionStateRef.current = state;
       setConnectionState(state);
       setReconnectAttempt(attempt);
+
+      if (retryInFlightRef.current) {
+        if (state === 'connected') {
+          retryInFlightRef.current = false;
+          setIsRetrying(false);
+          setLastRetryResult('succeeded');
+        } else if (state === 'exhausted' || state === 'disconnected') {
+          retryInFlightRef.current = false;
+          setIsRetrying(false);
+          setLastRetryResult('failed');
+        }
+      }
     });
 
     if (autoConnect) {
@@ -102,6 +127,8 @@ export function SocketProvider({
     }
 
     return () => {
+      retryInFlightRef.current = false;
+      setIsRetrying(false);
       unsubscribeState();
       // Remove handlers registered through this provider before closing the
       // socket. Without this, late socket events can still call unmounted UI.
@@ -151,14 +178,32 @@ export function SocketProvider({
   }, [socketManager]);
 
   const retry = useCallback(() => {
-    if (socketManager) {
-      socketManager.retry();
-      setSocket(socketManager.getSocket());
+    if (!socketManager) {
+      return;
     }
+
+    // Prevent concurrent manual reconnects or retries while already connecting/connected (#286).
+    const currentState = connectionStateRef.current;
+    if (
+      retryInFlightRef.current ||
+      currentState === 'connecting' ||
+      currentState === 'reconnecting' ||
+      currentState === 'connected'
+    ) {
+      return;
+    }
+
+    retryInFlightRef.current = true;
+    setIsRetrying(true);
+    setLastRetryResult(null);
+    socketManager.retry();
+    setSocket(socketManager.getSocket());
   }, [socketManager]);
 
   const disconnect = useCallback(() => {
     if (socketManager) {
+      retryInFlightRef.current = false;
+      setIsRetrying(false);
       socketManager.disconnect();
       setSocket(null);
     }
@@ -205,6 +250,8 @@ export function SocketProvider({
     connectionState,
     reconnectAttempt,
     maxReconnectAttempts: socketManager?.getMaxReconnectAttempts() ?? 0,
+    isRetrying,
+    lastRetryResult,
     retry,
     connect,
     disconnect,

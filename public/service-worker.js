@@ -1,7 +1,8 @@
 import { isCacheablePublicResource } from './offline-cache-policy.js';
-
-const CACHE_NAME = 'chenpilot-public-static-v1';
-const CACHE_PREFIX = 'chenpilot-public-static-';
+import {
+  CACHE_NAME,
+  cleanupObsoleteCaches,
+} from './service-worker-cache.js';
 
 self.addEventListener('install', () => {
   // First install can activate immediately. An update waits for the user to
@@ -12,11 +13,7 @@ self.addEventListener('install', () => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then(async (cacheNames) => {
-      await Promise.all(
-        cacheNames
-          .filter((cacheName) => cacheName.startsWith(CACHE_PREFIX) && cacheName !== CACHE_NAME)
-          .map((cacheName) => caches.delete(cacheName)),
-      );
+      await cleanupObsoleteCaches(caches, cacheNames, CACHE_NAME);
       await self.clients.claim();
     }),
   );

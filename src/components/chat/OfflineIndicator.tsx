@@ -1,13 +1,20 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { setOnlineStatus, loadMessageQueue, fetchChatHistory } from '@/store/slices/chatSlice';
 import { WifiOff, Wifi } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { useOptionalSocket } from '@/components/providers/SocketProvider';
-import { isSocketStatusVisible, type SocketConnectionState } from '@/types/socket';
+import {
+  useOptionalSocket,
+  type ManualReconnectResult,
+} from '@/components/providers/SocketProvider';
+import {
+  INITIAL_SOCKET_CONNECTION_STATE,
+  isSocketStatusVisible,
+  type SocketConnectionState,
+} from '@/types/socket';
 
 /** Status-line copy for each visible socket state (#279). */
 export function describeSocketState(
@@ -52,10 +59,18 @@ export const OfflineIndicator: React.FC<OfflineIndicatorProps> = ({
 }) => {
   const dispatch = useAppDispatch();
   const { isOnline, messageQueue, dataSource, lastSyncedAt } = useAppSelector((state) => state.chat);
-  const [connectionRestored, setConnectionRestored] = React.useState(false);
+  const [connectionRestored, setConnectionRestored] = useState(false);
+  const [manualRetryPending, setManualRetryPending] = useState(false);
+  const [retryResult, setRetryResult] = useState<ManualReconnectResult | null>(null);
+
+  const manualRetryPendingRef = useRef(false);
+  const prevSocketStateRef = useRef<SocketConnectionState>(INITIAL_SOCKET_CONNECTION_STATE);
+
   const socket = useOptionalSocket();
   // `idle` is the documented initial state; there is no 'unknown' member (#553).
-  const socketState: SocketConnectionState = socket?.connectionState ?? 'idle';
+  const socketState: SocketConnectionState =
+    socket?.connectionState ?? INITIAL_SOCKET_CONNECTION_STATE;
+  const socketIsRetrying = Boolean(socket?.isRetrying) || manualRetryPending;
   const socketMessage = isSocketStatusVisible(socketState)
     ? describeSocketState(socketState, socket?.reconnectAttempt, socket?.maxReconnectAttempts)
     : null;
@@ -96,12 +111,77 @@ export const OfflineIndicator: React.FC<OfflineIndicatorProps> = ({
     return () => window.clearTimeout(timeout);
   }, [canRetry, connectionRestored, messageQueue.length]);
 
-  if (isOnline && messageQueue.length === 0 && !connectionRestored && !socketMessage) {
+  // Track manual reconnect outcome and announce result (#286)
+  useEffect(() => {
+    const prevState = prevSocketStateRef.current;
+
+    if (manualRetryPendingRef.current) {
+      if (socketState === 'connected' || socket?.lastRetryResult === 'succeeded') {
+        manualRetryPendingRef.current = false;
+        setManualRetryPending(false);
+        setRetryResult('succeeded');
+      } else if (
+        (prevState === 'connecting' || prevState === 'reconnecting') &&
+        (socketState === 'exhausted' || socketState === 'disconnected')
+      ) {
+        manualRetryPendingRef.current = false;
+        setManualRetryPending(false);
+        setRetryResult('failed');
+      } else if (socket?.lastRetryResult === 'failed' && !socket?.isRetrying) {
+        manualRetryPendingRef.current = false;
+        setManualRetryPending(false);
+        setRetryResult('failed');
+      }
+    } else if (socketState === 'connected' && retryResult === 'failed') {
+      setRetryResult(null);
+    }
+
+    prevSocketStateRef.current = socketState;
+  }, [socketState, socket?.lastRetryResult, socket?.isRetrying, retryResult]);
+
+  // Auto-dismiss the manual reconnect success announcement
+  useEffect(() => {
+    if (retryResult !== 'succeeded') return;
+
+    const timeout = window.setTimeout(() => setRetryResult(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [retryResult]);
+
+  const handleSocketRetry = useCallback(() => {
+    if (!socket) return;
+    if (
+      manualRetryPendingRef.current ||
+      socket.isRetrying ||
+      socketState === 'connecting' ||
+      socketState === 'reconnecting' ||
+      socketState === 'connected'
+    ) {
+      return;
+    }
+
+    manualRetryPendingRef.current = true;
+    setManualRetryPending(true);
+    setRetryResult(null);
+    socket.retry();
+  }, [socket, socketState]);
+
+  const socketAnnouncement =
+    retryResult === 'succeeded'
+      ? 'Live updates reconnected'
+      : retryResult === 'failed' && canRetrySocket
+        ? socketState === 'disconnected'
+          ? 'Reconnect failed • live updates disconnected'
+          : 'Reconnect failed • live updates unavailable'
+        : socketMessage;
+
+  if (isOnline && messageQueue.length === 0 && !connectionRestored && !socketAnnouncement) {
     return null;
   }
 
   return (
     <div
+      role="status"
+      aria-live="polite"
       className={`fixed bottom-20 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 text-sm font-medium z-40 transition-all duration-300 ${
         isOnline
           ? 'bg-blue-900/80 border border-blue-700 text-blue-200'
@@ -118,11 +198,17 @@ export const OfflineIndicator: React.FC<OfflineIndicatorProps> = ({
                 ? 'Connection restored • your changes are ready to retry'
                 : connectionRestored
                   ? 'Connection restored'
-                  : socketMessage}
+                  : socketAnnouncement}
           </span>
           {canRetrySocket && !connectionRestored && messageQueue.length === 0 && (
-            <Button type="button" size="sm" variant="secondary" onClick={socket.retry}>
-              Retry
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={socketIsRetrying}
+              onClick={handleSocketRetry}
+            >
+              {socketIsRetrying ? 'Reconnecting…' : 'Retry'}
             </Button>
           )}
           {connectionRestored && canRetry && onRetry && (

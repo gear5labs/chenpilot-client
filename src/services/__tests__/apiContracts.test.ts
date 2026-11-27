@@ -1,6 +1,19 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const { mockAxiosInstance, mockBareAxios } = vi.hoisted(() => {
+  // jsdom under Node 26 does not always expose localStorage; ApiService reads
+  // it at module load time, so stub it before imports are evaluated.
+  const storageValues = new Map<string, string>();
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key: string) => storageValues.get(key) ?? null,
+      setItem: (key: string, value: string) => void storageValues.set(key, value),
+      removeItem: (key: string) => void storageValues.delete(key),
+      clear: () => storageValues.clear(),
+    },
+  });
+
   const mockAxiosInstance = {
     get: vi.fn(),
     post: vi.fn(),
@@ -63,6 +76,7 @@ vi.mock('../agentService', () => ({
 }));
 
 import { ApiService, requestAccountFunding } from '../api';
+import { BackendResponseValidationError } from '@/utils/validation';
 import { CreateContactRequest, UpdateContactRequest, Contact, StellarTransaction } from '@/types';
 
 describe('ApiService - Contact & Transaction API Contracts', () => {
@@ -601,6 +615,62 @@ describe('ApiService - Contact & Transaction API Contracts', () => {
         await expect(requestAccountFunding(sampleAddress, 10, 0, true)).rejects.toThrow(
           'Funding failed: Backend service unavailable and Friendbot fallback failed. Required: 10 XLM, Current: 0 XLM.'
         );
+      });
+    });
+
+    describe('getAutoFundingStats() contract', () => {
+      const endpoint = '/auth/funding/auto-funding-stats';
+
+      it('accepts a valid funding statistics envelope', async () => {
+        const payload = {
+          success: true,
+          data: { totalFunded: 10, totalAccounts: 8, averageAmount: '5.25' },
+        };
+        mockAxiosInstance.get.mockResolvedValueOnce({ data: payload, status: 200 });
+
+        await expect(apiService.getAutoFundingStats()).resolves.toEqual(payload);
+        expect(mockAxiosInstance.get).toHaveBeenCalledWith(endpoint);
+      });
+
+      it('rejects an empty data object instead of treating it as zeroed statistics', async () => {
+        mockAxiosInstance.get.mockResolvedValueOnce({
+          data: { success: true, data: {} },
+          status: 200,
+        });
+
+        await expect(apiService.getAutoFundingStats()).rejects.toBeInstanceOf(
+          BackendResponseValidationError,
+        );
+      });
+
+      it('rejects malformed numeric and amount values at the service boundary', async () => {
+        mockAxiosInstance.get.mockResolvedValueOnce({
+          data: {
+            success: true,
+            data: { totalFunded: '10', totalAccounts: -2, averageAmount: 'NaN' },
+          },
+          status: 200,
+        });
+
+        await expect(apiService.getAutoFundingStats()).rejects.toMatchObject({
+          name: 'BackendResponseValidationError',
+          endpoint: `GET ${endpoint}`,
+        });
+      });
+
+      it('propagates unauthorized responses without fabricating statistics', async () => {
+        const unauthorized = { response: { status: 401 } };
+        mockAxiosInstance.get.mockRejectedValueOnce(unauthorized);
+
+        await expect(apiService.getAutoFundingStats()).rejects.toEqual(unauthorized);
+      });
+
+      it('propagates unavailable backend responses without live network access', async () => {
+        const unavailable = { response: { status: 503 } };
+        mockAxiosInstance.get.mockRejectedValueOnce(unavailable);
+
+        await expect(apiService.getAutoFundingStats()).rejects.toEqual(unavailable);
+        expect(mockAxiosInstance.get).toHaveBeenCalledWith(endpoint);
       });
     });
   });

@@ -41,4 +41,27 @@ describe("ResetPasswordForm", () => {
       "StrongPass1",
     );
   });
+  it("removes the one-time token from the URL after successful reset", async () => {
+    vi.mocked(authService.resetPassword).mockResolvedValue({
+      success: true,
+      data: { message: "Password reset" },
+    });
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    render(<ResetPasswordForm token="one-time-secret" />);
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "StrongPass1" } });
+    fireEvent.change(screen.getByLabelText("Confirm new password"), { target: { value: "StrongPass1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update password" }));
+
+    expect(await screen.findByText("Password updated")).toBeInTheDocument();
+    expect(replaceState).toHaveBeenCalledWith({}, "", "/auth/reset-password");
+    expect(localStorage.getItem("reset_token")).toBeNull();
+    replaceState.mockRestore();
+  });
+
+  it("does not submit when the reset token is missing", () => {
+    render(<ResetPasswordForm token="" />);
+    expect(screen.getByRole("alert")).toHaveTextContent("missing its token");
+    expect(authService.resetPassword).not.toHaveBeenCalled();
+  });
+
 });

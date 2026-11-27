@@ -64,6 +64,7 @@ import {
 } from "@/utils/paymentOutcome";
 import {
   apiResponseSchema,
+  autoFundingStatsResponseSchema,
   balanceResponseSchema,
   contactDeleteResponseSchema,
   contactResponseEnvelopeSchema,
@@ -906,15 +907,15 @@ export class ApiService {
       averageAmount: string;
     }>
   > {
-    const response = await this.api.get<
-      ApiResponse<{
-        totalFunded: number;
-        totalAccounts: number;
-        averageAmount: string;
-      }>
-    >("/auth/funding/auto-funding-stats");
+    const response = await this.api.get<unknown>(
+      "/auth/funding/auto-funding-stats",
+    );
 
-    return response.data;
+    return parseBackendResponse(
+      "GET /auth/funding/auto-funding-stats",
+      autoFundingStatsResponseSchema,
+      response.data,
+    );
   }
 
   async getFundedAccountBalance(): Promise<

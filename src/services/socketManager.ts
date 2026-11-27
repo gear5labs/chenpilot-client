@@ -128,6 +128,13 @@ export class SocketManager {
     }
 
   public retry(): void {
+    if (
+      this.connectionState === 'connecting' ||
+      this.connectionState === 'reconnecting' ||
+      this.connectionState === 'connected'
+    ) {
+      return;
+    }
     this.reconnectAttempt = 0;
     this.setState('connecting', 0);
     if (this.socket) {

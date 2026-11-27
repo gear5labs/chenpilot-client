@@ -377,7 +377,15 @@ class AuthService {
   }
 
   async resetPassword(token: string, password: string): Promise<ApiResponse<{ message: string }>> {
-    return apiService.resetPassword(token, password);
+    if (!token.trim()) {
+      throw new Error('A password reset token is required');
+    }
+
+    const response = await apiService.resetPassword(token, password);
+    if (!response || !('success' in response) || !response.success) {
+      throw new Error('Password reset was not confirmed by the server');
+    }
+    return response;
   }
 
   async signOutAllOtherDevices(): Promise<{ currentSessionRevoked: boolean }> {
