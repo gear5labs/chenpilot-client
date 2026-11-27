@@ -350,7 +350,7 @@ export default function ContactsPage() {
                     <div className="flex items-center gap-2">
                       <code
                         dir="ltr"
-                        className="bidi-ltr-isolate text-sm bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded flex-1 text-start"
+                        className="bidi-ltr-isolate break-long-value text-sm bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded flex-1 min-w-0 text-start"
                       >
                         <LtrText>{formatAddress(contact.address)}</LtrText>
                       </code>

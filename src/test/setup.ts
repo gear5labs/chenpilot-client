@@ -1,8 +1,4 @@
 import '@testing-library/jest-dom';
-import * as matchers from 'vitest-axe/matchers';
-import { expect } from 'vitest';
-
-expect.extend(matchers);
 
 // Configure React act environment for hydration and component testing (#305)
 // @ts-expect-error React testing environment flag
